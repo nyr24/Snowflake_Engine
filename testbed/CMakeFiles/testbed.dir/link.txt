@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -Wl,--dependency-file=CMakeFiles/testbed.dir/link.d CMakeFiles/testbed.dir/src/main.cpp.o -o testbed  ../core/libvk-engine.a /usr/lib/libvulkan.so

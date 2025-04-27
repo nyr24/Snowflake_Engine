@@ -1,0 +1,2 @@
+/usr/bin/ar qc libvk-engine.a "CMakeFiles/vk-engine.dir/src/foo.cpp.o"
+/usr/bin/ranlib libvk-engine.a

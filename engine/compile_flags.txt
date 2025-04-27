@@ -1,0 +1,4 @@
+-Iinclude
+-I/home/nyr/libs/vulkan/1.4.309.0/x86_64/include/
+-L/home/nyr/libs/vulkan/1.4.309.0/x86_64/libs/
+-std=c++20
