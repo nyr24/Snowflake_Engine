@@ -4,8 +4,6 @@ project(${ENGINE_LIB_NAME} VERSION 0.1.0 LANGUAGES CXX)
 set(SRC_DIR ${ENGINE_DIR}/src)
 set(INCLUDE_DIR ${ENGINE_DIR}/include)
 
-find_package(Vulkan REQUIRED)
-
 file(GLOB_RECURSE VK-ENGINE-SRCS CONFIGURE_DEPENDS ${SRC_DIR}/*.cpp)
 file(GLOB_RECURSE VK-ENGINE-HEADERS CONFIGURE_DEPENDS ${INCLUDE_DIR}/*.hpp)
 
@@ -17,12 +15,13 @@ target_compile_options(
   $<$<CONFIG:Debug>:
     -g
     -Og
-    -DSN_DEBUG
+    -DSF_DEBUG
   >
   $<$<CONFIG:Release>:
     -O3
-    -DSN_NO_DEBUG
+    -DSF_NO_DEBUG
   >
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
-target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIR} ${Vulkan_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include)
+target_link_directories(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/lib)
+target_link_libraries(${PROJECT_NAME} PRIVATE vulkan)

@@ -1,5 +1,6 @@
-DEBUG_EXE_PATH="./build/debug/testbed/testbed"
-RELEASE_EXE_PATH="./build/release/testbed/testbed"
+EXE_NAME="snowflake-test"
+DEBUG_EXE_PATH="./build/debug/testbed/${EXE_NAME}"
+RELEASE_EXE_PATH="./build/release/testbed/${EXE_NAME}"
 RUN_RELEASE=0
 
 if [ $# -gt 0 ] && [ "$1" = "-r" ] || [ "$1" = "--release" ]; then

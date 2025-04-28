@@ -17,12 +17,12 @@ target_compile_options(
   $<$<CONFIG:Debug>:
     -g
     -Og
-    -DSN_DEBUG
+    -DSF_DEBUG
   >
   $<$<CONFIG:Release>:
     -O3
-    -DSN_NO_DEBUG
+    -DSF_NO_DEBUG
   >
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ENGINE_LIB_NAME})
-target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIR} ${ENGINE_INCLUDE_DIR})
+target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} ${ENGINE_INCLUDE_DIR})
