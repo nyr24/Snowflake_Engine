@@ -35,18 +35,15 @@
 #error "Unknown platform!"
 #endif
 
-#ifdef SF_EXPORT
 // Exports
 #ifdef _MSC_VER
-#define SF_EXTERN __declspec(dllexport)
+#define SF_EXPORT __declspec(dllexport)
 #else
-#define SF_EXTERN __attribute__((visibility("default")))
+#define SF_EXPORT __attribute__((visibility("default")))
 #endif
-#else
 // Imports
 #ifdef _MSC_VER
-#define SF_EXTERN __declspec(dllimport)
+#define SF_IMPORT __declspec(dllimport)
 #else
-#define SF_EXTERN
-#endif
+#define SF_IMPORT
 #endif

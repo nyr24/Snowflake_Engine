@@ -18,7 +18,7 @@
 #endif
 
 namespace sf_core {
-    enum class Log_level : u8 {
+    enum class LogLevel : u8 {
         LOG_LEVEL_FATAL,
         LOG_LEVEL_ERROR,
         LOG_LEVEL_WARN,
@@ -40,14 +40,14 @@ namespace sf_core {
     void shutdown_logging();
 
     template<typename... Args>
-    SF_EXTERN void log_output(Log_level log_level, std::format_string<Args...> fmt, Args&&... args) {
+    SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, Args&&... args) {
         constexpr usize BUFF_LEN{ 32000 };
         i8 message_buff[BUFF_LEN] = {0};
         const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, fmt, args...);
 
         switch (log_level) {
-            case Log_level::LOG_LEVEL_FATAL:
-            case Log_level::LOG_LEVEL_ERROR:
+            case LogLevel::LOG_LEVEL_FATAL:
+            case LogLevel::LOG_LEVEL_ERROR:
                 std::cerr << log_level_as_str[static_cast<usize>(log_level)] << std::string_view(const_cast<const i8*>(message_buff), res.out) << '\n';
                 break;
             default:
@@ -57,22 +57,22 @@ namespace sf_core {
     }
 }
 
-#define LOG_FATAL(fmt, ...) log_output(Log_level::LOG_LEVEL_FATAL, ##__VA_ARGS__);
+#define LOG_FATAL(fmt, ...) log_output(LogLevel::LOG_LEVEL_FATAL, ##__VA_ARGS__);
 
-#define LOG_ERROR(fmt, ...) log_output(Log_level::LOG_LEVEL_ERROR, ##__VA_ARGS__);
+#define LOG_ERROR(fmt, ...) log_output(LogLevel::LOG_LEVEL_ERROR, ##__VA_ARGS__);
 
 #if LOG_WARN_ENABLED == 1
-#define LOG_WARN(fmt, ...) log_output(Log_level::LOG_LEVEL_WARN, ##__VA_ARGS__);
+#define LOG_WARN(fmt, ...) log_output(LogLevel::LOG_LEVEL_WARN, ##__VA_ARGS__);
 #endif
 
 #if LOG_INFO_ENABLED == 1
-#define LOG_INFO(fmt, ...) log_output(Log_level::LOG_LEVEL_INFO, ##__VA_ARGS__);
+#define LOG_INFO(fmt, ...) log_output(LogLevel::LOG_LEVEL_INFO, ##__VA_ARGS__);
 #endif
 
 #if LOG_DEBUG_ENABLED == 1
-#define LOG_DEBUG(fmt, ...) log_output(Log_level::LOG_LEVEL_DEBUG, ##__VA_ARGS__);
+#define LOG_DEBUG(fmt, ...) log_output(LogLevel::LOG_LEVEL_DEBUG, ##__VA_ARGS__);
 #endif
 
 #if LOG_TRACE_ENABLED == 1
-#define LOG_TRACE(fmt, ...) log_output(Log_level::LOG_LEVEL_TRACE, ##__VA_ARGS__);
+#define LOG_TRACE(fmt, ...) log_output(LogLevel::LOG_LEVEL_TRACE, ##__VA_ARGS__);
 #endif
