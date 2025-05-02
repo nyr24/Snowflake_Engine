@@ -18,6 +18,7 @@ target_compile_options(
     -g
     -Og
     -DSF_DEBUG
+    -DSF_ASSERTS_ENABLED
   >
   $<$<CONFIG:Release>:
     -O3
