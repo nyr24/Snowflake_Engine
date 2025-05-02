@@ -1,53 +1,32 @@
-#include <cstring>
-#include "sf_util.hpp"
-#include "sf_platform.hpp"
-#include "logger.hpp"
-
-namespace sf_platform {
-    template<typename T>
-    void PlatformState<T>::alloc_state() {
-        internal_state = sf_alloc<T>();
-    }
-
-    template<typename T>
-    PlatformState<T>::~PlatformState<T>() {
-         if (internal_state) {
-             LOG_INFO("Platform state is destroyed");
-             free(internal_state);
-             internal_state = nullptr;
-         }
-    }
-
-    Rect Rect::init(i32 x, i32 y, i32 width, i32 height) {
-        return Rect{ .x = x, .y = y, .width = width, .height = height };
-    }
-}
-
 #ifdef SF_PLATFORM_WINDOWS
-
-#include <windows.h>
+#include <cstring>
+#include <string_view>
+#include <Windows.h>
 #include <windowsx.h>
+#include "sf_platform.hpp"
+#include "sf_platform_macros.hpp"
+#include "sf_types.hpp"
 
 namespace sf_platform {
-    struct WindowsInternState {
+        struct WindowsInternState {
         HINSTANCE   h_instance;
         HWND        hwnd;
     };
 
-    HRESULT win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param) {}
+    static f64 clock_frequency;
+    static LARGE_INTEGER start_time;
 
-    template<typename T>
-    bool platform_startup(
-        PlatformState<T>* platform_state,
+    HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);
+
+    SF_EXPORT bool platform_startup(
+        PlatPlatformState* platform_state,
         const char* app_name,
         i32 x,
         i32 y,
         i32 width,
         i32 height
     ) {
-        static_assert(sizeof(T) != sizeof(WindowsInternState), "Not valid sizeof intern state");
-
-        platform_state->alloc_state();
+        platform_state->alloc_inner_state<WindowsInternState>();
         WindowsInternState* state = static_cast<WindowsInternState*>(platform_state->internal_state);
         state->h_instance = GetModuleHandleA(0);
         HICON icon = LoadIcon(state->h_instance, IDI_APPLICATION);
@@ -101,18 +80,20 @@ namespace sf_platform {
         }
         state->hwnd = handle;
 
-        // Show a window
         bool should_activate = true;
         i32 show_window_command_flags = should_activate ? SW_SHOW : SW_SHOWNOACTIVATE;
         ShowWindow(state->hwnd, show_window_command_flags);
 
+        // Clock setup
+        LARGE_INTERGER frequency;
+        QueryPerformanceFrequency(&frequency);
+        clock_frequency = 1.0 / (f64)frequency.QuadPart;
+        QueryPerformanceCounter(&start_time);
+
         return true;
     }
 
-    template<typename T>
-    void platform_shutdown(PlatformState<T>* platform_state) {
-        static_assert(sizeof(T) != sizeof(WindowsInternState), "Not valid sizeof intern state");
-
+    SF_EXPORT void platform_shutdown(PlatformState* platform_state) {
         WindowsInternState* intern_state = static_cast<WindowsInternState>(platform_state->internal_state);
         if (intern_state->hwnd) {
             DestroyWindow(intern_state->hwnd);
@@ -120,10 +101,7 @@ namespace sf_platform {
         }
     }
 
-    template<typename T>
-    bool platform_pump_messages(PlatformState<T>* platform_state) {
-        static_assert(sizeof(T) != sizeof(WindowsInternState), "Not valid sizeof intern state");
-
+    SF_EXPORT bool platform_pump_messages() {
         MSG message;
         while (PeekMessageA(&message, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&message);
@@ -133,36 +111,87 @@ namespace sf_platform {
         return true;
     }
 
-    template<typename T>
-    T* platform_alloc(usize size, bool aligned) {
-        return sf_alloc<T>(size);
+    inline f64 platform_get_abs_time() {
+        LARGE_INTERGER now_time;
+        QueryPerformanceCounter(&now_time);
+        return (f64)now_time.QuadPart * clock_frequency;
     }
 
-    template<typename T>
-    void platform_free(T* block, bool aligned) {
-        free(block);
-        block = nullptr;
+    void platform_console_write(std::string_view message, u8 color) {
+        HANDLE console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+        static u8 levels[6] = { 64, 4, 6, 2, 1, 8 };
+        SetConsoleTextAttribute(console_handle, levels[color]);
+
+        OutputDebugStringA(message.data());
+        LPDWORD count_written = 0;
+        WriteConsoleA(console_handle, message, (DWORD)message.length(), count_written, 0);
     }
 
-    template<typename T>
-    void platform_mem_zero(T* block, usize size) {
-        memset(block, 0, size);
+    void platform_console_write_error(std::string_view message, u8 color) {
+        HANDLE console_handle = GetStdHandle(STD_ERROR_HANDLE);
+        static u8 levels[6] = { 64, 4, 6, 2, 1, 8 };
+        SetConsoleTextAttribute(console_handle, levels[color]);
+
+        OutputDebugStringA(message.data());
+        LPDWORD count_written = 0;
+        WriteConsoleA(console_handle, message, (DWORD)message.length(), count_written, 0);
     }
 
-    template<typename T>
-    void platform_mem_copy(T* dest, const T* src, usize size) {
-        memcpy(dest, src, size);
+    void platform_sleep(u64 ms) {
+        Sleep(ms);
     }
 
-    template<typename T>
-    void platform_mem_set(T* dest, T val, usize size) {
-        memset(dest, val, size);
-    }
+    HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param) {
+        switch (msg) {
+            case WM_ERASEBKGND:
+                // will be handled by the application
+                return 1;
+            case WM_CLOSE:
+                // will be handled by the application
+                // TODO: fire event for the app to quit
+                return 0;
+            case WM_DESTROY:
+                PostQuitMessage(0);
+                return 0;
+            case WM_SIZE: {
+                // Get the updated size
+                RECT r;
+                GetClientRect(hwnd, &r);
+                u32 width = r.right - r.left;
+                u32 height = r.bottom - r.top;
 
-    void platform_console_write(const char* message, u8 color);
-    void platform_console_write_error(const char* message, u8 color);
-    f64 platform_get_abs_time();
-    void platform_sleep(u64 ms);
+                // TODO: fire an event for window resize
+            } break;
+            case WM_KEYDOWN:
+            case WM_SYSKEYDOWN;
+            case WM_KEYUP:
+            case WM_SYSKEYUP: {
+                bool pressed = WM_KEYDOWN || WM_SYSKEYDOWN;
+                // TODO: process input
+            } break;
+            case WM_MOUSEMOVE: {
+                i32 x_pos = GET_X_PARAM(l_param);
+                i32 y_pos = GET_Y_PARAM(l_param);
+                // TODO: process input
+            } break;
+            case MOUSEWHEEL: {
+                i32 z_delta = GET_WHEEL_DELTA_PARAM(w_param);
+                if (z_delta != 0) {
+                    z_delta = z_delta < 0 ? -1 : 1;
+                }
+                // TODO: process input
+            } break;
+            case WM_LBUTTONDOWN:
+            case WM_MBUTTONDOWN:
+            case WM_RBUTTONDOWN:
+            case WM_LBUTTONUP:
+            case WM_MBUTTONUP:
+            case WM_RBUTTONUP: {
+                bool pressed = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN;
+                // TODO: process input
+            } break;
+            default: return DefWindowProc(hwnd, msg, w_param, l_param);
+        }
+    }
 }
-
-#endif
+#endif // SF_PLATFORM_WINDOWS

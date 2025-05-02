@@ -1,63 +1,26 @@
 #pragma once
+#include <cstring>
+#include <string_view>
+#include "sf_platform_macros.hpp"
 #include "sf_types.hpp"
-
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) 
-#define SF_PLATFORM_WINDOWS 1
-#ifndef _WIN64
-#error "64-bit is required on Windows!"
-#endif
-#elif defined(__linux__) || defined(__gnu_linux__)
-// Linux OS
-#define SF_PLATFORM_LINUX 1
-#if defined(__ANDROID__)
-#define SF_PLATFORM_ANDROID 1
-#endif
-#elif defined(__unix__)
-// Catch anything not caught by the above.
-#define SF_PLATFORM_UNIX 1
-#elif defined(_POSIX_VERSION)
-// Posix
-#define SF_PLATFORM_POSIX 1
-#elif __APPLE__
-// Apple platforms
-#define SF_PLATFORM_APPLE 1
-#include <TargetConditionals.h>
-#if TARGET_IPHONE_SIMULATOR
-// iOS Simulator
-#define SF_PLATFORM_IOS 1
-#define SF_PLATFORM_IOS_SIMULATOR 1
-#elif TARGET_OS_IPHONE
-#define SF_PLATFORM_IOS 1
-// iOS device
-#elif TARGET_OS_MAC
-// Other kinds of Mac OS
-#else
-#error "Unknown Apple platform"
-#endif
-#else
-#error "Unknown platform!"
-#endif
-
-// Exports
-#ifdef _MSC_VER
-#define SF_EXPORT __declspec(dllexport)
-#else
-#define SF_EXPORT __attribute__((visibility("default")))
-#endif
-// Imports
-#ifdef _MSC_VER
-#define SF_IMPORT __declspec(dllimport)
-#else
-#define SF_IMPORT
-#endif
+#include "sf_util.hpp"
 
 namespace sf_platform {
-    template<typename T>
     struct PlatformState {
-        T* internal_state;
+        void* internal_state;
 
-        void alloc_state();
-        ~PlatformState<T>();
+        static PlatformState init_empty() {
+            return PlatformState{ .internal_state = nullptr };
+        }
+
+        template<typename T>
+        void alloc_inner_state() {
+            internal_state = sf_alloc<T>(1, true);
+        }
+
+        void destroy() {}
+
+        bool has_state() const { return internal_state != nullptr; }
     };
 
     struct Rect {
@@ -66,42 +29,51 @@ namespace sf_platform {
         i32 width;
         i32 height;
 
-        static Rect init(i32 x, i32 y, i32 width, i32 height);
+        Rect init(i32 x, i32 y, i32 width, i32 height) {
+            return Rect{ .x = x, .y = y, .width = width, .height = height };
+        }
     };
 
-    template<typename T>
-    bool platform_startup(
-        PlatformState<T>* platform_state,
+    SF_EXPORT bool platform_startup(
+        PlatformState* platform_state,
         const char* app_name,
         i32 x,
         i32 y,
         i32 width,
         i32 height
     );
-
-    template<typename T>
-    void platform_shutdown(PlatformState<T>* platform_state);
-
-    template<typename T>
-    bool platform_pump_messages(PlatformState<T>* platform_state);
-
-    template<typename T>
-    T* platform_alloc(usize size, bool aligned);
-
-    template<typename T>
-    void platform_free(T* block, bool aligned);
-
-    template<typename T>
-    void platform_mem_zero(T* block, usize size);
-
-    template<typename T>
-    void platform_mem_copy(T* dest, const T* src, usize size);
-
-    template<typename T>
-    void platform_mem_set(T* dest, T val, usize size);
-
-    void platform_console_write(const char* message, u8 color);
-    void platform_console_write_error(const char* message, u8 color);
+    SF_EXPORT void platform_shutdown(PlatformState* platform_state);
+    SF_EXPORT bool platform_pump_messages();
+    void platform_console_write(std::string_view message, u8 color);
+    void platform_console_write_error(std::string_view message, u8 color);
     f64 platform_get_abs_time();
     void platform_sleep(u64 ms);
+
+#ifdef SF_PLATFORM_WINDOWS
+    template<typename T>
+    T* platform_alloc(usize count, bool aligned) {
+        return sf_alloc<T>(count, aligned);
+    }
+
+    template<typename T>
+    void platform_free(T* block, bool aligned) {
+        free(block);
+        block = nullptr;
+    }
+
+    template<typename T>
+    void platform_mem_zero(T* block, usize size) {
+        memset(block, 0, size);
+    }
+
+    template<typename T>
+    void platform_mem_copy(T* dest, const T* src, usize size) {
+        memcpy(dest, src, size);
+    }
+
+    template<typename T>
+    void platform_mem_set(T* dest, T val, usize size) {
+        memset(dest, val, size);
+    }
+#endif // SF_PLATFORM_WINDOWS
 }

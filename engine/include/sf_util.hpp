@@ -1,13 +1,12 @@
 #pragma once
 #include <cstdlib>
-#include "sf_types.hpp"
-#include "logger.hpp"
+#include "sf_logger.hpp"
 
 template<typename T>
-T* sf_alloc(usize size) {
-    T* res = static_cast<T*>(malloc(size));
+T* sf_alloc(usize count, bool aligned) {
+    alignas(T) T* res = static_cast<T*>(malloc(sizeof(T) * count));
     if (!res) {
-        LOG_FATAL("Allocation failed, bytes needed: {}", size);
+        LOG_FATAL("Allocation failed");
         std::exit(1);
     }
 

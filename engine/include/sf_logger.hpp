@@ -4,7 +4,7 @@
 #include <iostream>
 #include <array>
 #include <string_view>
-#include "sf_platform.hpp"
+#include "sf_platform_macros.hpp"
 #include "sf_types.hpp"
 
 #define LOG_WARN_ENABLED 1
@@ -16,6 +16,11 @@
 #define LOG_DEBUG_ENABLED 0
 #define LOG_TRACE_ENABLED 0
 #endif
+
+namespace sf_platform {
+    void platform_console_write(std::string_view message, u8 color);
+    void platform_console_write_error(std::string_view message, u8 color);
+}
 
 namespace sf_core {
     enum class LogLevel : u8 {
@@ -45,13 +50,19 @@ namespace sf_core {
         i8 message_buff[BUFF_LEN] = {0};
         const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, fmt, args...);
 
+        constexpr usize BUFF_LEN2{ 32000 };
+        i8 message_buff2[BUFF_LEN2] = {0};
+        const std::format_to_n_result res2 = std::format_to_n(message_buff2, BUFF_LEN2, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], message_buff);
+
         switch (log_level) {
             case LogLevel::LOG_LEVEL_FATAL:
             case LogLevel::LOG_LEVEL_ERROR:
-                std::cerr << log_level_as_str[static_cast<usize>(log_level)] << std::string_view(const_cast<const char*>(message_buff), res.out) << '\n';
+                //std::cerr << log_level_as_str[static_cast<usize>(log_level)] << std::string_view(const_cast<const char*>(message_buff), res.out) << '\n';
+                sf_platform::platform_console_write_error(std::string_view(const_cast<const char*>(message_buff2), res2.out), static_cast<u8>(log_level));
                 break;
             default:
-                std::cout << log_level_as_str[static_cast<usize>(log_level)] << std::format(fmt, args...) << '\n';
+                // std::cout << log_level_as_str[static_cast<usize>(log_level)] << std::format(fmt, args...) << '\n';
+                sf_platform::platform_console_write(std::string_view(const_cast<const char*>(message_buff2), res2.out), static_cast<u8>(log_level));
                 break;
         }
     }
