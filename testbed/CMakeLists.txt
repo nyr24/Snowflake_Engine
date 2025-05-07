@@ -7,9 +7,8 @@ set(ENGINE_INCLUDE_DIR ${ENGINE_DIR}/include)
 
 file(GLOB_RECURSE TESTBED-SRCS CONFIGURE_DEPENDS ${SRC_DIR}/*.cpp)
 file(GLOB_RECURSE TESTBED-HEADERS CONFIGURE_DEPENDS ${INCLUDE_DIR}/*.hpp)
-file(GLOB_RECURSE ENGINE_HEADERS CONFIGURE_DEPENDS ${ENGINE_INCLUDE_DIR}/*.hpp)
 
-add_executable(${PROJECT_NAME} ${TESTBED-SRCS} ${TESTBED-HEADERS} ${ENGINE_HEADERS})
+add_executable(${PROJECT_NAME} ${TESTBED-SRCS} ${TESTBED-HEADERS})
 
 target_compile_options(
   ${PROJECT_NAME}
@@ -17,13 +16,23 @@ target_compile_options(
   $<$<CONFIG:Debug>:
     -g
     -Og
+  >
+  $<$<CONFIG:Release>:
+    -O3
+  >
+)
+
+target_compile_definitions(
+  ${PROJECT_NAME}
+  PRIVATE
+  $<$<CONFIG:Debug>:
     -DSF_DEBUG
     -DSF_ASSERTS_ENABLED
   >
   $<$<CONFIG:Release>:
-    -O3
     -DSF_NO_DEBUG
   >
 )
+
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ENGINE_LIB_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} ${ENGINE_INCLUDE_DIR})

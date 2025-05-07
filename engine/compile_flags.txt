@@ -1,6 +1,5 @@
 -Iinclude
--I/home/nyr/libs/vulkan/1.4.309.0/x86_64/include/
--L/home/nyr/libs/vulkan/1.4.309.0/x86_64/lib/
+-Ilib/glm
 -std=c++20
--DSF_DEBUG
 -DSF_ASSERTS_ENABLED
+-DSF_BUILD_WAYLAND
