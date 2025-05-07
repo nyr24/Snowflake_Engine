@@ -14,7 +14,7 @@ add_subdirectory(${GLM_INCLUDE_DIR})
 
 target_compile_options(
   ${PROJECT_NAME}
-  PRIVATE
+  PUBLIC
   $<$<CONFIG:Debug>:
     -g
     -Og
@@ -26,7 +26,7 @@ target_compile_options(
 
 target_compile_definitions(
   ${PROJECT_NAME}
-  PRIVATE
+  PUBLIC
   $<$<CONFIG:Debug>:
     -DSF_DEBUG
     -DSF_ASSERTS_ENABLED
@@ -35,6 +35,12 @@ target_compile_definitions(
     -DSF_NO_DEBUG
   >
 )
+
+if (DEFINED SF_BUILD_WAYLAND)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_WAYLAND)
+elseif (DEFINED SF_BUILD_X11)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_X11)
+endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include ${GLM_INCLUDE_DIR})
 target_link_directories(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/lib)

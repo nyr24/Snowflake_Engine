@@ -1,14 +1,14 @@
+#include "platform/sf_platform.hpp"
+
 #ifdef SF_PLATFORM_WINDOWS
 #include <cstring>
 #include <string_view>
 #include <Windows.h>
 #include <windowsx.h>
-#include "sf_platform.hpp"
-#include "sf_platform_macros.hpp"
-#include "sf_types.hpp"
+#include "core/sf_types.hpp"
 
 namespace sf_platform {
-        struct WindowsInternState {
+    struct WindowsInternState {
         HINSTANCE   h_instance;
         HWND        hwnd;
     };

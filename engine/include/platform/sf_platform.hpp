@@ -16,10 +16,6 @@ namespace sf_platform {
         void alloc_inner_state() {
             internal_state = sf_alloc<T>(1, true);
         }
-
-        void destroy() {}
-
-        bool has_state() const { return internal_state != nullptr; }
     };
 
     struct Rect {
@@ -33,7 +29,7 @@ namespace sf_platform {
         }
     };
 
-    SF_EXPORT bool platform_startup(
+    SF_EXPORT bool  platform_startup(
         PlatformState* platform_state,
         const char* app_name,
         i32 x,
@@ -41,12 +37,12 @@ namespace sf_platform {
         i32 width,
         i32 height
     );
-    SF_EXPORT void platform_shutdown(PlatformState* platform_state);
-    SF_EXPORT bool platform_pump_messages();
-    void platform_console_write(std::string_view message, u8 color);
-    void platform_console_write_error(std::string_view message, u8 color);
-    f64 platform_get_abs_time();
-    void platform_sleep(u64 ms);
+    SF_EXPORT void  platform_shutdown(PlatformState* platform_state);
+    SF_EXPORT bool  platform_pump_messages();
+    void            platform_console_write(std::string_view message, u8 color);
+    void            platform_console_write_error(std::string_view message, u8 color);
+    f64             platform_get_abs_time();
+    void            platform_sleep(u64 ms);
 
 #ifdef SF_PLATFORM_WINDOWS
     template<typename T>

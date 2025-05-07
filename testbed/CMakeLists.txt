@@ -12,7 +12,7 @@ add_executable(${PROJECT_NAME} ${TESTBED-SRCS} ${TESTBED-HEADERS})
 
 target_compile_options(
   ${PROJECT_NAME}
-  PRIVATE
+  PUBLIC
   $<$<CONFIG:Debug>:
     -g
     -Og
@@ -24,7 +24,7 @@ target_compile_options(
 
 target_compile_definitions(
   ${PROJECT_NAME}
-  PRIVATE
+  PUBLIC
   $<$<CONFIG:Debug>:
     -DSF_DEBUG
     -DSF_ASSERTS_ENABLED

@@ -24,7 +24,7 @@ for arg in "$@"; do
       echo "[Error]: can't build for x11 and build simultaneously, exiting"
       exit
     fi
-    CMAKE_OPTS+=" DSF_BUILD_WAYLAND"
+    CMAKE_OPTS+=" -DSF_BUILD_WAYLAND=1"
     WAYLAND_BUILD_FLAG_SPECIFIED=1
     ;;
   -x11 | --x11)
@@ -33,7 +33,7 @@ for arg in "$@"; do
       echo "[Error]: can't build for x11 and build simultaneously, exiting"
       exit
     fi
-    CMAKE_OPTS+=" DSF_BUILD_X11"
+    CMAKE_OPTS+=" -DSF_BUILD_X11=1"
     X11_BUILD_FLAG_SPECIFIED=1
     ;;
   *)
@@ -46,10 +46,10 @@ if [ $BUILD_RELEASE -eq 0 ]; then
   echo "Building in debug mode"
   [ -d "$DEBUG_BUILD_DIR" ] || mkdir "$DEBUG_BUILD_DIR"
   cd "$DEBUG_BUILD_DIR"
-  cmake $CMAKE_OPTS $CMAKE_PLATFORM_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
+  cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
 else
   echo "Building in release mode"
   [ -d "$RELEASE_BUILD_DIR" ] || mkdir "$RELEASE_BUILD_DIR"
   cd "$RELEASE_BUILD_DIR"
-  cmake $CMAKE_OPTS $CMAKE_PLATFORM_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
+  cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
 fi
