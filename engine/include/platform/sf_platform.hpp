@@ -6,16 +6,23 @@
 
 namespace sf_platform {
     struct PlatformState {
-        void* internal_state;
-
-        static PlatformState init_empty() {
-            return PlatformState{ .internal_state = nullptr };
-        }
+        static PlatformState init();
+        bool startup(
+            const char* app_name,
+            i32 x,
+            i32 y,
+            i32 width,
+            i32 height
+        );
+        ~PlatformState();
+        bool start_event_loop();
 
         template<typename T>
         void alloc_inner_state() {
             internal_state = sf_alloc<T>(1, true);
         }
+
+        void* internal_state = nullptr;
     };
 
     struct Rect {
@@ -24,21 +31,11 @@ namespace sf_platform {
         i32 width;
         i32 height;
 
-        Rect init(i32 x, i32 y, i32 width, i32 height) {
+        static Rect init(i32 x, i32 y, i32 width, i32 height) {
             return Rect{ .x = x, .y = y, .width = width, .height = height };
         }
     };
 
-    SF_EXPORT bool  platform_startup(
-        PlatformState* platform_state,
-        const char* app_name,
-        i32 x,
-        i32 y,
-        i32 width,
-        i32 height
-    );
-    SF_EXPORT void  platform_shutdown(PlatformState* platform_state);
-    SF_EXPORT bool  platform_pump_messages();
     void            platform_console_write(std::string_view message, u8 color);
     void            platform_console_write_error(std::string_view message, u8 color);
     f64             platform_get_abs_time();

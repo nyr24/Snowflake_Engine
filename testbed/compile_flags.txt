@@ -1,3 +1,5 @@
 -Iinclude
 -I../engine/include/
 -std=c++20
+-DSF_ASSERTS_ENABLED
+-DSF_BUILD_WAYLAND

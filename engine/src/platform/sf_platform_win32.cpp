@@ -18,16 +18,19 @@ namespace sf_platform {
 
     HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);
 
-    SF_EXPORT bool platform_startup(
-        PlatPlatformState* platform_state,
+    PlatformState PlatformState::init() {
+        return PlatformState{ .internal_state = nullptr };
+    }
+
+    bool PlatformState::startup(
         const char* app_name,
         i32 x,
         i32 y,
         i32 width,
         i32 height
     ) {
-        platform_state->alloc_inner_state<WindowsInternState>();
-        WindowsInternState* state = static_cast<WindowsInternState*>(platform_state->internal_state);
+        this->alloc_inner_state<WindowsInternState>();
+        WindowsInternState* state = static_cast<WindowsInternState*>(this->internal_state);
         state->h_instance = GetModuleHandleA(0);
         HICON icon = LoadIcon(state->h_instance, IDI_APPLICATION);
 
@@ -93,15 +96,16 @@ namespace sf_platform {
         return true;
     }
 
-    SF_EXPORT void platform_shutdown(PlatformState* platform_state) {
-        WindowsInternState* intern_state = static_cast<WindowsInternState>(platform_state->internal_state);
+    PlatformState::~PlatformState() {
+        WindowsInternState* intern_state = static_cast<WindowsInternState>(this->internal_state);
         if (intern_state->hwnd) {
             DestroyWindow(intern_state->hwnd);
             intern_state->hwnd = nullptr;
+            free(intern_state);
         }
     }
 
-    SF_EXPORT bool platform_pump_messages() {
+    bool PlatformState::start_event_loop() {
         MSG message;
         while (PeekMessageA(&message, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&message);
