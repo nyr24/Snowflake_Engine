@@ -30,6 +30,7 @@ target_compile_definitions(
   $<$<CONFIG:Debug>:
     -DSF_DEBUG
     -DSF_ASSERTS_ENABLED
+    -DWAYLAND_DEBUG
   >
   $<$<CONFIG:Release>:
     -DSF_NO_DEBUG
