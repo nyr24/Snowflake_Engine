@@ -1,18 +1,21 @@
 #include "platform/sf_platform.hpp"
-#include <wayland-util.h>
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
+#include "platform/wayland-util-custom.hpp"
 #include "core/sf_logger.hpp"
 #include "platform/xdg-shell-protocol.hpp"
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <cstring>
 #include <ctime>
+#include <cassert>
 
 namespace sf_platform {
     constexpr u32 WIDTH = 720, HEIGHT = 540;
@@ -30,6 +33,13 @@ namespace sf_platform {
     using xdg_wm_base   = struct xdg_wm_base;
     using wl_callback   = struct wl_callback;
 
+    struct KeyboardState {
+        xkb_context*    xkb_context;
+        xkb_keymap*     xkb_keymap;
+        xkb_state*      xkb_state;
+        u32             serial;
+    };
+
     enum class PointerEventMask : u32 {
         POINTER_EVENT_ENTER = 1 << 0,
         POINTER_EVENT_LEAVE = 1 << 1,
@@ -38,12 +48,14 @@ namespace sf_platform {
         POINTER_EVENT_AXIS = 1 << 4,
         POINTER_EVENT_AXIS_SOURCE = 1 << 5,
         POINTER_EVENT_AXIS_STOP = 1 << 6,
-        POINTER_EVENT_AXIS_DISCRETE = 1 << 7,
+        POINTER_EVENT_AXIS_VALUE120 = 1 << 7,
+        POINTER_EVENT_AXIS_RELATIVE_DIR = 1 << 8
     };
 
     struct PointerAxis {
         f64         value;
-        i32         discrete;
+        i32         value120;
+        u8          relative_dir;
         bool        valid;
     };
 
@@ -77,6 +89,7 @@ namespace sf_platform {
         f32                     offset;
         u32                     last_frame = 0;
         PointerEventState       pointer_state;
+        KeyboardState           keyboard_state;
         u8                      active_buffer_ind = 0;
     };
 
@@ -166,8 +179,6 @@ namespace sf_platform {
     {
         GlobalObjectsState* state = static_cast<GlobalObjectsState*>(data);
 
-        LOG_DEBUG("global {}", interface);
-
         // wl_shm
         if (std::strcmp(interface, wl_shm_interface.name) == 0) {
             state->shm = static_cast<wl_shm*>(
@@ -181,13 +192,6 @@ namespace sf_platform {
                 wl_registry_bind(registry, name, &wl_compositor_interface, 6
             ));
         }
-
-        // wl_output
-        // if (std::strcmp(interface, wl_output_interface.name) == 0) {
-        //     state->output = static_cast<wl_output*>(
-        //         wl_registry_bind(registry, name, &wl_output_interface, 4
-        //     ));
-        // }
 
         // wl_seat
         if (std::strcmp(interface, wl_seat_interface.name) == 0) {
@@ -271,11 +275,6 @@ namespace sf_platform {
         state->go_state.last_frame = time;
     }
 
-    static void seat_handle_name(void* data, wl_seat* seat, const i8* name) {
-        // This space deliberately left blank
-    }
-
-    // TODO: move up
     // Pointer events
     static void pointer_handle_enter(void* data, wl_pointer* pointer, u32 serial, wl_surface* surface, wl_fixed_t x, wl_fixed_t y)
     {
@@ -337,15 +336,22 @@ namespace sf_platform {
         state->go_state.pointer_state.axis[axis].valid = true;
     }
 
-    static void pointer_handle_axis_discrete(void* data, wl_pointer* pointer, u32 axis, i32 discrete)
+    static void pointer_handle_axis_value120(void* data, wl_pointer* pointer, u32 axis, i32 value120)
     {
         WaylandInternState* state = static_cast<WaylandInternState*>(data);
-        state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_DISCRETE);
+        state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120);
         state->go_state.pointer_state.axis[axis].valid = true;
-        state->go_state.pointer_state.axis[axis].discrete = discrete;
+        state->go_state.pointer_state.axis[axis].value120 = value120;
     }
 
-    // TODO: finish here
+    static void pointer_handle_axis_relative_dir(void* data, wl_pointer* pointer, u32 axis, u32 axis_rel_dir)
+    {
+        WaylandInternState* state = static_cast<WaylandInternState*>(data);
+        state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR);
+        state->go_state.pointer_state.axis[axis].valid = true;
+        state->go_state.pointer_state.axis[axis].relative_dir = static_cast<u8>(axis_rel_dir);
+    }
+
     static void pointer_handle_frame(void* data, wl_pointer* pointer)
     {
         WaylandInternState* state = static_cast<WaylandInternState*>(data);
@@ -354,7 +360,7 @@ namespace sf_platform {
         LOG_INFO("pointer frame {}: ", pointer_state->time);
 
         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_ENTER)) {
-            LOG_INFO("entered {} {} ", pointer_state->surface_x, pointer_state->surface_y);
+            LOG_INFO("entered x: {} y: {} ", pointer_state->surface_x, pointer_state->surface_y);
         }
 
         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_LEAVE)) {
@@ -362,56 +368,160 @@ namespace sf_platform {
         }
 
         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_MOTION)) {
-            LOG_INFO("moved {} {} ", pointer_state->surface_x, pointer_state->surface_y);
+            LOG_INFO("moved x: {} y: {} ", pointer_state->surface_x, pointer_state->surface_y);
         }
 
         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_BUTTON)) {
-            LOG_INFO("moved {} {} ", pointer_state->surface_x, pointer_state->surface_y);
-                // char *state = pointer_state->state == WL_POINTER_BUTTON_STATE_RELEASED ?
-                //         "released" : "pressed";
-                // fprintf(stderr, "button %d %s ", pointer_state->button, state);
+            LOG_INFO("button: {} state: {} ", pointer_state->button, pointer_state->button_state);
         }
 
-        uint32_t axis_events = POINTER_EVENT_AXIS
-                | POINTER_EVENT_AXIS_SOURCE
-                | POINTER_EVENT_AXIS_STOP
-                | POINTER_EVENT_AXIS_DISCRETE;
-        const char *axis_name[2] = {
-                [WL_POINTER_AXIS_VERTICAL_SCROLL] = "vertical",
-                [WL_POINTER_AXIS_HORIZONTAL_SCROLL] = "horizontal",
+        u32 axis_events = static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)
+                | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE)
+                | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP)
+                | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120)
+                | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR);
+
+        const i8* axis_name[2] = {
+            "vertical",
+            "horizontal",
         };
-        const char *axis_source[4] = {
-                [WL_POINTER_AXIS_SOURCE_WHEEL] = "wheel",
-                [WL_POINTER_AXIS_SOURCE_FINGER] = "finger",
-                [WL_POINTER_AXIS_SOURCE_CONTINUOUS] = "continuous",
-                [WL_POINTER_AXIS_SOURCE_WHEEL_TILT] = "wheel tilt",
+
+        const i8* axis_relative_dir[2] = {
+            "identical",
+            "inverted",
         };
+
+        const i8* axis_source[4] = {
+            "wheel",
+            "finger",
+            "continuous",
+            "wheel tilt",
+        };
+
         if (pointer_state->event_mask & axis_events) {
-                for (size_t i = 0; i < 2; ++i) {
-                        if (!pointer_state->axes[i].valid) {
-                                continue;
-                        }
-                        fprintf(stderr, "%s axis ", axis_name[i]);
-                        if (pointer_state->event_mask & POINTER_EVENT_AXIS) {
-                                fprintf(stderr, "value %f ", wl_fixed_to_double(
-                                                        pointer_state->axes[i].value));
-                        }
-                        if (pointer_state->event_mask & POINTER_EVENT_AXIS_DISCRETE) {
-                                fprintf(stderr, "discrete %d ",
-                                                pointer_state->axes[i].discrete);
-                        }
-                        if (pointer_state->event_mask & POINTER_EVENT_AXIS_SOURCE) {
-                                fprintf(stderr, "via %s ",
-                                                axis_source[pointer_state->axis_source]);
-                        }
-                        if (pointer_state->event_mask & POINTER_EVENT_AXIS_STOP) {
-                                fprintf(stderr, "(stopped) ");
-                        }
+            for (size_t i = 0; i < 2; ++i) {
+                if (!pointer_state->axis[i].valid) {
+                    continue;
                 }
+                LOG_INFO("{} axis ", axis_name[i]);
+                if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)) {
+                    LOG_INFO("value {} ", pointer_state->axis[i].value);
+                }
+                if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE)) {
+                    LOG_INFO("source {} ", axis_source[pointer_state->axis_source]);
+                }
+                if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120)) {
+                    LOG_INFO("value120 {} ", pointer_state->axis[i].value120);
+                }
+                if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR)) {
+                    LOG_INFO("relative dir {} ", axis_relative_dir[pointer_state->axis[i].relative_dir]);
+                }
+                if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP)) {
+                    LOG_INFO("stopped ");
+                }
+            }
         }
 
-        fprintf(stderr, "\n");
-        memset(event, 0, sizeof(*event));
+        std::memset(pointer_state, 0, sizeof(*pointer_state));
+    }
+
+    // Keyboard events
+    static void keyboard_handle_keymap(void* data, wl_keyboard* keyboard, u32 format, i32 fd, u32 size)
+    {
+        assert(format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
+        WaylandInternState* state = static_cast<WaylandInternState*>(data);
+
+        i8* map_shm = static_cast<i8*>(
+            mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0)
+        );
+
+        xkb_keymap* xkb_keymap = xkb_keymap_new_from_string(
+            state->go_state.keyboard_state.xkb_context,
+            map_shm,
+            XKB_KEYMAP_FORMAT_TEXT_V1,
+            XKB_KEYMAP_COMPILE_NO_FLAGS
+        );
+
+        munmap(map_shm, size);
+        close(fd);
+
+        xkb_state* xkb_state = xkb_state_new(xkb_keymap);
+        xkb_keymap_unref(state->go_state.keyboard_state.xkb_keymap);
+        xkb_state_unref(state->go_state.keyboard_state.xkb_state);
+
+        state->go_state.keyboard_state.xkb_keymap = xkb_keymap;
+        state->go_state.keyboard_state.xkb_state = xkb_state;
+    }
+
+    // The key_code from this event is the Linux evdev scancode.
+    // To translate this to an XKB scancode, you must add 8 to the evdev scancode.
+    static void keyboard_handle_key(
+        void* data, wl_keyboard* keyboard, u32 serial,
+        u32 time, u32 key_code, u32 key_state)
+    {
+        WaylandInternState* state = static_cast<WaylandInternState*>(data);
+        i8 buf[128];
+
+        u32 keycode = key_code + 8;
+        xkb_keysym_t sym = xkb_state_key_get_one_sym(
+            state->go_state.keyboard_state.xkb_state, keycode);
+        xkb_keysym_get_name(sym, buf, sizeof(buf));
+        std::string_view key_state_sv = key_state == WL_KEYBOARD_KEY_STATE_PRESSED ? "press" : "release";
+        LOG_INFO("key: {} scan_code: {} state: {}", buf, sym, key_state_sv);
+
+        // TODO: switch on keys
+        // XKB_KEY_Alt_L
+
+        xkb_state_key_get_utf8(state->go_state.keyboard_state.xkb_state, keycode,
+            buf, sizeof(buf)
+        );
+        LOG_INFO("utf8: {}", buf);
+    }
+
+    static void keyboard_handle_enter(void* data, wl_keyboard* keyboard, u32 serial, wl_surface* surface, wl_array* keys)
+    {
+        WaylandInternState* state = static_cast<WaylandInternState*>(data);
+        u32* key;
+
+        LOG_INFO("Keyboard enter, pressed keys are:");
+        wl_array_for_each(key, keys, u32*) {
+            i8 buf[128];
+            xkb_keysym_t sym = xkb_state_key_get_one_sym(
+                state->go_state.keyboard_state.xkb_state, *key + 8
+            );
+            xkb_keysym_get_name(sym, buf, sizeof(buf));
+            LOG_INFO("key: {} scan_code: {}", buf, sym);
+
+            // TODO: switch on keys
+            // XKB_KEY_Alt_L
+ 
+            xkb_state_key_get_utf8(state->go_state.keyboard_state.xkb_state,
+                *key + 8, buf, sizeof(buf));
+            LOG_INFO("utf8: {}", buf);
+        }
+    }
+
+    static void keyboard_handle_leave(void* data, wl_keyboard* keyboard, u32 serial, wl_surface* surface)
+    {
+        // This space deliberately left blank
+    }
+
+    static void keyboard_handle_repeat_info(void* data, wl_keyboard* keyboard, i32 rate, i32 delay)
+    {
+        LOG_INFO("repeat rate: {} repeat delay: {}", rate, delay);
+    }
+
+    static void keyboard_handle_modifiers(
+        void* data, wl_keyboard* keyboard, u32 serial,
+        u32 depressed_mods, u32 latched_mods, u32 locked_mods, u32 group
+    )
+    {
+        WaylandInternState* state = static_cast<WaylandInternState*>(data);
+        xkb_state_update_mask(state->go_state.keyboard_state.xkb_state, depressed_mods, latched_mods, locked_mods, 0, 0, group);
+    }
+
+    static void seat_handle_name(void* data, wl_seat* seat, const i8* name) {
+        // This space deliberately left blank
     }
 
     static void seat_handle_capabilities(void* data, wl_seat* seat, u32 capabilities) {
@@ -430,8 +540,8 @@ namespace sf_platform {
 
         if (have_keyboard) {
             LOG_INFO("keyboard device detected");
-            // state->go_state.keyboard_dev = wl_seat_get_keyboard(state->go_state.seat);
-            // wl_keyboard_add_listener(state->go_state.keyboard_dev, &state->listeners.keyboard_listener, static_cast<void*>(state));
+            state->go_state.keyboard_dev = wl_seat_get_keyboard(state->go_state.seat);
+            wl_keyboard_add_listener(state->go_state.keyboard_dev, &state->listeners.keyboard_listener, static_cast<void*>(state));
         } else if (!have_keyboard && state->go_state.keyboard_dev) {
             wl_keyboard_release(state->go_state.keyboard_dev);
             state->go_state.keyboard_dev = nullptr;
@@ -492,6 +602,8 @@ namespace sf_platform {
             return false;
         }
         state->registry = wl_display_get_registry(state->display);
+        state->go_state.keyboard_state.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+
         state->listeners.registry_listener = wl_registry_listener{
             .global = registry_handle_global,
             .global_remove = registry_handle_global_remove,
@@ -511,9 +623,19 @@ namespace sf_platform {
             .motion = pointer_handle_motion,
             .button = pointer_handle_button,
             .axis = pointer_handle_axis,
+            .frame = pointer_handle_frame,
+            .axis_source = pointer_handle_axis_source,
+            .axis_stop = pointer_handle_axis_stop,
+            .axis_value120 = pointer_handle_axis_value120,
+            .axis_relative_direction = pointer_handle_axis_relative_dir
         };
         state->listeners.keyboard_listener = wl_keyboard_listener{
-            // TODO
+            .keymap = keyboard_handle_keymap,
+            .enter = keyboard_handle_enter,
+            .leave = keyboard_handle_leave,
+            .key = keyboard_handle_key,
+            .modifiers = keyboard_handle_modifiers,
+            .repeat_info = keyboard_handle_repeat_info
         };
         state->listeners.xdg_surface_listener = xdg_surface_listener{
             .configure = xdg_surface_handle_configure,
@@ -534,6 +656,14 @@ namespace sf_platform {
     PlatformState::~PlatformState() {
         WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
         if (state) {
+            if (state->go_state.pointer_dev) {
+                wl_pointer_release(state->go_state.pointer_dev);
+                state->go_state.pointer_dev = nullptr;
+            }
+            if (state->go_state.keyboard_dev) {
+                wl_keyboard_release(state->go_state.keyboard_dev);
+                state->go_state.keyboard_dev = nullptr;
+            }
             munmap(state->go_state.pool_data, SHM_POOL_SIZE);
             wl_display_disconnect(state->display);
             state->display = nullptr;

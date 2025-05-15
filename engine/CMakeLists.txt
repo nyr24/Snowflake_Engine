@@ -46,4 +46,4 @@ endif()
 target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include ${GLM_INCLUDE_DIR})
 target_link_directories(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/lib)
 # TODO: link with platform-specific libs under condition
-target_link_libraries(${PROJECT_NAME} PRIVATE vulkan glm wayland-client)
+target_link_libraries(${PROJECT_NAME} PRIVATE vulkan glm wayland-client xkbcommon)
