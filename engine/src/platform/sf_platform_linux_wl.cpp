@@ -18,16 +18,15 @@
 #include <cassert>
 
 namespace sf_platform {
-    constexpr u32 WIDTH = 720, HEIGHT = 540;
-    constexpr u32 STRIDE = WIDTH * 4;
-    constexpr u32 BUFF_COUNT = 2;
-    constexpr u32 SHM_POOL_SIZE = HEIGHT * STRIDE * BUFF_COUNT;
-
-    constexpr u32 BLACK_COLOR =   0xFF333333;
-    constexpr u32 WHITE_COLOR =   0xFFFFFFFF;
-    constexpr u32 GREEN_COLOR =   0xFF00FF00;
-    constexpr u32 RED_COLOR   =   0xFFFF0000;
-    constexpr u32 BLUE_COLOR  =   0xFF0000FF;
+    enum class ColorXRGB : u32 {
+        BLACK  = 0xFF333333,
+        WHITE  = 0xFFFFFFFF,
+        GREEN  = 0xFF00FF00,
+        RED    = 0xFFFF0000,
+        YELLOW = 0xFFCFB000,
+        BLUE   = 0xFF0000FF,
+        PURPLE = 0xFF8800C5,
+    };
 
     using wl_surface    = struct wl_surface;
     using xdg_wm_base   = struct xdg_wm_base;
@@ -74,7 +73,6 @@ namespace sf_platform {
     struct GlobalObjectsState {
         wl_shm*                 shm;
         wl_compositor*          compositor;
-        // wl_output*              output;
         wl_seat*                seat;
         wl_pointer*             pointer_dev;
         wl_keyboard*            keyboard_dev;
@@ -83,14 +81,11 @@ namespace sf_platform {
         xdg_surface*            xdg_surface;
         xdg_toplevel*           xdg_toplevel;
         xdg_wm_base*            xdg_wm_base;
-        wl_buffer*              buffers[2];
+        wl_buffer*              buffer;
         u32*                    pool_data;
-        const i8*               window_name;
-        f32                     offset;
         u32                     last_frame = 0;
         PointerEventState       pointer_state;
         KeyboardState           keyboard_state;
-        u8                      active_buffer_ind = 0;
     };
 
     struct Listeners {
@@ -104,14 +99,23 @@ namespace sf_platform {
         xdg_surface_listener    xdg_surface_listener;
     };
 
+    struct WindowProps {
+        const i8*   name;
+        i32         width;
+        i32         height;
+        i32         stride;
+        i32         shm_pool_size;
+    };
+
     struct WaylandInternState {
         wl_display*             display;
         wl_registry*            registry;
         Listeners               listeners;
         GlobalObjectsState      go_state;
+        WindowProps             window_props;
     };
 
-    static void draw_frame(GlobalObjectsState* state);
+    static void draw_frame(WaylandInternState* state);
 
     static void randname(i8 *buf) {
         struct timespec ts;
@@ -169,7 +173,7 @@ namespace sf_platform {
     static void xdg_surface_handle_configure(void *data,
             struct xdg_surface *xdg_surface, u32 serial)
     {
-        GlobalObjectsState* state = static_cast<GlobalObjectsState*>(data);
+        WaylandInternState* state = static_cast<WaylandInternState*>(data);
         xdg_surface_ack_configure(xdg_surface, serial);
         draw_frame(state);
     }
@@ -217,15 +221,15 @@ namespace sf_platform {
     static void init_surface(WaylandInternState* state) {
         state->go_state.surface = wl_compositor_create_surface(state->go_state.compositor);
         state->go_state.xdg_surface = xdg_wm_base_get_xdg_surface(state->go_state.xdg_wm_base, state->go_state.surface);
-        xdg_surface_add_listener(state->go_state.xdg_surface, &state->listeners.xdg_surface_listener, &state->go_state);
+        xdg_surface_add_listener(state->go_state.xdg_surface, &state->listeners.xdg_surface_listener, state);
         xdg_wm_base_add_listener(state->go_state.xdg_wm_base, &state->listeners.xdg_wm_base_listener, &state->go_state);
 
         state->go_state.xdg_toplevel = xdg_surface_get_toplevel(state->go_state.xdg_surface);
-        xdg_toplevel_set_title(state->go_state.xdg_toplevel, state->go_state.window_name);
+        xdg_toplevel_set_title(state->go_state.xdg_toplevel, state->window_props.name);
 
         // making all surface as opaque and compositor dont need to worry about drawing windows behind our app
         state->go_state.region_opaque = wl_compositor_create_region(state->go_state.compositor);
-        wl_region_add(state->go_state.region_opaque, 0, 0, WIDTH, HEIGHT);
+        wl_region_add(state->go_state.region_opaque, 0, 0, state->window_props.width, state->window_props.height);
         wl_surface_set_opaque_region(state->go_state.surface, state->go_state.region_opaque);
         wl_region_destroy(state->go_state.region_opaque);
 
@@ -234,44 +238,32 @@ namespace sf_platform {
     }
 
     static void init_buffers(WaylandInternState* state) {
-        i32 fd = allocate_shm_file(SHM_POOL_SIZE);
+        i32 fd = allocate_shm_file(state->window_props.shm_pool_size);
         if (fd == -1) {
             LOG_ERROR("Invalid file descriptor");
             std::exit(1);
         }
 
         state->go_state.pool_data = static_cast<u32*>(
-            mmap(nullptr, SHM_POOL_SIZE,
+            mmap(nullptr, state->window_props.shm_pool_size,
             PROT_READ | PROT_WRITE, MAP_SHARED,
             fd, 0
         ));
 
-        wl_shm_pool* pool = wl_shm_create_pool(state->go_state.shm, fd, SHM_POOL_SIZE);
-
-        for (i32 i = 0; i < 2; ++i) {
-            const i32 offset = i * HEIGHT * STRIDE;
-            state->go_state.buffers[i] = wl_shm_pool_create_buffer(pool, offset,
-                WIDTH, HEIGHT, STRIDE, WL_SHM_FORMAT_XRGB8888);
-        }
+        wl_shm_pool* pool = wl_shm_create_pool(state->go_state.shm, fd, state->window_props.shm_pool_size);
+        state->go_state.buffer = wl_shm_pool_create_buffer(pool, 0,
+            state->window_props.width, state->window_props.height, state->window_props.stride, WL_SHM_FORMAT_XRGB8888);
 
         wl_shm_pool_destroy(pool);
         close(fd);
     }
 
     static void surface_handle_frame_done(void* data, wl_callback* cb, u32 time) {
-        wl_callback_destroy(cb);
-
         WaylandInternState* state = static_cast<WaylandInternState*>(data);
+        wl_callback_destroy(cb);
         cb = wl_surface_frame(state->go_state.surface);
         wl_callback_add_listener(cb, &state->listeners.callback_listener,  static_cast<void*>(state));
-
-        // update scroll amount at 24px per second
-        if (state->go_state.last_frame != 0) {
-            i32 elapsed = static_cast<i32>(time) - static_cast<i32>(state->go_state.last_frame);
-            state->go_state.offset += static_cast<f32>(elapsed) / 1000.0f * 24;
-        }
-
-        draw_frame(&state->go_state);
+        draw_frame(state);
         state->go_state.last_frame = time;
     }
 
@@ -548,35 +540,22 @@ namespace sf_platform {
         }
     }
 
-    static void draw_frame(GlobalObjectsState* state) {
-#ifdef SF_DEBUG
-        static u64 frame_count = 0;
-        // LOG_DEBUG("frame: {}", frame_count);
-        frame_count++;
-#endif
-        i32 back_buffer_ind = (state->active_buffer_ind + 1) % 2;
-        wl_buffer* back_buffer = state->buffers[back_buffer_ind];
-        u32 back_buffer_data_offset = back_buffer_ind * HEIGHT * WIDTH;
-        u32* back_buffer_data = state->pool_data + back_buffer_data_offset;
+    static void draw_frame(WaylandInternState* state) {
+        const i32 quot_height = state->window_props.height / 4;
+        ColorXRGB colors[] = { ColorXRGB::PURPLE, ColorXRGB::GREEN, ColorXRGB::RED, ColorXRGB::YELLOW };
 
-        i32 offset = static_cast<i32>(state->offset) % 8;
-        for (i32 y = 0; y < HEIGHT; ++y) {
-            for (i32 x = 0; x < WIDTH; ++x) {
-                if (((x + offset) + (y + offset) / 8 * 8) % 16 < 8) {
-                    back_buffer_data[y * WIDTH + x] = BLACK_COLOR;
-                }
-                else {
-                    back_buffer_data[y * WIDTH + x] = WHITE_COLOR;
+        for (i32 height_offset = 0; height_offset < 4; ++height_offset) {
+            for (i32 y = (height_offset * quot_height); y < ((height_offset + 1) * quot_height); ++y) {
+                for (i32 x = 0; x < state->window_props.width; ++x) {
+                    i32 px_curr = y * (state->window_props.width) + x;
+                    state->go_state.pool_data[px_curr] = static_cast<u32>(colors[height_offset]);
                 }
             }
         }
 
-        wl_surface_attach(state->surface, back_buffer, 0, 0);
-        wl_surface_damage_buffer(state->surface, 0, 0, WIDTH, HEIGHT);
-        wl_surface_commit(state->surface);
-
-        // swap buffers
-        state->active_buffer_ind = back_buffer_ind;
+        wl_surface_attach(state->go_state.surface, state->go_state.buffer, 0, 0);
+        wl_surface_damage_buffer(state->go_state.surface, 0, 0, state->window_props.width, state->window_props.height);
+        wl_surface_commit(state->go_state.surface);
     }
 
     PlatformState PlatformState::init() {
@@ -594,7 +573,16 @@ namespace sf_platform {
         std::memset(this->internal_state, 0, sizeof(this->internal_state));
 
         WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
-        state->go_state.window_name = app_name;
+
+        constexpr i32 buff_count = 2;
+        const i32 stride = width * 4;
+        state->window_props = WindowProps{
+            .name = app_name,
+            .width = width,
+            .height = height,
+            .stride = stride,
+            .shm_pool_size = height * stride * buff_count,
+        };
 
         state->display = wl_display_connect(nullptr);
         if (!state->display) {
@@ -664,7 +652,7 @@ namespace sf_platform {
                 wl_keyboard_release(state->go_state.keyboard_dev);
                 state->go_state.keyboard_dev = nullptr;
             }
-            munmap(state->go_state.pool_data, SHM_POOL_SIZE);
+            munmap(state->go_state.pool_data, state->window_props.shm_pool_size);
             wl_display_disconnect(state->display);
             state->display = nullptr;
             free(state);
