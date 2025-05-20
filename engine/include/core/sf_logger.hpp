@@ -74,16 +74,24 @@ namespace sf_core {
 
 #if LOG_WARN_ENABLED == 1
 #define LOG_WARN(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_WARN, fmt, ##__VA_ARGS__);
+#else
+#define LOG_WARN
 #endif
 
 #if LOG_INFO_ENABLED == 1
 #define LOG_INFO(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_INFO, fmt, ##__VA_ARGS__);
+#else
+#define LOG_INFO
 #endif
 
 #if LOG_DEBUG_ENABLED == 1
 #define LOG_DEBUG(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__);
+#else
+#define LOG_DEBUG
 #endif
 
 #if LOG_TRACE_ENABLED == 1
 #define LOG_TRACE(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_TRACE, fmt, ##__VA_ARGS__);
+#else
+#define LOG_TRACE
 #endif

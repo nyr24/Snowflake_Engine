@@ -4,6 +4,7 @@
 #include "platform/wayland-util-custom.hpp"
 #include "core/sf_logger.hpp"
 #include "platform/xdg-shell-protocol.hpp"
+#include "core/sf_util.hpp"
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>
 #include <wayland-client.h>
@@ -559,7 +560,9 @@ namespace sf_platform {
     }
 
     PlatformState PlatformState::init() {
-        return PlatformState{ .internal_state = nullptr };
+        auto state = PlatformState{ .internal_state = sf_alloc<WaylandInternState>(1, true) };
+        std::memset(state.internal_state, 0, sizeof(state.internal_state));
+        return state;
     }
 
     bool PlatformState::startup(
@@ -569,9 +572,6 @@ namespace sf_platform {
         i32 width,
         i32 height
     ) {
-        this->alloc_inner_state<WaylandInternState>();
-        std::memset(this->internal_state, 0, sizeof(this->internal_state));
-
         WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
 
         constexpr i32 buff_count = 2;

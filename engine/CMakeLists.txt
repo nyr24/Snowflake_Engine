@@ -33,7 +33,7 @@ target_compile_definitions(
     -DWAYLAND_DEBUG
   >
   $<$<CONFIG:Release>:
-    -DSF_NO_DEBUG
+    -DSF_RELEASE
   >
 )
 

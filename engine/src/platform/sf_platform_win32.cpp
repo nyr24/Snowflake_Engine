@@ -19,7 +19,9 @@ namespace sf_platform {
     HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);
 
     PlatformState PlatformState::init() {
-        return PlatformState{ .internal_state = nullptr };
+        auto state = PlatformState{ .internal_state = sf_alloc<WindowsInternState>(1, true) };
+        std::memset(state.internal_state, 0, sizeof(state.internal_state));
+        return state;
     }
 
     bool PlatformState::startup(
@@ -29,9 +31,8 @@ namespace sf_platform {
         i32 width,
         i32 height
     ) {
-        this->alloc_inner_state<WindowsInternState>();
         WindowsInternState* state = static_cast<WindowsInternState*>(this->internal_state);
-        state->h_instance = GetModuleHandleA(0);
+        state->h_instance = GetModuleHandleA(nullptr);
         HICON icon = LoadIcon(state->h_instance, IDI_APPLICATION);
 
         WNDCLASSA wc;
@@ -115,7 +116,7 @@ namespace sf_platform {
         return true;
     }
 
-    inline f64 platform_get_abs_time() {
+    f64 platform_get_abs_time() {
         LARGE_INTERGER now_time;
         QueryPerformanceCounter(&now_time);
         return (f64)now_time.QuadPart * clock_frequency;

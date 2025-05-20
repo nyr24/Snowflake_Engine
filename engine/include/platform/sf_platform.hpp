@@ -2,11 +2,13 @@
 #include <string_view>
 #include "platform/sf_platform_macros.hpp"
 #include "core/sf_types.hpp"
-#include "core/sf_util.hpp"
-
+#include <cstdlib>
+#include <cstring>
+// TODO: 
 namespace sf_platform {
     struct PlatformState {
         static PlatformState init();
+
         bool startup(
             const char* app_name,
             i32 x,
@@ -14,13 +16,10 @@ namespace sf_platform {
             i32 width,
             i32 height
         );
-        ~PlatformState();
-        bool start_event_loop();
 
-        template<typename T>
-        void alloc_inner_state() {
-            internal_state = sf_alloc<T>(1, true);
-        }
+        ~PlatformState();
+
+        bool start_event_loop();
 
         void* internal_state = nullptr;
     };
@@ -41,7 +40,7 @@ namespace sf_platform {
     f64             platform_get_abs_time();
     void            platform_sleep(u64 ms);
 
-#ifdef SF_PLATFORM_WINDOWS
+// #ifdef SF_PLATFORM_WINDOWS
     template<typename T>
     T* platform_alloc(usize count, bool aligned) {
         return sf_alloc<T>(count, aligned);
@@ -55,17 +54,17 @@ namespace sf_platform {
 
     template<typename T>
     void platform_mem_zero(T* block, usize size) {
-        memset(block, 0, size);
+        std::memset(block, 0, size);
     }
 
     template<typename T>
     void platform_mem_copy(T* dest, const T* src, usize size) {
-        memcpy(dest, src, size);
+        std::memcpy(dest, src, size);
     }
 
     template<typename T>
     void platform_mem_set(T* dest, T val, usize size) {
-        memset(dest, val, size);
+        std::memset(dest, val, size);
     }
-#endif // SF_PLATFORM_WINDOWS
+// #endif // SF_PLATFORM_WINDOWS
 }

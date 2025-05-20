@@ -30,7 +30,7 @@ target_compile_definitions(
     -DSF_ASSERTS_ENABLED
   >
   $<$<CONFIG:Release>:
-    -DSF_NO_DEBUG
+    -DSF_RELEASE
   >
 )
 

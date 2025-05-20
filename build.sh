@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 DEBUG_BUILD_DIR="build/debug/"
 RELEASE_BUILD_DIR="build/release/"
