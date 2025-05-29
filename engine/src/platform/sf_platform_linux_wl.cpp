@@ -563,10 +563,24 @@ namespace sf_platform {
         wl_surface_commit(state->go_state.surface);
     }
 
-    PlatformState PlatformState::init() {
-        auto state = PlatformState{ .internal_state = sf_alloc<WaylandInternState>(1, true) };
-        std::memset(state.internal_state, 0, sizeof(state.internal_state));
-        return state;
+    PlatformState::PlatformState()
+        : internal_state{ sf_core::sf_alloc<WaylandInternState>(1, true) }
+    {
+        std::memset(internal_state, 0, sizeof(WaylandInternState));
+    }
+
+    PlatformState::PlatformState(PlatformState&& rhs) noexcept
+        : internal_state{ rhs.internal_state }
+    {
+        rhs.internal_state = nullptr;
+    }
+
+    PlatformState& PlatformState::operator=(PlatformState&& rhs) noexcept
+    {
+        free(internal_state);
+        internal_state = rhs.internal_state;
+        rhs.internal_state = nullptr;
+        return *this;
     }
 
     bool PlatformState::startup(

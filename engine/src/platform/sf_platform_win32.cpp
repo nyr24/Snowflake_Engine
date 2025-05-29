@@ -6,6 +6,7 @@
 #include <Windows.h>
 #include <windowsx.h>
 #include "core/sf_types.hpp"
+#include "core/sf_util.hpp"
 
 namespace sf_platform {
     struct WindowsInternState {
@@ -18,10 +19,10 @@ namespace sf_platform {
 
     HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);
 
-    PlatformState PlatformState::init() {
-        auto state = PlatformState{ .internal_state = sf_alloc<WindowsInternState>(1, true) };
-        std::memset(state.internal_state, 0, sizeof(state.internal_state));
-        return state;
+    PlatformState::PlatformState()
+        : internal_state{ sf_alloc<WindowsInternState>(1, true) }
+    {
+        std::memset(internal_state, 0, sizeof(internal_state));
     }
 
     bool PlatformState::startup(

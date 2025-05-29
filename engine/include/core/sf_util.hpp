@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include "core/sf_logger.hpp"
 
+namespace sf_core {
 template<typename T>
 T* sf_alloc(usize count, bool aligned) {
     if (aligned) {
@@ -21,4 +22,5 @@ T* sf_alloc(usize count, bool aligned) {
 
         return res;
     }
+}
 }

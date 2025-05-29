@@ -29,10 +29,10 @@ namespace sf_platform {
         xcb_atom_t          wm_delete_win;
     };
 
-    PlatformState PlatformState::init() {
-        auto state = PlatformState{ .internal_state = sf_alloc<X11InternState>(1, true) };
-        std::memset(state.internal_state, 0, sizeof(state.internal_state));
-        return state;
+    PlatformState::PlatformState()
+        : internal_state{ sf_alloc<WaylandInternState>(1, true) }
+    {
+        std::memset(internal_state, 0, sizeof(internal_state));
     }
 
     bool PlatformState::startup(
