@@ -4,7 +4,7 @@
 #include "core/sf_types.hpp"
 #include <cstdlib>
 #include <cstring>
-// TODO: 
+
 namespace sf_platform {
     struct PlatformState {
         static PlatformState init();
@@ -40,7 +40,7 @@ namespace sf_platform {
     f64             platform_get_abs_time();
     void            platform_sleep(u64 ms);
 
-// #ifdef SF_PLATFORM_WINDOWS
+#ifdef SF_PLATFORM_WINDOWS
     template<typename T>
     T* platform_alloc(usize count, bool aligned) {
         return sf_alloc<T>(count, aligned);
@@ -66,5 +66,61 @@ namespace sf_platform {
     void platform_mem_set(T* dest, T val, usize size) {
         std::memset(dest, val, size);
     }
-// #endif // SF_PLATFORM_WINDOWS
+#endif // SF_PLATFORM_WINDOWS
+
+#if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
+    template<typename T>
+    T* platform_alloc(usize count, bool aligned) {
+        return sf_alloc<T>(count, aligned);
+    }
+
+    template<typename T>
+    void platform_free(T* block, bool aligned) {
+        free(block);
+        block = nullptr;
+    }
+
+    template<typename T>
+    void platform_mem_zero(T* block, usize size) {
+        std::memset(block, 0, size);
+    }
+
+    template<typename T>
+    void platform_mem_copy(T* dest, const T* src, usize size) {
+        std::memcpy(dest, src, size);
+    }
+
+    template<typename T>
+    void platform_mem_set(T* dest, T val, usize size) {
+        std::memset(dest, val, size);
+    }
+#endif // SF_PLATFORM_WAYLAND
+
+#if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
+    template<typename T>
+    T* platform_alloc(usize count, bool aligned) {
+        return sf_alloc<T>(count, aligned);
+    }
+
+    template<typename T>
+    void platform_free(T* block, bool aligned) {
+        free(block);
+        block = nullptr;
+    }
+
+    template<typename T>
+    void platform_mem_zero(T* block, usize size) {
+        std::memset(block, 0, size);
+    }
+
+    template<typename T>
+    void platform_mem_copy(T* dest, const T* src, usize size) {
+        std::memcpy(dest, src, size);
+    }
+
+    template<typename T>
+    void platform_mem_set(T* dest, T val, usize size) {
+        std::memset(dest, val, size);
+    }
+#endif // SF_PLATFORM_X11
 }

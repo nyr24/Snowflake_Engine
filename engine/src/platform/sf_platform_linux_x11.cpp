@@ -36,7 +36,7 @@ namespace sf_platform {
     }
 
     bool PlatformState::startup(
-        const char* app_name,
+        const i8* app_name,
         i32 x,
         i32 y,
         i32 width,
@@ -174,8 +174,7 @@ namespace sf_platform {
 
         bool quit_flagged = false;
 
-        while (true) {
-            event = xcb_poll_for_event(state->connection);
+        while (event = xcb_poll_for_event(state->connection)) {
             if (!event) {
                 break;
             }
@@ -211,6 +210,40 @@ namespace sf_platform {
 
         return !quit_flagged;
     }
+
+    static constexpr std::array<const i8*, 6> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
+
+    void platform_console_write(const i8* message, u8 colour) {
+        // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
+        printf("\033[%sm%s\033[0m", color_strings[colour], message);
+    }
+
+
+    void platform_console_write_error(const i8* message, u8 colour) {
+        // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
+        const i8* color_strings[] = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
+        printf("\033[%sm%s\033[0m", color_strings[colour], message);
+    }
+
+    f64 platform_get_absolute_time() {
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        return now.tv_sec + now.tv_nsec * 0.000000001;
+    }
+
+    void platform_sleep(u64 ms) {
+#if _POSIX_C_SOURCE >= 199309L
+        struct timespec ts;
+        ts.tv_sec = ms / 1000;
+        ts.tv_nsec = (ms % 1000) * 1000 * 1000;
+        nanosleep(&ts, 0);
+#else
+        if (ms >= 1000) {
+            sleep(ms / 1000);
+        }
+        usleep((ms % 1000) * 1000);
+#endif
+    }
 }
 
-#endif
+#endif // defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
