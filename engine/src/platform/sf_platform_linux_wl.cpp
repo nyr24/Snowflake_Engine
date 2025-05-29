@@ -17,6 +17,10 @@
 #include <cstring>
 #include <ctime>
 #include <cassert>
+#include <format>
+#include <array>
+#include <string_view>
+#include <iostream>
 
 namespace sf_platform {
     enum class ColorXRGB : u32 {
@@ -670,9 +674,45 @@ namespace sf_platform {
         return true;
     }
 
-    void            platform_console_write(std::string_view message, u8 color);
-    void            platform_console_write_error(std::string_view message, u8 color);
-    f64             platform_get_abs_time();
-    void            platform_sleep(u64 ms);
+    static constexpr std::array<std::string_view, 6> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
+
+    void platform_console_write(const i8* message, u8 color) {
+        // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
+        // printf("\033[%sm%s\033[0m", color_strings[color], message);
+        constexpr usize BUFF_LEN{ 200 };
+        char message_buff[BUFF_LEN] = {0};
+        const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
+        std::cout << std::string_view(const_cast<const i8*>(message_buff), res.out);
+    }
+
+
+    void platform_console_write_error(const i8* message, u8 color) {
+        // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
+        // printf("\033[%sm%s\033[0m", color_strings[color], message);
+        constexpr usize BUFF_LEN{ 200 };
+        char message_buff[BUFF_LEN] = {0};
+        const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
+        std::cerr << std::string_view(const_cast<const i8*>(message_buff), res.out);
+    }
+
+    f64 platform_get_absolute_time() {
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        return now.tv_sec + now.tv_nsec * 0.000000001;
+    }
+
+    void platform_sleep(u64 ms) {
+#if _POSIX_C_SOURCE >= 199309L
+        struct timespec ts;
+        ts.tv_sec = ms / 1000;
+        ts.tv_nsec = (ms % 1000) * 1000 * 1000;
+        nanosleep(&ts, 0);
+#else
+        if (ms >= 1000) {
+            sleep(ms / 1000);
+        }
+        usleep((ms % 1000) * 1000);
+#endif
+    }
 }
 #endif // defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)

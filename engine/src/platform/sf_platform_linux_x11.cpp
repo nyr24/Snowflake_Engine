@@ -211,18 +211,24 @@ namespace sf_platform {
         return !quit_flagged;
     }
 
-    static constexpr std::array<const i8*, 6> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
+    static constexpr std::array<std::string_view, 6> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
 
-    void platform_console_write(const i8* message, u8 colour) {
+    void platform_console_write(const i8* message, u8 color) {
         // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-        printf("\033[%sm%s\033[0m", color_strings[colour], message);
+        // printf("\033[%sm%s\033[0m", color_strings[color], message);
+        constexpr usize BUFF_LEN{ 200 };
+        char message_buff[BUFF_LEN] = {0};
+        const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
+        std::cout << std::string_view(const_cast<const i8*>(message_buff), res.out);
     }
 
-
-    void platform_console_write_error(const i8* message, u8 colour) {
+    void platform_console_write_error(const i8* message, u8 color) {
         // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-        const i8* color_strings[] = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
-        printf("\033[%sm%s\033[0m", color_strings[colour], message);
+        // printf("\033[%sm%s\033[0m", color_strings[color], message);
+        constexpr usize BUFF_LEN{ 200 };
+        char message_buff[BUFF_LEN] = {0};
+        const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
+        std::cerr << std::string_view(const_cast<const i8*>(message_buff), res.out);
     }
 
     f64 platform_get_absolute_time() {
