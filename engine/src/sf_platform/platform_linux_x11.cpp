@@ -1,4 +1,4 @@
-#include "platform/sf_platform.hpp"
+#include "sf_platform/platform.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
 #include <xcb/xcb.h>

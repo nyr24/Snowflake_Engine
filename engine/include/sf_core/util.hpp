@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdlib>
-#include "core/sf_logger.hpp"
+#include "sf_core/logger.hpp"
 
 namespace sf_core {
 template<typename T>

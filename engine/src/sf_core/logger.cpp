@@ -1,5 +1,5 @@
-#include "core/sf_logger.hpp"
-#include "core/sf_asserts.hpp"
+#include "sf_core/logger.hpp"
+#include "sf_core/asserts_sf.hpp"
 
 #ifdef SF_ASSERTS_ENABLED
 SF_EXPORT void sf_core::report_assertion_failure(const char* expression, const char* message, const char* file, i32 line) {

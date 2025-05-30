@@ -1,12 +1,12 @@
-#include "platform/sf_platform.hpp"
+#include "sf_platform/platform.hpp"
 
 #ifdef SF_PLATFORM_WINDOWS
 #include <cstring>
 #include <string_view>
 #include <Windows.h>
 #include <windowsx.h>
-#include "core/sf_types.hpp"
-#include "core/sf_util.hpp"
+#include "sf_core/types.hpp"
+#include "sf_core/util.hpp"
 
 namespace sf_platform {
     struct WindowsInternState {

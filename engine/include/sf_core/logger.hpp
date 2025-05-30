@@ -1,11 +1,10 @@
 #pragma once
 
 #include <format>
-#include <array>
 #include <iostream>
 #include <string_view>
-#include "platform/sf_platform_macros.hpp"
-#include "core/sf_types.hpp"
+#include "sf_platform/platform_macros.hpp"
+#include "sf_core/types.hpp"
 
 #define LOG_WARN_ENABLED 1
 #define LOG_INFO_ENABLED 1

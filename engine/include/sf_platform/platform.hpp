@@ -1,6 +1,6 @@
 #pragma once
-#include "platform/sf_platform_macros.hpp"
-#include "core/sf_types.hpp"
+#include "sf_platform/platform_macros.hpp"
+#include "sf_core/types.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <string_view>

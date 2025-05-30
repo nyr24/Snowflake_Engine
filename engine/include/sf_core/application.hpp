@@ -1,7 +1,7 @@
 #pragma once
 
-#include "platform/sf_platform.hpp"
-#include "core/sf_types.hpp"
+#include "sf_platform/platform.hpp"
+#include "sf_core/types.hpp"
 
 namespace sf_core {
 struct ApplicationConfig {

@@ -1,5 +1,5 @@
-#include "core/sf_application.hpp"
-#include "core/sf_logger.hpp"
+#include "sf_core/application.hpp"
+#include "sf_core/logger.hpp"
 
 static sf_core::ApplicationState app_state;
 static bool app_initialized{ false };
