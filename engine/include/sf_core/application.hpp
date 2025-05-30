@@ -12,16 +12,18 @@ struct ApplicationConfig {
     i16         height;
 };
 
+struct GameInstance;
 struct ApplicationState {
     bool                        is_running;
     bool                        is_suspended;
     i16                         width;
     i16                         height;
-    sf_platform::PlatformState  platform_state;
     f64                         last_time;
+    sf_platform::PlatformState  platform_state;
+    GameInstance*               game_inst;
 };
 
-bool create_app(const sf_core::ApplicationConfig& config);
+bool create_app(GameInstance* game_inst);
 void run_app();
 }
 

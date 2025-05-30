@@ -564,7 +564,7 @@ namespace sf_platform {
     }
 
     PlatformState::PlatformState()
-        : internal_state{ sf_core::sf_alloc<WaylandInternState>(1, true) }
+        : internal_state{ sf_alloc<WaylandInternState>(1, true) }
     {
         std::memset(internal_state, 0, sizeof(WaylandInternState));
     }

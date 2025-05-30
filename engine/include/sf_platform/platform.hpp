@@ -1,4 +1,5 @@
 #pragma once
+#include "sf_core/util.hpp"
 #include "sf_platform/platform_macros.hpp"
 #include "sf_core/types.hpp"
 #include <cstdlib>
@@ -72,12 +73,14 @@ void platform_mem_set(T* dest, T val, usize size) {
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
 template<typename T>
-T* platform_alloc(usize count, bool aligned) {
+// NOTE: export to the user code is temporary
+SF_EXPORT T* platform_alloc(usize count, bool aligned) {
     return sf_alloc<T>(count, aligned);
 }
 
 template<typename T>
-void platform_free(T* block, bool aligned) {
+// NOTE: export to the user code is temporary
+SF_EXPORT void platform_free(T* block, bool aligned) {
     free(block);
     block = nullptr;
 }
