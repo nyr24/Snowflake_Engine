@@ -3,7 +3,7 @@
 #include <format>
 #include <iostream>
 #include <string_view>
-#include "sf_platform/platform_macros.hpp"
+#include "sf_platform/platform.hpp"
 #include "sf_core/types.hpp"
 
 #define LOG_WARN_ENABLED 1
@@ -16,81 +16,80 @@
 #define LOG_TRACE_ENABLED 0
 #endif
 
-namespace sf_platform {
-    void platform_console_write(std::string_view message, u8 color);
-    void platform_console_write_error(std::string_view message, u8 color);
-}
+namespace sf {
+void platform_console_write(const i8* message, u8 color);
+void platform_console_write_error(const i8* message, u8 color);
 
-namespace sf_core {
-    enum class LogLevel : u8 {
-        LOG_LEVEL_FATAL,
-        LOG_LEVEL_ERROR,
-        LOG_LEVEL_WARN,
-        LOG_LEVEL_INFO,
-        LOG_LEVEL_DEBUG,
-        LOG_LEVEL_TRACE,
-    };
+enum struct LogLevel : u8 {
+    LOG_LEVEL_FATAL,
+    LOG_LEVEL_ERROR,
+    LOG_LEVEL_WARN,
+    LOG_LEVEL_INFO,
+    LOG_LEVEL_DEBUG,
+    LOG_LEVEL_TRACE,
+    COUNT
+};
 
-    constexpr std::array<const i8*, 6> log_level_as_str = {
-        "[FATAL]: ",
-        "[ERROR]: ",
-        "[WARN]: ",
-        "[INFO]: ",
-        "[DEBUG]: ",
-        "[TRACE]: ",
-    };
+constexpr std::array<const i8*, 6> log_level_as_str = {
+    "[FATAL]: ",
+    "[ERROR]: ",
+    "[WARN]: ",
+    "[INFO]: ",
+    "[DEBUG]: ",
+    "[TRACE]: ",
+};
 
-    bool init_logging();
-    void shutdown_logging();
+bool init_logging();
+void shutdown_logging();
 
-    template<typename... Args>
-    SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, Args&&... args) {
-        constexpr usize BUFF_LEN{ 32000 };
-        char message_buff[BUFF_LEN] = {0};
-        const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, fmt, std::forward<Args>(args)...);
+template<typename... Args>
+SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, Args&&... args) {
+    constexpr usize BUFF_LEN{ 256 };
+    char message_buff[BUFF_LEN] = {0};
+    const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, fmt, std::forward<Args>(args)...);
 
-        constexpr usize BUFF_LEN2{ 32000 };
-        char message_buff2[BUFF_LEN2] = {0};
-        const std::format_to_n_result res2 = std::format_to_n(message_buff2, BUFF_LEN2, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], message_buff);
+    constexpr usize BUFF_LEN2{ 256 };
+    char message_buff2[BUFF_LEN2] = {0};
+    const std::format_to_n_result _ = std::format_to_n(message_buff2, BUFF_LEN2, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], message_buff);
 
-        std::cerr << std::string_view(const_cast<const i8*>(message_buff2), res2.out);
+    // std::cerr << std::string_view(const_cast<const i8*>(message_buff2), res2.out);
 
-        // switch (log_level) {
-        //     case LogLevel::LOG_LEVEL_FATAL:
-        //     case LogLevel::LOG_LEVEL_ERROR:
-                // sf_platform::platform_console_write_error(std::string_view(const_cast<const i8*>(message_buff2), res2.out), static_cast<u8>(log_level));
-            //     break;
-            // default:
-                // sf_platform::platform_console_write(std::string_view(const_cast<const i8*>(message_buff2), res2.out), static_cast<u8>(log_level));
-                // break;
-        // }
+    switch (log_level) {
+        case LogLevel::LOG_LEVEL_FATAL:
+        case LogLevel::LOG_LEVEL_ERROR:
+            sf::platform_console_write_error(const_cast<const i8*>(message_buff2), static_cast<u8>(log_level));
+            break;
+        default:
+            sf::platform_console_write(const_cast<const i8*>(message_buff2), static_cast<u8>(log_level));
+            break;
     }
 }
+}
 
-#define LOG_FATAL(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__);
+#define LOG_FATAL(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__);
 
-#define LOG_ERROR(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__);
+#define LOG_ERROR(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__);
 
 #if LOG_WARN_ENABLED == 1
-#define LOG_WARN(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_WARN, fmt, ##__VA_ARGS__);
+#define LOG_WARN(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_WARN, fmt, ##__VA_ARGS__);
 #else
 #define LOG_WARN
 #endif
 
 #if LOG_INFO_ENABLED == 1
-#define LOG_INFO(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_INFO, fmt, ##__VA_ARGS__);
+#define LOG_INFO(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_INFO, fmt, ##__VA_ARGS__);
 #else
 #define LOG_INFO
 #endif
 
 #if LOG_DEBUG_ENABLED == 1
-#define LOG_DEBUG(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__);
+#define LOG_DEBUG(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__);
 #else
 #define LOG_DEBUG
 #endif
 
 #if LOG_TRACE_ENABLED == 1
-#define LOG_TRACE(fmt, ...) log_output(sf_core::LogLevel::LOG_LEVEL_TRACE, fmt, ##__VA_ARGS__);
+#define LOG_TRACE(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_TRACE, fmt, ##__VA_ARGS__);
 #else
 #define LOG_TRACE
 #endif

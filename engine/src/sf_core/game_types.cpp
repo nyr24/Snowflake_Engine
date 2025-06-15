@@ -1,10 +1,10 @@
 #include "sf_core/game_types.hpp"
 #include "sf_platform/platform.hpp"
 
-namespace sf_core {
+namespace sf {
 GameInstance::~GameInstance() {
     if (game_state) {
-        sf_platform::platform_free(game_state, false);
+        sf::platform_mem_free(game_state, false);
         game_state = nullptr;
     }
 }
@@ -22,7 +22,7 @@ GameInstance::GameInstance(GameInstance&& rhs) noexcept
 
 GameInstance& GameInstance::operator=(GameInstance&& rhs) noexcept
 {
-    sf_platform::platform_free(game_state, false);
+    sf::platform_mem_free(game_state, false);
     game_state = rhs.game_state;
     rhs.game_state = nullptr;
     init = rhs.init;
@@ -32,4 +32,4 @@ GameInstance& GameInstance::operator=(GameInstance&& rhs) noexcept
     app_config = rhs.app_config;
     return *this;
 }
-} // namespace sf_core
+} // sf

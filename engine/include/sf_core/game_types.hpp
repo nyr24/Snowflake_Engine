@@ -3,7 +3,7 @@
 #include "sf_core/application.hpp"
 #include <functional>
 
-namespace sf_core {
+namespace sf {
 struct GameInstance {
     GameInstance() = default;
     ~GameInstance();
@@ -17,6 +17,6 @@ struct GameInstance {
     std::function<bool(const GameInstance*, f32 delta_time)>        render;
     std::function<void(const GameInstance*, u32 width, u32 height)> on_resize;
     void*                                                           game_state;
-    sf_core::ApplicationConfig                                      app_config;
+    sf::ApplicationConfig                                           app_config;
 };
 }

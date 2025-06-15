@@ -3,7 +3,7 @@
 #include "sf_core/logger.hpp"
 
 i32 main() {
-    sf_core::GameInstance game_inst;
+    sf::GameInstance game_inst;
     if (!create_game(&game_inst)) {
         LOG_FATAL("Could not create a game");
         return -1;
@@ -14,12 +14,12 @@ i32 main() {
         return -2;
     }
 
-    if (!sf_core::create_app(&game_inst)) {
+    if (!sf::create_app(&game_inst)) {
         LOG_INFO("Application failed to create");
         return 1;
     }
 
-    sf_core::run_app();
+    sf::run_app();
 
     return 0;
 }

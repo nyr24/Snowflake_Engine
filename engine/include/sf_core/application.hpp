@@ -3,7 +3,7 @@
 #include "sf_platform/platform.hpp"
 #include "sf_core/types.hpp"
 
-namespace sf_core {
+namespace sf {
 struct ApplicationConfig {
     const i8*   name;
     i16         start_pos_x;
@@ -19,7 +19,7 @@ struct ApplicationState {
     i16                         width;
     i16                         height;
     f64                         last_time;
-    sf_platform::PlatformState  platform_state;
+    sf::PlatformState           platform_state;
     GameInstance*               game_inst;
 };
 

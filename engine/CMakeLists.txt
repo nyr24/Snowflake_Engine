@@ -38,12 +38,13 @@ target_compile_definitions(
 )
 
 if (DEFINED SF_BUILD_WAYLAND)
+  message("wayland build 1")
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_WAYLAND)
+  target_link_libraries(${PROJECT_NAME} PRIVATE vulkan wayland-client xkbcommon)
 elseif (DEFINED SF_BUILD_X11)
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_X11)
+  target_link_libraries(${PROJECT_NAME} PRIVATE vulkan xcb xcb-xkb X11 X11-xcb)
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include ${GLM_INCLUDE_DIR})
 target_link_directories(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/lib)
-# TODO: link with platform-specific libs under condition
-target_link_libraries(${PROJECT_NAME} PRIVATE vulkan glm wayland-client xkbcommon)

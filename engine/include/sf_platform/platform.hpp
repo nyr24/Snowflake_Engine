@@ -1,12 +1,71 @@
 #pragma once
-#include "sf_core/util.hpp"
-#include "sf_platform/platform_macros.hpp"
 #include "sf_core/types.hpp"
-#include <cstdlib>
-#include <cstring>
 #include <string_view>
 
-namespace sf_platform {
+// Win32
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
+#define SF_PLATFORM_WINDOWS 1
+#ifndef _WIN64
+#error "64-bit is required on Windows!"
+#endif
+
+// Linux
+#elif defined(__linux__) || defined(__gnu_linux__)
+#define SF_PLATFORM_LINUX 1
+#if defined(SF_BUILD_WAYLAND) && defined(SF_BUILD_X11)
+#error "Can't build for wayland and x11 simultaneously"
+#elif ! defined(SF_BUILD_WAYLAND) && ! defined(SF_BUILD_X11)
+#error "You need to choose for building either for wayland or x11 if you are on linux"
+#elif defined(SF_BUILD_WAYLAND)
+#define SF_PLATFORM_WAYLAND 1
+#elif defined(SF_BUILD_X11)
+#define SF_PLATFORM_X11 1
+#endif
+
+#if defined(__ANDROID__)
+#define SF_PLATFORM_ANDROID 1
+#endif
+#elif defined(__unix__)
+// Catch anything not caught by the above.
+#define SF_PLATFORM_UNIX 1
+// Posix
+#elif defined(_POSIX_VERSION)
+#define SF_PLATFORM_POSIX 1
+
+// Apple platforms
+#elif __APPLE__
+#define SF_PLATFORM_APPLE 1
+#include <TargetConditionals.h>
+#if TARGET_IPHONE_SIMULATOR
+// iOS Simulator
+#define SF_PLATFORM_IOS 1
+#define SF_PLATFORM_IOS_SIMULATOR 1
+#elif TARGET_OS_IPHONE
+#define SF_PLATFORM_IOS 1
+// iOS device
+#elif TARGET_OS_MAC
+// Other kinds of Mac OS
+#else
+#error "Unknown Apple platform"
+#endif
+#else
+#error "Unknown platform!"
+#endif
+
+// Exports
+#ifdef _MSC_VER
+#define SF_EXPORT __declspec(dllexport)
+#else
+#define SF_EXPORT __attribute__((visibility("default")))
+#endif
+// Imports
+#ifdef _MSC_VER
+#define SF_IMPORT __declspec(dllimport)
+#else
+#define SF_IMPORT
+#endif
+
+namespace sf {
 struct PlatformState {
     PlatformState();
     PlatformState(PlatformState&& rhs) noexcept;
@@ -38,94 +97,13 @@ struct Rect {
     }
 };
 
-void            platform_console_write(std::string_view message, u8 color);
-void            platform_console_write_error(std::string_view message, u8 color);
+void*           platform_mem_alloc(u64 byte_size, bool aligned);
+void            platform_mem_free(void* block, bool aligned);
+void            platform_mem_copy(void* dest, const void* src, u64 byte_size);
+void            platform_mem_set(void* dest, u64 byte_size, u32 val);
+void            platform_mem_zero(void* dest, u64 byte_size);
+void            platform_console_write(const i8* message, u8 color);
+void            platform_console_write_error(const i8* message, u8 color);
 f64             platform_get_abs_time();
 void            platform_sleep(u64 ms);
-
-#ifdef SF_PLATFORM_WINDOWS
-template<typename T>
-T* platform_alloc(usize count, bool aligned) {
-    return sf_alloc<T>(count, aligned);
-}
-
-template<typename T>
-void platform_free(T* block, bool aligned) {
-    free(block);
-    block = nullptr;
-}
-
-template<typename T>
-void platform_mem_zero(T* block, usize size) {
-    std::memset(block, 0, size);
-}
-
-template<typename T>
-void platform_mem_copy(T* dest, const T* src, usize size) {
-    std::memcpy(dest, src, size);
-}
-
-template<typename T>
-void platform_mem_set(T* dest, T val, usize size) {
-    std::memset(dest, val, size);
-}
-#endif // SF_PLATFORM_WINDOWS
-
-#if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
-template<typename T>
-// NOTE: export to the user code is temporary
-SF_EXPORT T* platform_alloc(usize count, bool aligned) {
-    return sf_alloc<T>(count, aligned);
-}
-
-template<typename T>
-// NOTE: export to the user code is temporary
-SF_EXPORT void platform_free(T* block, bool aligned) {
-    free(block);
-    block = nullptr;
-}
-
-template<typename T>
-void platform_mem_zero(T* block, usize size) {
-    std::memset(block, 0, size);
-}
-
-template<typename T>
-void platform_mem_copy(T* dest, const T* src, usize size) {
-    std::memcpy(dest, src, size);
-}
-
-template<typename T>
-void platform_mem_set(T* dest, T val, usize size) {
-    std::memset(dest, val, size);
-}
-#endif // SF_PLATFORM_WAYLAND
-
-#if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
-template<typename T>
-T* platform_alloc(usize count, bool aligned) {
-    return sf_alloc<T>(count, aligned);
-}
-
-template<typename T>
-void platform_free(T* block, bool aligned) {
-    free(block);
-    block = nullptr;
-}
-
-template<typename T>
-void platform_mem_zero(T* block, usize size) {
-    std::memset(block, 0, size);
-}
-
-template<typename T>
-void platform_mem_copy(T* dest, const T* src, usize size) {
-    std::memcpy(dest, src, size);
-}
-
-template<typename T>
-void platform_mem_set(T* dest, T val, usize size) {
-    std::memset(dest, val, size);
-}
-#endif // SF_PLATFORM_X11
 }

@@ -10,7 +10,7 @@
 #define DEBUG_BREAK() __builtin_trap()
 #endif
 
-namespace sf_core {
+namespace sf {
 void report_assertion_failure(const char* expression, const char* message, const char* file, i32 line);
 }
 
@@ -18,7 +18,7 @@ void report_assertion_failure(const char* expression, const char* message, const
     {                                                                           \
         if (expr) {                                                             \
         } else {                                                                \
-            sf_core::report_assertion_failure(#expr, "", __FILE__, __LINE__);   \
+            sf::report_assertion_failure(#expr, "", __FILE__, __LINE__);   \
             DEBUG_BREAK();                                                      \
         }                                                                       \
     }                                                                           \
@@ -27,7 +27,7 @@ void report_assertion_failure(const char* expression, const char* message, const
     {                                                                           \
         if (expr) {                                                             \
         } else {                                                                \
-            sf_core::report_assertion_failure(#expr, #msg, __FILE__, __LINE__); \
+            sf::report_assertion_failure(#expr, #msg, __FILE__, __LINE__); \
             DEBUG_BREAK();                                                      \
         }                                                                       \
     }                                                                           \
@@ -37,7 +37,7 @@ void report_assertion_failure(const char* expression, const char* message, const
     {                                                                           \
         if (expr) {                                                             \
         } else {                                                                \
-            sf_core::report_assertion_failure(#expr, "", __FILE__, __LINE__);   \
+            sf::report_assertion_failure(#expr, "", __FILE__, __LINE__);   \
             DEBUG_BREAK();                                                      \
         }                                                                       \
     }                                                                           \

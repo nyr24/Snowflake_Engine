@@ -2,10 +2,10 @@
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
 
-static sf_core::ApplicationState app_state;
+static sf::ApplicationState app_state;
 static bool app_initialized{ false };
 
-bool sf_core::create_app(sf_core::GameInstance* game_inst) {
+bool sf::create_app(sf::GameInstance* game_inst) {
     if (app_initialized) {
         LOG_ERROR("application create called more than once");
         return false;
@@ -14,11 +14,11 @@ bool sf_core::create_app(sf_core::GameInstance* game_inst) {
     app_state.game_inst = game_inst;
 
     // init subsystems
-    sf_core::init_logging();
+    sf::init_logging();
 
     app_state.is_running = true;
     app_state.is_suspended = false;
-    app_state.platform_state = sf_platform::PlatformState{};
+    app_state.platform_state = sf::PlatformState{};
 
     bool start_success = app_state.platform_state.startup(
         game_inst->app_config.name,
@@ -47,7 +47,7 @@ bool sf_core::create_app(sf_core::GameInstance* game_inst) {
     return true;
 }
 
-void sf_core::run_app() {
+void sf::run_app() {
     while (app_state.is_running) {
         if (!app_state.platform_state.start_event_loop()) {
             app_state.is_running = false;
