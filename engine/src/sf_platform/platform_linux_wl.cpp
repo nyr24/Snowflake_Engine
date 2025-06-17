@@ -1,4 +1,5 @@
 #include "sf_platform/platform.hpp"
+#include <new>
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
 #include "sf_platform/wayland-util-custom.hpp"
@@ -565,7 +566,7 @@ static void draw_frame(WaylandInternState* state) {
 }
 
 PlatformState::PlatformState()
-    : internal_state{ sf::sf_mem_alloc(sizeof(WaylandInternState), sf::MemoryTag::MEMORY_TAG_UNKNOWN) }
+    : internal_state{ sf_mem_alloc(sizeof(WaylandInternState), alignof(WaylandInternState)) }
 {
     std::memset(internal_state, 0, sizeof(WaylandInternState));
 }
@@ -578,7 +579,7 @@ PlatformState::PlatformState(PlatformState&& rhs) noexcept
 
 PlatformState& PlatformState::operator=(PlatformState&& rhs) noexcept
 {
-    free(internal_state);
+    sf_mem_free(internal_state, alignof(WaylandInternState));
     internal_state = rhs.internal_state;
     rhs.internal_state = nullptr;
     return *this;
@@ -674,7 +675,7 @@ PlatformState::~PlatformState() {
         munmap(state->go_state.pool_data, state->window_props.shm_pool_size);
         wl_display_disconnect(state->display);
         state->display = nullptr;
-        free(state);
+        platform_mem_free(state, alignof(WaylandInternState));
         state = nullptr;
     }
 }
@@ -689,12 +690,22 @@ bool PlatformState::start_event_loop() {
     return true;
 }
 
-void* platform_mem_alloc(u64 byte_size, bool aligned) {
-    return std::malloc(byte_size);
+void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
+    if (alignment) {
+         assert(is_power_of_two(alignment) && "alignment should be a power of two");
+        return ::operator new(byte_size, static_cast<std::align_val_t>(alignment), std::nothrow);
+    } else {
+        return ::operator new(byte_size, std::nothrow);
+    }
 }
 
-void platform_mem_free(void* block, bool aligned) {
-    std::free(block);
+void platform_mem_free(void* block, u16 alignment = 0) {
+    if (alignment) {
+        assert(is_power_of_two(alignment) && "alignment should be a power of two");
+        return ::operator delete(block, static_cast<std::align_val_t>(alignment), std::nothrow);
+    } else {
+        return ::operator delete(block, std::nothrow);
+    }
 }
 
 void platform_mem_copy(void* dest, const void* src, u64 byte_size) {

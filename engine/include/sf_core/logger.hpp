@@ -46,13 +46,11 @@ template<typename... Args>
 SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, Args&&... args) {
     constexpr usize BUFF_LEN{ 256 };
     char message_buff[BUFF_LEN] = {0};
-    const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, fmt, std::forward<Args>(args)...);
+    std::format_to_n(message_buff, BUFF_LEN, fmt, std::forward<Args>(args)...);
 
     constexpr usize BUFF_LEN2{ 256 };
     char message_buff2[BUFF_LEN2] = {0};
-    const std::format_to_n_result _ = std::format_to_n(message_buff2, BUFF_LEN2, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], message_buff);
-
-    // std::cerr << std::string_view(const_cast<const i8*>(message_buff2), res2.out);
+    std::format_to_n(message_buff2, BUFF_LEN2, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], message_buff);
 
     switch (log_level) {
         case LogLevel::LOG_LEVEL_FATAL:

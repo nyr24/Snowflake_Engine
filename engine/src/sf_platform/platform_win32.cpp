@@ -20,7 +20,7 @@ static LARGE_INTEGER start_time;
 HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);
 
 PlatformState::PlatformState()
-    : internal_state{ sf_alloc(sizeof(WindowsInternState), true) }
+    : internal_state{ sf_mem_alloc(sizeof(WindowsInternState), alignof(WindowsInternState)) }
 {
     std::memset(internal_state, 0, sizeof(internal_state));
 }
@@ -103,7 +103,7 @@ PlatformState::~PlatformState() {
     if (intern_state->hwnd) {
         DestroyWindow(intern_state->hwnd);
         intern_state->hwnd = nullptr;
-        free(intern_state);
+        sf_mem_free(intern_state, sizeof(WindowsInternState), alignof(WindowsInternState));
     }
 }
 
@@ -123,12 +123,22 @@ f64 platform_get_abs_time() {
     return (f64)now_time.QuadPart * clock_frequency;
 }
 
-void* platform_mem_alloc(u64 byte_size, bool aligned) {
-    return std::malloc(byte_size);
+void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
+    if (alignment) {
+        assert(is_power_of_two(alignment) && "alignment should be a power of two");
+        return ::operator new(byte_size, static_cast<std::align_val_t>(alignment), std::nothrow);
+    } else {
+        return ::operator new(byte_size, std::nothrow);
+    }
 }
 
-void platform_mem_free(void* block, bool aligned) {
-    std::free(block);
+void platform_mem_free(void* block, u16 alignment = 0) {
+    if (alignment) {
+        assert(is_power_of_two(alignment) && "alignment should be a power of two");
+        return ::operator delete(block, static_cast<std::align_val_t>(alignment), std::nothrow);
+    } else {
+        return ::operator delete(block, std::nothrow);
+    }
 }
 
 void platform_mem_copy(void* dest, const void* src, u64 byte_size) {

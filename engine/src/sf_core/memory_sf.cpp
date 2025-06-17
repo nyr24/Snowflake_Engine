@@ -28,12 +28,41 @@ static std::array<std::string_view, MemoryTag::MEMORY_TAG_MAX_TAGS> memory_tag_s
     "SCENE"
 };
 
-SF_EXPORT void* sf_mem_alloc(u64 byte_size, MemoryTag tag) {
+ArenaAllocator::ArenaAllocator(u64 buffer_size)
+    : buffer{static_cast<u8*>(sf_mem_alloc(buffer_size)) }
+    , buffer_size{ buffer_size }
+    , offset{ 0 }
+{}
+
+ArenaAllocator::ArenaAllocator(ArenaAllocator&& rhs) noexcept
+    : buffer{ rhs.buffer }
+    , buffer_size{ rhs.buffer_size }
+    , offset{ rhs.offset }
+{
+    rhs.buffer = nullptr;
+    rhs.buffer_size = 0;
+    rhs.offset = 0;
+}
+
+ArenaAllocator::~ArenaAllocator()
+{
+    sf_mem_free(buffer, buffer_size);
+}
+
+void ArenaAllocator::reallocate(u64 new_size) {
+    buffer_size = new_size;
+    u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_size));
+    sf::platform_mem_copy(new_buffer, buffer, offset);
+    sf_mem_free(buffer, buffer_size);
+    buffer = new_buffer;
+}
+
+SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
         LOG_INFO("unknown memory tag used for mem_alloc, please assign other tag later");
     }
 
-    void* block = sf::platform_mem_alloc(byte_size, false);
+    void* block = sf::platform_mem_alloc(byte_size, alignment);
     sf::platform_mem_zero(block, byte_size);
 
     mem_stats.total_allocated += byte_size;
@@ -42,12 +71,12 @@ SF_EXPORT void* sf_mem_alloc(u64 byte_size, MemoryTag tag) {
     return block;
 }
 
-SF_EXPORT void sf_mem_free(void* block, u64 byte_size, MemoryTag tag) {
+SF_EXPORT void sf_mem_free(void* block, u64 byte_size, u16 alignment, MemoryTag tag) {
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
         LOG_INFO("unknown memory tag used for mem_free, please assign other tag later");
     }
 
-    sf::platform_mem_free(block, false);
+    sf::platform_mem_free(block, alignment);
 
     mem_stats.total_allocated -= byte_size;
     mem_stats.tag_allocated[tag] -= byte_size;
@@ -94,6 +123,7 @@ SF_EXPORT i8* get_memory_usage_str() {
         }
 
         const std::format_to_n_result res = std::format_to_n(buffer, BUFF_LEN, "  {}: {}{}\n", memory_tag_strings[i], amount, unit);
+        std::cout << std::fixed << std::string_view(const_cast<const i8*>(buffer), res.out);
         offset += res.size;
     }
 

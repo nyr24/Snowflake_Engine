@@ -30,7 +30,7 @@ struct X11InternState {
 };
 
 PlatformState::PlatformState()
-    : internal_state{ sf_mem_alloc(sizeof(X11InternState), false) }
+    : internal_state{ sf_mem_alloc(sizeof(X11InternState), alignof(X11InternState)) }
 {
     std::memset(internal_state, 0, sizeof(internal_state));
 }
@@ -161,7 +161,7 @@ PlatformState::~PlatformState() {
         X11InternState* state = static_cast<X11InternState*>(this->internal_state);
         XAutoRepeatOn(state->display);
         xcb_destroy_window(state->connection, state->window);
-        free(state);
+        sf_mem_free(state, sizeof(X11InternState), alignof(X11InternState));
         this->internal_state = nullptr;
     }
 }
@@ -205,18 +205,28 @@ bool PlatformState::start_event_loop() {
                 break;
         }
 
-        free(event);
+        sf_mem_free(event, sizeof(event));
     }
 
     return !quit_flagged;
 }
 
-void* platform_mem_alloc(u64 byte_size, bool aligned) {
-    return std::malloc(byte_size);
+void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
+    if (alignment) {
+        assert(is_power_of_two(alignment) && "alignment should be a power of two");
+        return ::operator new(byte_size, static_cast<std::align_val_t>(alignment), std::nothrow);
+    } else {
+        return ::operator new(byte_size, std::nothrow);
+    }
 }
 
-void platform_mem_free(void* block, bool aligned) {
-    std::free(block);
+void platform_mem_free(void* block, u16 alignment = 0) {
+    if (alignment) {
+        assert(is_power_of_two(alignment) && "alignment should be a power of two");
+        return ::operator delete(block, static_cast<std::align_val_t>(alignment), std::nothrow);
+    } else {
+        return ::operator delete(block, std::nothrow);
+    }
 }
 
 void platform_mem_copy(void* dest, const void* src, u64 byte_size) {

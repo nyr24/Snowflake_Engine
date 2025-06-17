@@ -1,6 +1,8 @@
 #pragma once
 #include "sf_core/types.hpp"
-#include <string_view>
+#include "sf_core/utils.hpp"
+#include <new>
+#include <utility>
 
 // Win32
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
@@ -97,13 +99,28 @@ struct Rect {
     }
 };
 
-void*           platform_mem_alloc(u64 byte_size, bool aligned);
-void            platform_mem_free(void* block, bool aligned);
+// templated versions of memory functions
+template<typename T, typename... Args>
+T* platform_mem_alloc(Args&&... args) {
+    static_assert(is_power_of_two(alignof(T)) && "alignment should be a power of two");
+    return new (std::nothrow) T(std::forward<Args>(args)...);
+}
+
+template<typename T>
+void platform_mem_free(T* block) {
+    ::operator delete(block, alignof(T), std::nothrow);
+}
+
+// non-templated versions of memory functions (void*)
+void*           platform_mem_alloc(u64 byte_size, u16 alignment);
+void            platform_mem_free(void* block, u16 alignment);
 void            platform_mem_copy(void* dest, const void* src, u64 byte_size);
 void            platform_mem_set(void* dest, u64 byte_size, u32 val);
 void            platform_mem_zero(void* dest, u64 byte_size);
+
 void            platform_console_write(const i8* message, u8 color);
 void            platform_console_write_error(const i8* message, u8 color);
 f64             platform_get_abs_time();
 void            platform_sleep(u64 ms);
-}
+
+} // sf
