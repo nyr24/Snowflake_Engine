@@ -229,5 +229,12 @@ HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
         default: return DefWindowProc(hwnd, msg, w_param, l_param);
     }
 }
+
+u32 platform_get_mem_page_size() {
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return static_cast<u32>(si.dwPageSize);
+}
+
 }
 #endif // SF_PLATFORM_WINDOWS

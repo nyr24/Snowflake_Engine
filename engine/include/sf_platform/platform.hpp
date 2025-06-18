@@ -117,6 +117,7 @@ void            platform_mem_free(void* block, u16 alignment);
 void            platform_mem_copy(void* dest, const void* src, u64 byte_size);
 void            platform_mem_set(void* dest, u64 byte_size, u32 val);
 void            platform_mem_zero(void* dest, u64 byte_size);
+u32             platform_get_mem_page_size();
 
 void            platform_console_write(const i8* message, u8 color);
 void            platform_console_write_error(const i8* message, u8 color);

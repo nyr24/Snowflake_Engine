@@ -28,9 +28,15 @@ static std::array<std::string_view, MemoryTag::MEMORY_TAG_MAX_TAGS> memory_tag_s
     "SCENE"
 };
 
-ArenaAllocator::ArenaAllocator(u64 buffer_size)
-    : buffer{static_cast<u8*>(sf_mem_alloc(buffer_size)) }
-    , buffer_size{ buffer_size }
+ArenaAllocator::ArenaAllocator()
+    : buffer_size{ platform_get_mem_page_size() }
+    , buffer{static_cast<u8*>(sf_mem_alloc(buffer_size)) }
+    , offset{ 0 }
+{}
+
+ArenaAllocator::ArenaAllocator(u64 buffer_size_)
+    : buffer_size{ buffer_size_ }
+    , buffer{static_cast<u8*>(sf_mem_alloc(buffer_size)) }
     , offset{ 0 }
 {}
 

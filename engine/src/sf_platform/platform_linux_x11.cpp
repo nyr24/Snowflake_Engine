@@ -280,6 +280,11 @@ void platform_sleep(u64 ms) {
     usleep((ms % 1000) * 1000);
 #endif
 }
+
+u32 platform_get_mem_page_size() {
+    return static_cast<u32>(sysconf(_SC_PAGESIZE));
+}
+
 }
 
 #endif // defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
