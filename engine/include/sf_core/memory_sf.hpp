@@ -3,8 +3,10 @@
 #include "sf_core/types.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_core/utils.hpp"
+#include <concepts>
 
 // NOTE: temp
+#include <functional>
 #include <iostream>
 
 namespace sf {
@@ -48,13 +50,26 @@ SF_EXPORT void  sf_mem_copy(void* dest, const void* source, u64 size);
 SF_EXPORT void  sf_mem_set(void* dest, i32 value, u64 size);
 SF_EXPORT i8*   get_memory_usage_str();
 
+// custom allocators
+template<typename T, typename U, typename ...Args>
+concept Allocator = requires(T a, Args... args) {
+    { a.allocate(100u) } -> std::same_as<U*>;
+    { a.deallocate(reinterpret_cast<U*>(1), 100u) } -> std::same_as<void>;
+    { a.construct(reinterpret_cast<U*>(1), 100u) } -> std::same_as<void>;
+    { a.reallocate(100u) } -> std::same_as<void>;
+
+    requires std::is_same_v<decltype(a.buffer), u8*>;
+    requires std::is_same_v<decltype(a.capacity), u64>;
+    requires std::is_same_v<decltype(a.len), u64>;
+};
+
 struct ArenaAllocator {
-    u64 buffer_size;
+    u64 capacity;
     u8* buffer;
-    u64 offset;
+    u64 len;
 
     ArenaAllocator();
-    ArenaAllocator(u64 buffer_size);
+    ArenaAllocator(u64 capacity);
     ArenaAllocator(ArenaAllocator&& rhs) noexcept;
     ~ArenaAllocator();
 
@@ -67,53 +82,54 @@ struct ArenaAllocator {
         static_assert(is_power_of_two(align_of_T) && "should be power of 2");
 
         // Same as (ptr % alignment) but faster as 'alignemnt' is a power of two
-        u32 padding = reinterpret_cast<usize>(buffer + offset) & (align_of_T - 1);
-        if (offset + padding + sizeo_of_T > buffer_size) {
-            this->reallocate(buffer_size * 2);
+        u32 padding = reinterpret_cast<usize>(buffer + len) & (align_of_T - 1);
+        if (len + padding + sizeo_of_T > capacity) {
+            this->reallocate(capacity * 2);
         }
-        T* ptr_to_return = reinterpret_cast<T*>(buffer + offset + padding);
-        offset += padding + sizeo_of_T;
+        T* ptr_to_return = reinterpret_cast<T*>(buffer + len + padding);
+        len += padding + sizeo_of_T;
         new (ptr_to_return) T(std::forward<Args>(args)...);
         return ptr_to_return;
     }
 
+    void deallocate() {}
     void reallocate(u64 new_size);
 };
 
 template<typename T>
 struct PoolAllocator {
-    u64 buffer_size;
+    // TODO: should be made private
+    u64 capacity;
     u8* buffer;
-    u64 offset;
-    static u16 ref_count;
+    u64 len;
 
     using value_type    = T;
     using pointer       = T*;
 
-    PoolAllocator(u64 buffer_size_)
-        : buffer_size{ buffer_size_ }
-        , buffer{ static_cast<u8*>(sf_mem_alloc(buffer_size)) }
-        , offset{ 0 }
+    PoolAllocator(u64 capacity_)
+        : capacity{ capacity_ }
+        , buffer{ static_cast<u8*>(sf_mem_alloc(capacity)) }
+        , len{ 0 }
     {}
 
     PoolAllocator(PoolAllocator<T>&& rhs) noexcept
-        : buffer_size{ rhs.buffer_size }
+        : capacity{ rhs.capacity }
         , buffer{ rhs.buffer }
-        , offset{ rhs.offset }
+        , len{ rhs.len }
     {
-        rhs.buffer_size = 0;
+        rhs.capacity = 0;
         rhs.buffer = nullptr;
-        rhs.offset = 0;
+        rhs.len = 0;
     }
 
     PoolAllocator<T>& operator=(PoolAllocator<T>&& rhs) noexcept
     {
-        buffer_size = rhs.buffer_size;
+        capacity = rhs.capacity;
         buffer = rhs.buffer;
-        offset = rhs.offset;
-        rhs.buffer_size = 0;
+        len = rhs.len;
+        rhs.capacity = 0;
         rhs.buffer = nullptr;
-        rhs.offset = 0;
+        rhs.len = 0;
 
         return *this;
     }
@@ -124,7 +140,7 @@ struct PoolAllocator {
     ~PoolAllocator()
     {
         if (buffer) {
-            sf_mem_free(buffer, buffer_size);
+            sf_mem_free(buffer, capacity);
             buffer = nullptr;
         }
     }
@@ -136,14 +152,16 @@ struct PoolAllocator {
 
         static_assert(is_power_of_two(align_of_T) && "should be power of 2");
 
-        // Same as (ptr % alignment) but faster as 'alignemnt' is a power of two
-        u32 padding = reinterpret_cast<usize>(buffer + offset) & (align_of_T - 1);
-        if (offset + padding + sizeo_of_T * count > buffer_size) {
-            this->reallocate(buffer_size * 2);
+        u64 need_memory = sizeo_of_T * count;
+        u32 padding = reinterpret_cast<usize>(buffer + len) & (align_of_T - 1);
+        u64 have_memory = capacity - (len + padding);
+
+        if (have_memory < need_memory) {
+            this->reallocate(capacity * 2);
         }
-        T* ptr_to_return = reinterpret_cast<T*>(buffer + offset + padding);
-        offset += padding + sizeo_of_T * count;
-        return ptr_to_return;
+
+        len += padding + need_memory;
+        return reinterpret_cast<T*>(buffer + len + padding);
     }
 
     void deallocate(T* ptr, u64 count)
@@ -155,12 +173,12 @@ struct PoolAllocator {
         ::new (ptr) T(std::forward<Args>(args)...);
     }
 
-    void reallocate(u64 new_size)
+    void reallocate(u64 new_capacity)
     {
-        buffer_size = new_size;
-        u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_size));
-        sf::platform_mem_copy(new_buffer, buffer, offset);
-        sf_mem_free(buffer, buffer_size);
+        capacity = new_capacity;
+        u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_capacity));
+        sf::platform_mem_copy(new_buffer, buffer, len);
+        sf_mem_free(buffer, capacity);
         buffer = new_buffer;
     }
 };
