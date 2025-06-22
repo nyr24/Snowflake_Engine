@@ -33,9 +33,6 @@ bool sf::create_app(sf::GameInstance* game_inst) {
         return false;
     }
 
-    // TODO: remove later
-    LOG_DEBUG("This is warning! and n: {}", 12);
-
     if (!game_inst->init(game_inst)) {
         LOG_FATAL("Game failed to initialize");
         return false;

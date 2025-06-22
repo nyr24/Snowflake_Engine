@@ -28,44 +28,44 @@ static std::array<std::string_view, MemoryTag::MEMORY_TAG_MAX_TAGS> memory_tag_s
     "SCENE"
 };
 
-ArenaAllocator::ArenaAllocator()
-    : capacity{ platform_get_mem_page_size() }
-    , buffer{static_cast<u8*>(sf_mem_alloc(capacity)) }
-    , len{ 0 }
-{}
-
-ArenaAllocator::ArenaAllocator(u64 capacity_)
-    : capacity{ capacity_ }
-    , buffer{static_cast<u8*>(sf_mem_alloc(capacity)) }
-    , len{ 0 }
-{}
-
-ArenaAllocator::ArenaAllocator(ArenaAllocator&& rhs) noexcept
-    : buffer{ rhs.buffer }
-    , capacity{ rhs.capacity  }
-    , len{ rhs.len }
-{
-    rhs.buffer = nullptr;
-    rhs.capacity = 0;
-    rhs.len = 0;
-}
-
-ArenaAllocator::~ArenaAllocator()
-{
-    sf_mem_free(buffer, capacity);
-}
-
-void ArenaAllocator::reallocate(u64 new_size) {
-    capacity = new_size;
-    u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_size));
-    sf::platform_mem_copy(new_buffer, buffer, len);
-    sf_mem_free(buffer, capacity);
-    buffer = new_buffer;
-}
-
+// ArenaAllocator::ArenaAllocator()
+//     : capacity{ platform_get_mem_page_size() }
+//     , buffer{static_cast<u8*>(sf_mem_alloc(capacity)) }
+//     , len{ 0 }
+// {}
+//
+// ArenaAllocator::ArenaAllocator(u64 capacity_)
+//     : capacity{ capacity_bytes_ }
+//     , buffer{static_cast<u8*>(sf_mem_alloc(capacity)) }
+//     , len{ 0 }
+// {}
+//
+// ArenaAllocator::ArenaAllocator(ArenaAllocator&& rhs) noexcept
+//     : buffer{ rhs.buffer }
+//     , capacity{ rhs.capacity_bytes }
+//     , len{ rhs.len_bytes }
+// {
+//     rhs.buffer = nullptr;
+//     rhs.capacity = 0;
+//     rhs.len = 0;
+// }
+//
+// ArenaAllocator::~ArenaAllocator()
+// {
+//     sf_mem_free(buffer, capacity);
+// }
+//
+// void ArenaAllocator::reallocate(u64 new_capacity) {
+//     capacity = new_capacity;
+//     u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_capacity));
+//     sf::platform_mem_copy(new_buffer, buffer, len);
+//     sf_mem_free(buffer, capacity);
+//     buffer = new_buffer;
+// }
+//
 SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
-        LOG_INFO("unknown memory tag used for mem_alloc, please assign other tag later");
+        // LOG_INFO("unknown memory tag used for mem_alloc, please assign other tag later");
     }
 
     void* block = sf::platform_mem_alloc(byte_size, alignment);
@@ -79,7 +79,7 @@ SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
 
 SF_EXPORT void sf_mem_free(void* block, u64 byte_size, u16 alignment, MemoryTag tag) {
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
-        LOG_INFO("unknown memory tag used for mem_free, please assign other tag later");
+        // LOG_INFO("unknown memory tag used for mem_free, please assign other tag later");
     }
 
     sf::platform_mem_free(block, alignment);

@@ -5,10 +5,6 @@
 #include "sf_core/utils.hpp"
 #include <concepts>
 
-// NOTE: temp
-#include <functional>
-#include <iostream>
-
 namespace sf {
 enum MemoryTag {
     MEMORY_TAG_UNKNOWN,
@@ -43,93 +39,103 @@ SF_EXPORT void sf_mem_free(T* block) {
 }
 
 // non-templated versions of memory functions (void*)
-SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment = 0, MemoryTag tag = MemoryTag::MEMORY_TAG_UNKNOWN);
-SF_EXPORT void  sf_mem_free(void* block, u64 byte_size, u16 alignment = 0, MemoryTag tag = MemoryTag::MEMORY_TAG_UNKNOWN);
-SF_EXPORT void  sf_mem_zero(void* block, u64 size);
-SF_EXPORT void  sf_mem_copy(void* dest, const void* source, u64 size);
-SF_EXPORT void  sf_mem_set(void* dest, i32 value, u64 size);
+SF_EXPORT void* sf_mem_alloc(usize byte_size, u16 alignment = 0, MemoryTag tag = MemoryTag::MEMORY_TAG_UNKNOWN);
+SF_EXPORT void  sf_mem_free(void* block, usize byte_size, u16 alignment = 0, MemoryTag tag = MemoryTag::MEMORY_TAG_UNKNOWN);
+SF_EXPORT void  sf_mem_zero(void* block, usize size);
+SF_EXPORT void  sf_mem_copy(void* dest, const void* source, usize size);
+SF_EXPORT void  sf_mem_set(void* dest, i32 value, usize size);
 SF_EXPORT i8*   get_memory_usage_str();
 
 // custom allocators
-template<typename T, typename U, typename ...Args>
-concept Allocator = requires(T a, Args... args) {
-    { a.allocate(100u) } -> std::same_as<U*>;
-    { a.deallocate(reinterpret_cast<U*>(1), 100u) } -> std::same_as<void>;
-    { a.construct(reinterpret_cast<U*>(1), 100u) } -> std::same_as<void>;
-    { a.reallocate(100u) } -> std::same_as<void>;
-
-    requires std::is_same_v<decltype(a.buffer), u8*>;
-    requires std::is_same_v<decltype(a.capacity), u64>;
-    requires std::is_same_v<decltype(a.len), u64>;
+template<typename A, typename T, typename ...Args>
+concept MonoTypeAllocator = requires(A a, Args... args) {
+    { a.allocate(std::declval<u64>()) } -> std::same_as<T*>;
+    { a.deallocate(std::declval<T*>(), std::declval<u64>()) } -> std::same_as<void>;
+    { a.construct(std::declval<T*>(), std::forward<Args>(args)...) } -> std::same_as<void>;
+    { a.allocate_and_construct(std::forward<Args>(args)...) } -> std::same_as<T*>;
+    { a.reallocate(std::declval<u64>()) } -> std::same_as<void>;
+    { a.begin() } -> std::same_as<T*>;
+    { a.end() } -> std::same_as<T*>;
+    { a.ptr_offset(std::declval<u64>()) } -> std::same_as<T*>;
+    { a.ptr_offset_val(std::declval<u64>()) } -> std::same_as<T&>;
+    { a.len() } -> std::same_as<usize>;
+    { a.capacity() } -> std::same_as<usize>;
 };
 
-struct ArenaAllocator {
-    u64 capacity;
-    u8* buffer;
-    u64 len;
+// TODO:
+template<typename A, typename ...Args>
+concept PolyTypeAllocator = true;
 
-    ArenaAllocator();
-    ArenaAllocator(u64 capacity);
-    ArenaAllocator(ArenaAllocator&& rhs) noexcept;
-    ~ArenaAllocator();
-
-    template<typename T, typename... Args>
-    T* allocate(Args&&... args)
-    {
-        constexpr usize sizeo_of_T = sizeof(T);
-        constexpr usize align_of_T = alignof(T);
-
-        static_assert(is_power_of_two(align_of_T) && "should be power of 2");
-
-        // Same as (ptr % alignment) but faster as 'alignemnt' is a power of two
-        u32 padding = reinterpret_cast<usize>(buffer + len) & (align_of_T - 1);
-        if (len + padding + sizeo_of_T > capacity) {
-            this->reallocate(capacity * 2);
-        }
-        T* ptr_to_return = reinterpret_cast<T*>(buffer + len + padding);
-        len += padding + sizeo_of_T;
-        new (ptr_to_return) T(std::forward<Args>(args)...);
-        return ptr_to_return;
-    }
-
-    void deallocate() {}
-    void reallocate(u64 new_size);
-};
+// struct ArenaAllocator {
+//     usize _capacity;
+//     u8* _buffer;
+//     usize _len;
+//
+//     ArenaAllocator();
+//     ArenaAllocator(usize _capacity);
+//     ArenaAllocator(ArenaAllocator&& rhs) noexcept;
+//     ~ArenaAllocator();
+//
+//     template<typename T, typename... Args>
+//     T* allocate(Args&&... args)
+//     {
+//         constexpr usize sizeo_of_T = sizeof(T);
+//         constexpr usize align_of_T = alignof(T);
+//
+//         static_assert(is_power_of_two(align_of_T) && "should be power of 2");
+//
+//         // Same as (ptr % alignment) but faster as 'alignemnt' is a power of two
+//         u32 padding_bytes = reinterpret_cast<usize>(_buffer + _len) & (align_of_T - 1);
+//         if (_len + padding_bytes + sizeo_of_T > _capacity) {
+//             this->reallocate(_capacity * 2);
+//         }
+//         T* ptr_to_return = reinterpret_cast<T*>(_buffer + _len + padding_bytes);
+//         _len += padding_bytes + sizeo_of_T;
+//         new (ptr_to_return) T(std::forward<Args>(args)...);
+//         return ptr_to_return;
+//     }
+//
+//     void deallocate() {}
+//     void reallocate(usize new_size);
+// };
 
 template<typename T>
 struct PoolAllocator {
-    // TODO: should be made private
-    u64 capacity;
-    u8* buffer;
-    u64 len;
+private:
+    usize   _capacity;
+    usize   _len;
+    u8*     _buffer;
 
+public:
     using value_type    = T;
     using pointer       = T*;
 
-    PoolAllocator(u64 capacity_)
-        : capacity{ capacity_ }
-        , buffer{ static_cast<u8*>(sf_mem_alloc(capacity)) }
-        , len{ 0 }
+    static_assert(is_power_of_two(alignof(T)) && "should be power of 2");
+
+    PoolAllocator(u64 count)
+        : _capacity{ sizeof(T) * count }
+        , _len{ 0 }
+        , _buffer{ static_cast<u8*>(sf_mem_alloc(_capacity, alignof(T))) }
     {}
 
     PoolAllocator(PoolAllocator<T>&& rhs) noexcept
-        : capacity{ rhs.capacity }
-        , buffer{ rhs.buffer }
-        , len{ rhs.len }
+        : _capacity{ rhs._capacity }
+        , _len{ rhs._len }
+        , _buffer{ rhs._buffer }
     {
-        rhs.capacity = 0;
-        rhs.buffer = nullptr;
-        rhs.len = 0;
+        rhs._capacity = 0;
+        rhs._len = 0;
+        rhs._buffer = nullptr;
     }
 
     PoolAllocator<T>& operator=(PoolAllocator<T>&& rhs) noexcept
     {
-        capacity = rhs.capacity;
-        buffer = rhs.buffer;
-        len = rhs.len;
-        rhs.capacity = 0;
-        rhs.buffer = nullptr;
-        rhs.len = 0;
+        _capacity = rhs._capacity;
+        _len = rhs._len;
+        _buffer = rhs._buffer;
+        rhs._capacity = 0;
+        rhs._len = 0;
+        rhs._buffer = nullptr;
 
         return *this;
     }
@@ -139,48 +145,60 @@ struct PoolAllocator {
 
     ~PoolAllocator()
     {
-        if (buffer) {
-            sf_mem_free(buffer, capacity);
-            buffer = nullptr;
+        if (_buffer) {
+            sf_mem_free(_buffer, _capacity, alignof(T));
+            _buffer = nullptr;
         }
     }
 
     T* allocate(u64 count)
     {
-        constexpr usize sizeo_of_T = sizeof(T);
-        constexpr usize align_of_T = alignof(T);
-
-        static_assert(is_power_of_two(align_of_T) && "should be power of 2");
-
-        u64 need_memory = sizeo_of_T * count;
-        u32 padding = reinterpret_cast<usize>(buffer + len) & (align_of_T - 1);
-        u64 have_memory = capacity - (len + padding);
+        usize need_memory = sizeof(T) * static_cast<usize>(count);
+        usize padding = reinterpret_cast<usize>(_buffer + _len) & (alignof(T) - 1);
+        usize have_memory = _capacity - (_len + padding);
 
         if (have_memory < need_memory) {
-            this->reallocate(capacity * 2);
+            this->reallocate(_capacity * 2);
         }
 
-        len += padding + need_memory;
-        return reinterpret_cast<T*>(buffer + len + padding);
+        T* return_memory = reinterpret_cast<T*>(_buffer + _len + padding);
+        _len += padding + need_memory;
+
+        return return_memory;
     }
 
-    void deallocate(T* ptr, u64 count)
+    void deallocate(T* ptr, u64 count) noexcept
     {}
 
     template<typename ...Args>
-    void construct(T* ptr, Args&&... args)
+    void construct(T* ptr, Args&&... args) noexcept
     {
         ::new (ptr) T(std::forward<Args>(args)...);
     }
 
-    void reallocate(u64 new_capacity)
+    template<typename ...Args>
+    T* allocate_and_construct(Args&&... args)
     {
-        capacity = new_capacity;
-        u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_capacity));
-        sf::platform_mem_copy(new_buffer, buffer, len);
-        sf_mem_free(buffer, capacity);
-        buffer = new_buffer;
+        T* place_ptr = allocate(1);
+        construct(place_ptr, std::forward<Args>(args)...);
+        return place_ptr;
     }
+
+    void reallocate(usize new_capacity)
+    {
+        _capacity = new_capacity;
+        u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_capacity, alignof(T)));
+        sf::platform_mem_copy(new_buffer, _buffer, _len);
+        sf_mem_free(_buffer, _capacity);
+        _buffer = new_buffer;
+    }
+
+    T* begin() noexcept { return reinterpret_cast<T*>(_buffer); }
+    T* end() noexcept { return reinterpret_cast<T*>(_buffer + _len); }
+    T* ptr_offset(usize ind) noexcept { return reinterpret_cast<T*>(_buffer) + ind; }
+    T& ptr_offset_val(usize ind) noexcept { return *(ptr_offset(ind)); }
+    usize len() noexcept { return _len / sizeof(T); }
+    usize capacity() noexcept { return _capacity / sizeof(T); }
 };
 
 } // sf
