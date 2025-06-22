@@ -130,6 +130,7 @@ public:
 
     PoolAllocator<T>& operator=(PoolAllocator<T>&& rhs) noexcept
     {
+        sf_mem_free(_buffer);
         _capacity = rhs._capacity;
         _len = rhs._len;
         _buffer = rhs._buffer;
@@ -140,8 +141,23 @@ public:
         return *this;
     }
 
-    PoolAllocator(const PoolAllocator<T>& rhs) = delete;
-    PoolAllocator<T>& operator=(const PoolAllocator<T>& rhs) = delete;
+    PoolAllocator(const PoolAllocator<T>& rhs)
+        : _capacity{ rhs._capacity }
+        , _len{ rhs._len }
+        , _buffer{ static_cast<u8*>(sf_mem_alloc(rhs._capacity, alignof(T))) }
+    {
+        sf_mem_copy(_buffer, rhs._buffer, rhs._len);
+    }
+
+    PoolAllocator<T>& operator=(const PoolAllocator<T>& rhs) {
+        if (_capacity < rhs._len) {
+            sf_mem_free(_buffer);
+            _buffer = static_cast<u8*>(sf_mem_alloc(rhs._capacity, alignof(T)));
+            _capacity = rhs._capacity;
+        }
+        _len = rhs._len;
+        sf_mem_copy(_buffer, rhs._buffer, rhs._len);
+    }
 
     ~PoolAllocator()
     {
