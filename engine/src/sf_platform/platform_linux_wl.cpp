@@ -6,6 +6,7 @@
 #include "sf_core/logger.hpp"
 #include "sf_platform/xdg-shell-protocol.hpp"
 #include "sf_core/memory_sf.hpp"
+#include "sf_core/asserts_sf.hpp"
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>
 #include <wayland-client.h>
@@ -690,7 +691,7 @@ bool PlatformState::start_event_loop() {
 
 void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
     if (alignment) {
-         assert(is_power_of_two(alignment) && "alignment should be a power of two");
+        SF_ASSERT_MSG(is_power_of_two(alignment), "alignment should be a power of two");
         return ::operator new(byte_size, static_cast<std::align_val_t>(alignment), std::nothrow);
     } else {
         return ::operator new(byte_size, std::nothrow);
@@ -699,7 +700,7 @@ void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
 
 void platform_mem_free(void* block, u16 alignment = 0) {
     if (alignment) {
-        assert(is_power_of_two(alignment) && "alignment should be a power of two");
+        SF_ASSERT_MSG(is_power_of_two(alignment), "alignment should be a power of two");
         return ::operator delete(block, static_cast<std::align_val_t>(alignment), std::nothrow);
     } else {
         return ::operator delete(block, std::nothrow);

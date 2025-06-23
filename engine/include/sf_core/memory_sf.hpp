@@ -1,9 +1,7 @@
 #pragma once
-#include "sf_core/logger.hpp"
 #include "sf_core/types.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_core/utils.hpp"
-#include <concepts>
 
 namespace sf {
 enum MemoryTag {
@@ -47,24 +45,6 @@ SF_EXPORT void  sf_mem_set(void* dest, i32 value, usize size);
 SF_EXPORT i8*   get_memory_usage_str();
 
 // custom allocators
-template<typename A, typename T, typename ...Args>
-concept MonoTypeAllocator = requires(A a, Args... args) {
-    { a.allocate(std::declval<u64>()) } -> std::same_as<T*>;
-    { a.deallocate(std::declval<T*>(), std::declval<u64>()) } -> std::same_as<void>;
-    { a.construct(std::declval<T*>(), std::forward<Args>(args)...) } -> std::same_as<void>;
-    { a.allocate_and_construct(std::forward<Args>(args)...) } -> std::same_as<T*>;
-    { a.reallocate(std::declval<u64>()) } -> std::same_as<void>;
-    { a.begin() } -> std::same_as<T*>;
-    { a.end() } -> std::same_as<T*>;
-    { a.ptr_offset(std::declval<u64>()) } -> std::same_as<T*>;
-    { a.ptr_offset_val(std::declval<u64>()) } -> std::same_as<T&>;
-    { a.len() } -> std::same_as<usize>;
-    { a.capacity() } -> std::same_as<usize>;
-};
-
-// TODO:
-template<typename A, typename ...Args>
-concept PolyTypeAllocator = true;
 
 // struct ArenaAllocator {
 //     usize _capacity;
@@ -100,7 +80,7 @@ concept PolyTypeAllocator = true;
 // };
 
 template<typename T>
-struct PoolAllocator {
+struct DefaultArrayAllocator {
 private:
     usize   _capacity;
     usize   _len;
@@ -112,13 +92,13 @@ public:
 
     static_assert(is_power_of_two(alignof(T)) && "should be power of 2");
 
-    PoolAllocator(u64 count)
+    DefaultArrayAllocator(u64 count)
         : _capacity{ sizeof(T) * count }
         , _len{ 0 }
         , _buffer{ static_cast<u8*>(sf_mem_alloc(_capacity, alignof(T))) }
     {}
 
-    PoolAllocator(PoolAllocator<T>&& rhs) noexcept
+    DefaultArrayAllocator(DefaultArrayAllocator<T>&& rhs) noexcept
         : _capacity{ rhs._capacity }
         , _len{ rhs._len }
         , _buffer{ rhs._buffer }
@@ -128,7 +108,7 @@ public:
         rhs._buffer = nullptr;
     }
 
-    PoolAllocator<T>& operator=(PoolAllocator<T>&& rhs) noexcept
+    DefaultArrayAllocator<T>& operator=(DefaultArrayAllocator<T>&& rhs) noexcept
     {
         sf_mem_free(_buffer);
         _capacity = rhs._capacity;
@@ -141,7 +121,7 @@ public:
         return *this;
     }
 
-    PoolAllocator(const PoolAllocator<T>& rhs)
+    DefaultArrayAllocator(const DefaultArrayAllocator<T>& rhs)
         : _capacity{ rhs._capacity }
         , _len{ rhs._len }
         , _buffer{ static_cast<u8*>(sf_mem_alloc(rhs._capacity, alignof(T))) }
@@ -149,7 +129,7 @@ public:
         sf_mem_copy(_buffer, rhs._buffer, rhs._len);
     }
 
-    PoolAllocator<T>& operator=(const PoolAllocator<T>& rhs) {
+    DefaultArrayAllocator<T>& operator=(const DefaultArrayAllocator<T>& rhs) {
         if (_capacity < rhs._len) {
             sf_mem_free(_buffer);
             _buffer = static_cast<u8*>(sf_mem_alloc(rhs._capacity, alignof(T)));
@@ -159,7 +139,7 @@ public:
         sf_mem_copy(_buffer, rhs._buffer, rhs._len);
     }
 
-    ~PoolAllocator()
+    ~DefaultArrayAllocator()
     {
         if (_buffer) {
             sf_mem_free(_buffer, _capacity, alignof(T));
@@ -170,15 +150,14 @@ public:
     T* allocate(u64 count)
     {
         usize need_memory = sizeof(T) * static_cast<usize>(count);
-        usize padding = reinterpret_cast<usize>(_buffer + _len) & (alignof(T) - 1);
-        usize have_memory = _capacity - (_len + padding);
+        usize have_memory = _capacity - _len;
 
         if (have_memory < need_memory) {
             this->reallocate(_capacity * 2);
         }
 
-        T* return_memory = reinterpret_cast<T*>(_buffer + _len + padding);
-        _len += padding + need_memory;
+        T* return_memory = reinterpret_cast<T*>(_buffer + _len);
+        _len += need_memory;
 
         return return_memory;
     }
@@ -209,12 +188,19 @@ public:
         _buffer = new_buffer;
     }
 
+    void pop() noexcept {
+        if (_len >= sizeof(T)) {
+            _len -= sizeof(T);
+        }
+    }
+
     T* begin() noexcept { return reinterpret_cast<T*>(_buffer); }
     T* end() noexcept { return reinterpret_cast<T*>(_buffer + _len); }
     T* ptr_offset(usize ind) noexcept { return reinterpret_cast<T*>(_buffer) + ind; }
     T& ptr_offset_val(usize ind) noexcept { return *(ptr_offset(ind)); }
     usize len() noexcept { return _len / sizeof(T); }
     usize capacity() noexcept { return _capacity / sizeof(T); }
+    void clear() noexcept { _len = 0; }
 };
 
 } // sf

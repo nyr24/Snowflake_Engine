@@ -1,15 +1,14 @@
 #pragma once
 #include "sf_core/types.hpp"
 #include <cstddef>
+#include <iterator>
 
 namespace sf {
 
-// RandomAccessIterator
 template<typename T>
-struct RandomAccessIterator {
-private:
+struct PtrForwardIterator {
+protected:
     T* ptr;
-
 public:
     using ValueType = T;
     using Ptr = T*;
@@ -17,13 +16,14 @@ public:
     using RvalueRef = T&&;
     using ConstRef = const T&;
     using Diff = std::ptrdiff_t;
+    using Strategy = std::forward_iterator_tag;
 
-    RandomAccessIterator() = default;
-    ~RandomAccessIterator() = default;
-    RandomAccessIterator(const RandomAccessIterator<T>& rhs) = default;
-    RandomAccessIterator<T>& operator=(const RandomAccessIterator<T>& rhs) = default;
+    PtrForwardIterator() = default;
+    ~PtrForwardIterator() = default;
+    PtrForwardIterator(const PtrForwardIterator<T>& rhs) = default;
+    PtrForwardIterator<T>& operator=(const PtrForwardIterator<T>& rhs) = default;
 
-    RandomAccessIterator(T* ptr)
+    PtrForwardIterator(T* ptr)
         : ptr{ ptr }
     {}
 
@@ -40,75 +40,89 @@ public:
     }
 
     // it++
-    RandomAccessIterator<T> operator++(i32 offset) {
-        RandomAccessIterator<T> tmp{ *this };
-        ptr += offset;
+    PtrForwardIterator<T> operator++(i32 offset) {
+        PtrForwardIterator<T> tmp{ *this };
+        ++ptr;
         return tmp;
     }
 
     // ++it
-    RandomAccessIterator<T>& operator++() {
+    PtrForwardIterator<T>& operator++() {
         ++ptr;
         return *this;
     }
 
+    friend bool operator==(const PtrForwardIterator<T>& first, const PtrForwardIterator<T>& second) {
+        return first.ptr == second.ptr;
+    }
+
+    friend bool operator!=(const PtrForwardIterator<T>& first, const PtrForwardIterator<T>& second) {
+        return first.ptr != second.ptr;
+    }
+};
+
+template<typename T>
+struct PtrBidirectionalOperator : public PtrForwardIterator<T> {
+public:
+    using Strategy = std::bidirectional_iterator_tag;
+    using PtrForwardIterator<T>::PtrForwardIterator;
+
     // it--
-    RandomAccessIterator<T> operator--(i32 offset) {
-        RandomAccessIterator<T> tmp{ *this };
-        ptr -= offset;
+    PtrBidirectionalOperator<T> operator--(i32 offset) {
+        PtrBidirectionalOperator<T> tmp{ *this };
+        this->ptr -= offset;
         return tmp;
     }
 
     // --it
-    RandomAccessIterator<T>& operator--() {
-        --ptr;
+    PtrBidirectionalOperator<T>& operator--() {
+        --this->ptr;
         return *this;
     }
+};
 
-    RandomAccessIterator<T>& operator+=(i32 val) {
-        ptr += val;
-        return *this;
-    }
-
-    RandomAccessIterator<T>& operator-=(i32 val) {
-        ptr += val;
-        return *this;
-    }
+template<typename T>
+struct PtrRandomAccessIterator : public PtrBidirectionalOperator<T> {
+public:
+    using Strategy = std::random_access_iterator_tag;
+    using PtrBidirectionalOperator<T>::PtrBidirectionalOperator;
 
     T& operator[](usize index) {
-        return *(ptr + index);
+        return *(this->ptr + index);
     }
 
-    friend bool operator==(const RandomAccessIterator<T>& first, const RandomAccessIterator<T>& second) {
-        return first.ptr == second.ptr;
+    PtrRandomAccessIterator<T>& operator+=(i32 val) {
+        this->ptr += val;
+        return *this;
     }
 
-    friend bool operator!=(const RandomAccessIterator<T>& first, const RandomAccessIterator<T>& second) {
-        return first.ptr != second.ptr;
+    PtrRandomAccessIterator<T>& operator-=(i32 val) {
+        this->ptr += val;
+        return *this;
     }
 
-    friend bool operator>(const RandomAccessIterator<T>& first, const RandomAccessIterator<T>& second) {
+    friend PtrRandomAccessIterator<T> operator-(const PtrRandomAccessIterator<T>& first, const PtrRandomAccessIterator<T>& second) {
+        return PtrRandomAccessIterator<T>{ first.ptr - second.ptr };
+    }
+
+    friend PtrRandomAccessIterator<T> operator+(const PtrRandomAccessIterator<T>& first, const PtrRandomAccessIterator<T>& second) {
+        return PtrRandomAccessIterator<T>{ first.ptr + second.ptr };
+    }
+
+    friend bool operator>(const PtrRandomAccessIterator<T>& first, const PtrRandomAccessIterator<T>& second) {
         return first.ptr > second.ptr;
     }
 
-    friend bool operator<(const RandomAccessIterator<T>& first, const RandomAccessIterator<T>& second) {
+    friend bool operator<(const PtrRandomAccessIterator<T>& first, const PtrRandomAccessIterator<T>& second) {
         return first.ptr < second.ptr;
     }
 
-    friend bool operator>=(const RandomAccessIterator<T>& first, const RandomAccessIterator<T>& second) {
+    friend bool operator>=(const PtrRandomAccessIterator<T>& first, const PtrRandomAccessIterator<T>& second) {
         return first.ptr >= second.ptr;
     }
 
-    friend bool operator<=(const RandomAccessIterator<T>& first, const RandomAccessIterator<T>& second) {
+    friend bool operator<=(const PtrRandomAccessIterator<T>& first, const PtrRandomAccessIterator<T>& second) {
         return first.ptr <= second.ptr;
-    }
-
-    friend RandomAccessIterator<T> operator+(const RandomAccessIterator<T>& first, const RandomAccessIterator<T>& second) {
-        return RandomAccessIterator<T>{ first.ptr + second.ptr };
-    }
-
-    friend RandomAccessIterator<T> operator-(const RandomAccessIterator<T>& first, const RandomAccessIterator<T>& second) {
-        return RandomAccessIterator<T>{ first.ptr - second.ptr };
     }
 };
 

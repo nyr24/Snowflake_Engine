@@ -1,21 +1,37 @@
 #pragma once
 
-#include "sf_core/memory_sf.hpp"
 #include "sf_core/logger.hpp"
+#include "sf_core/memory_sf.hpp"
 #include "sf_core/types.hpp"
 #include "sf_ds/iterator.hpp"
+#include "sf_ds/traits.hpp"
 #include <cassert>
-#include <initializer_list>
 
 namespace sf {
 
-template<typename T, MonoTypeAllocator<T> A>
+template<typename T, MonoTypeAllocatorTrait<T> A = DefaultArrayAllocator<T>>
 struct ArrayList {
 private:
     A allocator;
 
 public:
-    using Iterator = RandomAccessIterator<T>;
+    using Iterator = PtrRandomAccessIterator<T>;
+
+    ArrayList(std::initializer_list<T> init_list)
+        : allocator{ DefaultArrayAllocator<T>{ init_list.size() } }
+    {
+        allocator.allocate(init_list.size());
+
+        u16 i{0};
+        auto iter{init_list.begin()};
+
+        for (; iter != init_list.end(); ++iter, ++i) {
+            allocator.construct(
+                allocator.ptr_offset(i),
+                *iter
+            );
+        }
+    }
 
     ArrayList(std::pair<std::initializer_list<T>, A>&& args)
         : allocator{ std::move(args.second) }
@@ -71,9 +87,11 @@ public:
     }
 
     void pop() noexcept {
-        if (allocator.len() > 0) {
-            allocator.pop();
-        }
+        allocator.pop();
+    }
+
+    void clear() noexcept {
+        allocator.clear();
     }
 
     void debug_print() noexcept {
@@ -102,12 +120,12 @@ public:
         return allocator.capacity();
     }
 
-    RandomAccessIterator<T> begin() noexcept {
-        return RandomAccessIterator<T>(allocator.begin());
+    PtrRandomAccessIterator<T> begin() noexcept {
+        return PtrRandomAccessIterator<T>(allocator.begin());
     }
 
-    RandomAccessIterator<T> end() noexcept {
-        return RandomAccessIterator<T>(allocator.end());
+    PtrRandomAccessIterator<T> end() noexcept {
+        return PtrRandomAccessIterator<T>(allocator.end());
     }
 };
 
