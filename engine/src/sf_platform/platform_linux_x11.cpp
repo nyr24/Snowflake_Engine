@@ -3,6 +3,7 @@
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
+#include "sf_core/logger.hpp"
 #include <xcb/xcb.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
@@ -11,13 +12,8 @@
 #include <sys/time.h>
 #include <xcb/xproto.h>
 
-#if _POSIX_C_SOURCE >= 199309L
 #include <time.h> // nanosleep
-#else
 #include <unistd.h> // usleep
-#endif
-
-#include <cstdlib>
 #include <cstring>
 
 namespace sf {
@@ -206,7 +202,7 @@ bool PlatformState::start_event_loop() {
                 break;
         }
 
-        sf_mem_free(event, sizeof(event));
+        sf_mem_free(event, sizeof(xcb_generic_event_t));
     }
 
     return !quit_flagged;

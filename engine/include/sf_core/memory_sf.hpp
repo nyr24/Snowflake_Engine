@@ -87,8 +87,8 @@ private:
     u8*     _buffer;
 
 public:
-    using value_type    = T;
-    using pointer       = T*;
+    using ValueType = T;
+    using Pointer   = T*;
 
     static_assert(is_power_of_two(alignof(T)) && "should be power of 2");
 
@@ -162,9 +162,6 @@ public:
         return return_memory;
     }
 
-    void deallocate(T* ptr, u64 count) noexcept
-    {}
-
     template<typename ...Args>
     void construct(T* ptr, Args&&... args) noexcept
     {
@@ -178,6 +175,9 @@ public:
         construct(place_ptr, std::forward<Args>(args)...);
         return place_ptr;
     }
+
+    void deallocate(T* ptr, u64 count) noexcept
+    {}
 
     void reallocate(usize new_capacity)
     {
