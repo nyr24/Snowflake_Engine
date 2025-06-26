@@ -15,7 +15,7 @@ target_compile_options(
   PUBLIC
   $<$<CONFIG:Debug>:
     -g
-    -Og
+    -O0
   >
   $<$<CONFIG:Release>:
     -O3

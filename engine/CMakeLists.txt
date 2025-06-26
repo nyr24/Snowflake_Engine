@@ -17,7 +17,7 @@ target_compile_options(
   PUBLIC
   $<$<CONFIG:Debug>:
     -g
-    -Og
+    -O0
   >
   $<$<CONFIG:Release>:
     -O3
@@ -38,7 +38,6 @@ target_compile_definitions(
 )
 
 if (DEFINED SF_BUILD_WAYLAND)
-  message("wayland build 1")
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_WAYLAND)
   target_link_libraries(${PROJECT_NAME} PRIVATE vulkan wayland-client xkbcommon)
 elseif (DEFINED SF_BUILD_X11)

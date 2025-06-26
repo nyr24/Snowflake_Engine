@@ -97,7 +97,7 @@ public:
     }
 
     PtrRandomAccessIterator<T>& operator-=(i32 val) {
-        this->ptr += val;
+        this->ptr -= val;
         return *this;
     }
 
