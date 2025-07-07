@@ -7,10 +7,9 @@
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/types.hpp"
 #include "sf_core/asserts_sf.hpp"
-#include <concepts>
+#include "sf_core/utility.hpp"
 #include <initializer_list>
 #include <iterator>
-#include <type_traits>
 #include <utility>
 
 namespace sf {
@@ -181,7 +180,7 @@ public:
     }
 
     template<typename U>
-    requires std::same_as<std::remove_cv_t<std::remove_reference_t<T>>, std::remove_cv_t<std::remove_reference_t<U>>>
+    requires SameTypes<T, U>
     void insert(U&& value) noexcept {
         if (_count == _capacity) {
             reallocate();
@@ -198,7 +197,7 @@ public:
         }
     }
 
-    void remove_at(usize index) {
+    void remove_at(usize index) noexcept {
         if (_count == 0 || index < _head_offset || index > _tail_offset) {
             return;
         }
@@ -231,29 +230,29 @@ public:
         --_count;
     }
 
-    bool empty() {
+    bool empty() noexcept {
         return (_buffer + _head_offset).header.forward_count == 0 && (_buffer + _tail_offset).header.backward_count == 0;
     }
 
-    usize count() {
+    usize count() noexcept {
         return _count;
     }
 
-    usize capacity() {
+    usize capacity() noexcept {
         return _capacity;
     }
 
-    LinkedArrayListIterator begin() {
+    LinkedArrayListIterator begin() noexcept {
         return LinkedArrayListIterator(_buffer + _head_offset);
     }
 
-    LinkedArrayListIterator end() {
+    LinkedArrayListIterator end() noexcept {
         return LinkedArrayListIterator(_buffer + _tail_offset + 1);
     }
 
 private:
     template<typename U>
-    requires std::same_as<std::remove_cv_t<std::remove_reference_t<T>>, std::remove_cv_t<std::remove_reference_t<U>>>
+    requires SameTypes<T, U>
     void insert_first(U&& value) noexcept {
         SF_ASSERT_MSG(_count == 0, "should not have elements");
         _buffer->header.forward_count = 1;
@@ -263,7 +262,7 @@ private:
     }
 
     template<typename U>
-    requires std::same_as<std::remove_cv_t<std::remove_reference_t<T>>, std::remove_cv_t<std::remove_reference_t<U>>>
+    requires SameTypes<T, U>
     void insert_end(U&& value) noexcept {
         SF_ASSERT_MSG(_tail_offset < (_capacity - 1), "should have place at tail");
 
@@ -280,7 +279,7 @@ private:
     }
 
     template<typename U>
-    requires std::same_as<std::remove_cv_t<std::remove_reference_t<T>>, std::remove_cv_t<std::remove_reference_t<U>>>
+    requires SameTypes<T, U>
     void insert_begin(U&& value) noexcept {
         SF_ASSERT_MSG(_head_offset > 0, "should have place at head");
 
@@ -297,7 +296,7 @@ private:
     }
 
     template<typename U>
-    requires std::same_as<std::remove_cv_t<std::remove_reference_t<T>>, std::remove_cv_t<std::remove_reference_t<U>>>
+    requires SameTypes<T, U>
     void insert_search(U&& value) noexcept {
         SF_ASSERT_MSG(_tail_offset >= _capacity - 1, "use insert_end instead");
         SF_ASSERT_MSG(_head_offset == 0, "use insert_begin instead");

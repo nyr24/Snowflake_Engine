@@ -12,120 +12,120 @@ namespace sf {
 template<typename T, MonoTypeAllocatorTrait<T> A = DefaultArrayAllocator<T>>
 struct ArrayList {
 private:
-    A allocator;
+    A _allocator;
 
 public:
     using Iterator = PtrRandomAccessIterator<T>;
 
     ArrayList(std::initializer_list<T> init_list)
-        : allocator{ DefaultArrayAllocator<T>{ init_list.size() } }
+        : _allocator{ DefaultArrayAllocator<T>{ init_list.size() } }
     {
-        allocator.allocate(init_list.size());
+        _allocator.allocate(init_list.size());
 
         u16 i{0};
         auto iter{init_list.begin()};
 
         for (; iter != init_list.end(); ++iter, ++i) {
-            allocator.construct(
-                allocator.ptr_offset(i),
+            _allocator.construct(
+                _allocator.ptr_offset(i),
                 *iter
             );
         }
     }
 
     ArrayList(std::pair<std::initializer_list<T>, A>&& args)
-        : allocator{ std::move(args.second) }
+        : _allocator{ std::move(args.second) }
     {
-        allocator.allocate(args.first.size());
+        _allocator.allocate(args.first.size());
 
         u16 i{0};
         auto iter{args.first.begin()};
 
         for (; iter != args.first.end(); ++iter, ++i) {
-            allocator.construct(
-                allocator.ptr_offset(i),
+            _allocator.construct(
+                _allocator.ptr_offset(i),
                 *iter
             );
         }
     }
 
-    ArrayList(A&& allocator)
-        : allocator{ std::move(allocator) }
+    ArrayList(A&& _allocator)
+        : _allocator{ std::move(_allocator) }
     {}
 
     ArrayList(const ArrayList<T, A>& rhs)
-        : allocator{ rhs.allocator }
+        : _allocator{ rhs._allocator }
     {}
 
     ArrayList(ArrayList<T, A>&& rhs) noexcept
-        : allocator{ std::move(rhs.allocator) }
+        : _allocator{ std::move(rhs._allocator ) }
     {}
 
     ArrayList<T, A>& operator=(const ArrayList<T, A>& rhs) {
-        allocator = rhs.allocator;
+        _allocator = rhs._allocator ;
         return *this;
     }
 
     ArrayList<T, A>& operator=(ArrayList<T, A>&& rhs) noexcept {
-        allocator = std::move(rhs.allocator);
+        _allocator = std::move(rhs._allocator );
         return *this;
     }
 
     template<typename ...Args>
     void append_emplace(Args&&... args) noexcept {
-        allocator.allocate_and_construct(std::forward<Args>(args)...);
+        _allocator.allocate_and_construct(std::forward<Args>(args)...);
     }
 
     template<typename ...Args>
     void append(const T& item) noexcept {
-        allocator.allocate_and_construct(item);
+        _allocator.allocate_and_construct(item);
     }
 
     template<typename ...Args>
     void append(T&& item) noexcept {
-        allocator.allocate_and_construct(item);
+        _allocator.allocate_and_construct(item);
     }
 
     void pop() noexcept {
-        allocator.pop();
+        _allocator.pop();
     }
 
     void clear() noexcept {
-        allocator.clear();
+        _allocator.clear();
     }
 
     void debug_print() noexcept {
         if constexpr (HasFormatter<T, u8>) {
-            for (u32 i{0}; i < allocator.len(); ++i) {
-                LOG_DEBUG("{} ", allocator.ptr_offset_val(i));
+            for (u32 i{0}; i < _allocator.len(); ++i) {
+                LOG_DEBUG("{} ", _allocator.ptr_offset_val(i));
             }
         }
     }
 
     T& operator[](usize ind) noexcept {
-        SF_ASSERT_MSG((ind >= 0 && ind < allocator.len()), "out of bounds");
-        return allocator.ptr_offset_val(ind);
+        SF_ASSERT_MSG((ind >= 0 && ind < _allocator.len()), "out of bounds");
+        return _allocator.ptr_offset_val(ind);
     }
 
     const T& operator[](usize ind) const noexcept {
-        SF_ASSERT_MSG((ind >= 0 && ind < allocator.len()), "out of bounds");
-        return allocator.ptr_offset_val(ind);
+        SF_ASSERT_MSG((ind >= 0 && ind < _allocator.len()), "out of bounds");
+        return _allocator.ptr_offset_val(ind);
     }
 
     u64 len() noexcept {
-        return allocator.len();
+        return _allocator.len();
     }
 
     u64 capacity() noexcept {
-        return allocator.capacity();
+        return _allocator.capacity();
     }
 
     PtrRandomAccessIterator<T> begin() noexcept {
-        return PtrRandomAccessIterator<T>(allocator.begin());
+        return PtrRandomAccessIterator<T>(_allocator.begin());
     }
 
     PtrRandomAccessIterator<T> end() noexcept {
-        return PtrRandomAccessIterator<T>(allocator.end());
+        return PtrRandomAccessIterator<T>(_allocator.end());
     }
 };
 

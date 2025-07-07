@@ -1,10 +1,10 @@
 #include "sf_core/memory_sf.hpp"
 #include "sf_platform/platform.hpp"
-#include "sf_core/logger.hpp"
 #include <array>
 #include <string_view>
 #include <cstring>
 #include <format>
+#include <iostream>
 
 namespace sf {
 struct MemoryStats {

@@ -1,7 +1,7 @@
 #pragma once
 #include "sf_core/types.hpp"
 #include "sf_platform/platform.hpp"
-#include "sf_core/utils.hpp"
+#include "sf_core/utility.hpp"
 
 namespace sf {
 enum MemoryTag {
@@ -26,14 +26,14 @@ enum MemoryTag {
 };
 
 // templated versions of memory functions
-template<typename T, typename... Args>
-SF_EXPORT T* sf_mem_alloc(Args&&... args) {
-    return platform_mem_alloc<T, Args...>(std::forward<Args>(args)...);
+template<typename T, bool should_align = true>
+SF_EXPORT T* sf_mem_alloc(u64 count) {
+    return platform_mem_alloc<T, should_align>(count);
 }
 
-template<typename T>
+template<typename T, bool should_align = true>
 SF_EXPORT void sf_mem_free(T* block) {
-    return platform_mem_free<T>(block);
+    return platform_mem_free<T, should_align>(block);
 }
 
 // non-templated versions of memory functions (void*)
@@ -92,7 +92,7 @@ public:
 
     static_assert(is_power_of_two(alignof(T)) && "should be power of 2");
 
-    DefaultArrayAllocator(u64 count)
+    DefaultArrayAllocator(u64 count) noexcept
         : _capacity{ sizeof(T) * count }
         , _len{ 0 }
         , _buffer{ static_cast<u8*>(sf_mem_alloc(_capacity, alignof(T))) }
@@ -121,7 +121,7 @@ public:
         return *this;
     }
 
-    DefaultArrayAllocator(const DefaultArrayAllocator<T>& rhs)
+    DefaultArrayAllocator(const DefaultArrayAllocator<T>& rhs) noexcept
         : _capacity{ rhs._capacity }
         , _len{ rhs._len }
         , _buffer{ static_cast<u8*>(sf_mem_alloc(rhs._capacity, alignof(T))) }
@@ -129,7 +129,7 @@ public:
         sf_mem_copy(_buffer, rhs._buffer, rhs._len);
     }
 
-    DefaultArrayAllocator<T>& operator=(const DefaultArrayAllocator<T>& rhs) {
+    DefaultArrayAllocator<T>& operator=(const DefaultArrayAllocator<T>& rhs) noexcept {
         if (_capacity < rhs._len) {
             sf_mem_free(_buffer);
             _buffer = static_cast<u8*>(sf_mem_alloc(rhs._capacity, alignof(T)));
@@ -139,7 +139,7 @@ public:
         sf_mem_copy(_buffer, rhs._buffer, rhs._len);
     }
 
-    ~DefaultArrayAllocator()
+    ~DefaultArrayAllocator() noexcept
     {
         if (_buffer) {
             sf_mem_free(_buffer, _capacity, alignof(T));
@@ -147,7 +147,7 @@ public:
         }
     }
 
-    T* allocate(u64 count)
+    T* allocate(u64 count) noexcept
     {
         usize need_memory = sizeof(T) * static_cast<usize>(count);
         usize have_memory = _capacity - _len;
@@ -169,7 +169,7 @@ public:
     }
 
     template<typename ...Args>
-    T* allocate_and_construct(Args&&... args)
+    T* allocate_and_construct(Args&&... args) noexcept
     {
         T* place_ptr = allocate(1);
         construct(place_ptr, std::forward<Args>(args)...);
@@ -179,7 +179,7 @@ public:
     void deallocate(T* ptr, u64 count) noexcept
     {}
 
-    void reallocate(usize new_capacity)
+    void reallocate(usize new_capacity) noexcept
     {
         _capacity = new_capacity;
         u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_capacity, alignof(T)));

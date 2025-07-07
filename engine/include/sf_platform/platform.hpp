@@ -1,6 +1,6 @@
 #pragma once
 #include "sf_core/types.hpp"
-#include "sf_core/utils.hpp"
+#include "sf_core/utility.hpp"
 #include <new>
 #include <utility>
 
@@ -100,15 +100,32 @@ struct Rect {
 };
 
 // templated versions of memory functions
+template<typename T, bool should_align>
+T* platform_mem_alloc(u64 count) {
+    if constexpr (should_align) {
+        return static_cast<T*>(::operator new(sizeof(T) * count, static_cast<std::align_val_t>(alignof(T)), std::nothrow));
+    } else {
+        return static_cast<T*>(::operator new(sizeof(T) * count, std::nothrow));
+    }
+}
+
+template<typename T, bool should_align>
+void platform_mem_free(T* block) {
+    if constexpr (should_align) {
+        ::operator delete(block, static_cast<std::align_val_t>(alignof(T)), std::nothrow);
+    } else {
+        ::operator delete(block, std::nothrow);
+    }
+}
+
 template<typename T, typename... Args>
-T* platform_mem_alloc(Args&&... args) {
-    static_assert(is_power_of_two(alignof(T)) && "alignment should be a power of two");
+T* platform_mem_construct(Args&&... args) {
     return new (std::nothrow) T(std::forward<Args>(args)...);
 }
 
-template<typename T>
-void platform_mem_free(T* block) {
-    ::operator delete(block, alignof(T), std::nothrow);
+template<typename T, typename... Args>
+T* platform_mem_place(T* ptr, Args&&... args) {
+    return new (ptr) T(std::forward<Args>(args)...);
 }
 
 // non-templated versions of memory functions (void*)
