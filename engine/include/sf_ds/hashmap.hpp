@@ -3,167 +3,263 @@
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/types.hpp"
 #include "sf_core/utility.hpp"
+#include "sf_ds/iterator.hpp"
 #include "sf_ds/optional.hpp"
+#include "sf_core/asserts_sf.hpp"
+#include <functional>
+#include <utility>
 
 namespace sf {
 
 template<typename K, typename V>
+struct HashMap;
+
+template<typename K>
+using HashFn = std::function<u64(ConstLRefOrValType<K>)>;
+
+template<typename K>
+using EqualFn = std::function<bool(ConstLRefOrValType<K>, ConstLRefOrValType<K>)>;
+
+template<typename K>
+u64 hashfn_default(ConstLRefOrValType<K> key) noexcept;
+
+template<typename K>
+EqualFn<K> equal_fn_default = [](ConstLRefOrValType<K> first, ConstLRefOrValType<K> second) -> bool {
+    return first == second;
+};
+
+template<typename K>
+struct HashMapConfig {
+    HashFn<K>   hash_fn;
+    EqualFn<K>  equal_fn;
+    f32         load_factor;
+    f32         grow_factor;
+
+    HashMapConfig(HashFn<K> hash_fn)
+        : hash_fn{ hash_fn }
+        , equal_fn{ equal_fn_default<K> }
+        , load_factor{ 0.8f }
+        , grow_factor{ 2.0f }
+    {}
+};
+
+template<typename K>
+static HashMapConfig<K> map_default_config {
+    .hash_fn = hashfn_default<K>,
+    .equal_fn = [](ConstLRefOrValType<K> first, ConstLRefOrValType<K> second) -> bool {
+        return first == second;
+    },
+    .load_factor = 0.8f,
+    .grow_factor = 2.0f,
+};
+
+template<typename K, typename V>
 struct HashMap {
 public:
+    using KeyType = K;
+    using ValueType = V;
+
     struct Bucket {
+        enum BucketState : u8 {
+            FILLED,
+            EMPTY,
+            TOMBSTONE
+        };
+
         K key;
         V value;
-    };
-
-    struct Config {
-        f32 load_factor;
-        f32 grow_factor;
+        BucketState state;
     };
 
 private:
     // 1 capacity = 1 count = sizeof(Bucket<K, V>)
     usize               _capacity;
     usize               _count;
-    Option<Bucket>*     _buffer;
-    Config              _config;
+    Bucket*             _buffer;
+    HashMapConfig<K>    _config = map_default_config<K>;
 
 public:
-    HashMap(u64 prealloc_count, Config config)
+    HashMap(u64 prealloc_count, const HashMapConfig<K>& config = map_default_config<K>)
         : _capacity(static_cast<usize>(prealloc_count))
         , _count{ 0 }
-        , _buffer{ static_cast<Option<Bucket>*>(sf_mem_alloc(sizeof(Option<Bucket>) * prealloc_count)) }
-        , _config{ config }
+        , _buffer{ static_cast<Bucket*>(sf_mem_alloc<Bucket>(prealloc_count)) }
+        , _config{ std::move(config) }
     {
-        init_buffer(_buffer);
+        init_buffer_empty(_buffer, _capacity);
     }
 
     // updates entry with the same key
-    void put(K&& key, V&& val) noexcept {
-        if (_count > static_cast<usize>(_capacity * _config.load_factor)) {
+    template<typename Key, typename Val>
+    requires SameTypes<K, Key> && SameTypes<V, Val>
+    void put(Key&& key, Val&& val) noexcept {
+        if (_count >= static_cast<usize>(_capacity * _config.load_factor)) {
             realloc();
         }
 
-        usize index = static_cast<usize>(hash_fnv1a(key)) % _capacity;
+        usize index = static_cast<usize>(_config.hash_fn(key)) % _capacity;
 
-        while (_buffer[index].is_some() && key != _buffer[index].unwrap().key) {
+        while (_buffer[index].state == Bucket::FILLED && key != _buffer[index].key) {
             ++index;
             index %= _capacity;
         }
 
-        _buffer[index].set_some(Bucket{ .key = std::move(key), .value = std::move(val) });
-        ++_count;
+        if (_buffer[index].state != Bucket::FILLED) {
+            _buffer[index] = Bucket{ .key = std::forward<Key>(key), .value = std::forward<Val>(val), .state = Bucket::FILLED };
+            ++_count;
+        } else {
+            _buffer[index].value = std::forward<Val>(val);
+        }
+    }
+
+    // asserts if hashmap needs reallocate buffer
+    template<typename Key, typename Val>
+    requires SameTypes<K, Key> && SameTypes<V, Val>
+    void put_assume_capacity(K&& key, V&& val) noexcept {
+        SF_ASSERT_MSG(_count <= (static_cast<usize>(_capacity * _config.load_factor)), "Not enough capacity in HashMap");
+
+        usize index = static_cast<usize>(_config.hash_fn(key)) % _capacity;
+
+        while (_buffer[index].state == Bucket::FILLED && key != _buffer[index].key) {
+            ++index;
+            index %= _capacity;
+        }
+
+        if (_buffer[index].state != Bucket::FILLED) {
+            _buffer[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
+            ++_count;
+        } else {
+            _buffer[index].value = std::move(val);
+        }
     }
 
     // put without update
+    template<typename Key, typename Val>
+    requires SameTypes<K, Key> && SameTypes<V, Val>
     bool put_if_empty(K&& key, V&& val) noexcept {
-        if (_count > static_cast<usize>(_capacity * _config.load_factor)) {
+        if (_count >= static_cast<usize>(_capacity * _config.load_factor)) {
             realloc();
         }
 
-        usize index = static_cast<usize>(hash_fnv1a(key)) % _capacity;
+        usize index = static_cast<usize>(_config.hash_fn(key)) % _capacity;
 
-        while (_buffer[index].is_some() && key != _buffer[index].unwrap().key) {
+        while (_buffer[index].state == Bucket::FILLED && key != _buffer[index].key) {
             ++index;
             index %= _capacity;
         }
 
-        if (_buffer[index].is_some()) {
+        if (_buffer[index].state == Bucket::FILLED) {
             return false;
+        } else {
+            ++_count;
+            _buffer[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
+            return true;
         }
-
-        _buffer[index].set_some(Bucket{ .key = key, .value = val });
-        ++_count;
-        return true;
     }
 
-    Option<V> get(ConstRefOrVal<K>::Type key) noexcept {
-        Option<Option<Bucket>*> maybe_bucket = find_bucket(key);
+    Option<V> get(ConstLRefOrValType<K> key) noexcept {
+        Option<Bucket*> maybe_bucket = find_bucket(key);
         if (maybe_bucket.is_none()) {
             return None::Value;
         }
 
-        return maybe_bucket.unwrap()->unwrap().value;
+        return maybe_bucket.unwrap()->value;
     }
 
-    bool remove(ConstRefOrVal<K>::Type key) noexcept {
-        Option<Option<Bucket>*> maybe_bucket = find_bucket(key);
+    bool remove(ConstLRefOrValType<K> key) noexcept {
+        Option<Bucket*> maybe_bucket = find_bucket(key);
         if (maybe_bucket.is_none()) {
             return false;
         }
 
-        maybe_bucket.unwrap()->set_none();
+        Bucket* bucket = maybe_bucket.unwrap();
+        bucket->state = Bucket::TOMBSTONE;
+        --_count;
+
         return true;
     }
 
-private:
-    static constexpr u64 PRIME = 1099511628211u;
-    static constexpr u64 OFFSET_BASIS = 14695981039346656037u;
-
-    u64 hash_fnv1a(ConstRefOrVal<K>::Type key) noexcept {
-        u64 hash = OFFSET_BASIS;
-
-        u8 bytes[sizeof(K)];
-        sf_mem_copy(bytes, &key, sizeof(K));
- 
-        for (u32 i{0}; i < sizeof(K); ++i) {
-            hash ^= bytes[i];
-            hash *= PRIME;
-        }
-
-        return hash;
+    PtrRandomAccessIterator<Bucket> begin() noexcept {
+        return PtrRandomAccessIterator<Bucket>(_buffer);
     }
 
+    PtrRandomAccessIterator<Bucket> end() noexcept {
+        return PtrRandomAccessIterator<Bucket>(_buffer + _capacity);
+    }
+private:
     void realloc() noexcept {
-        usize new_capacity = static_cast<usize>(_capacity * _config.grow_factor);
-        Option<Bucket>* new_buffer = static_cast<Option<Bucket>*>(sf_mem_alloc<Option<Bucket>>(new_capacity));
-        init_buffer(new_buffer);
+        usize new_capacity = _capacity * _config.grow_factor;
+        Bucket* new_buffer = static_cast<Bucket*>(sf_mem_alloc<Bucket>(new_capacity));
+        init_buffer_empty(new_buffer, new_capacity);
 
         for (usize i{0}; i < _capacity; ++i) {
-            Option<Bucket>&& bucket_opt{ std::move(_buffer[i]) };
-            if (bucket_opt.is_none()) {
+            Bucket&& bucket{ std::move(_buffer[i]) };
+            if (bucket.state != Bucket::FILLED) {
                 continue;
             }
 
-            u64 new_hash = hash_fnv1a(bucket_opt.unwrap().key);
-            usize index = new_hash % new_capacity;
+            u64 hash = _config.hash_fn(bucket.key);
+            usize new_index = hash % _capacity;
 
-            new_buffer[index].set_some(bucket_opt.unwrap());
+            while (new_buffer[new_index].state == Bucket::FILLED) {
+                ++new_index;
+                new_index %= new_capacity;
+            }
+
+            new_buffer[new_index] = std::move(bucket);
         }
 
-        sf_mem_free<Option<Bucket>>(_buffer);
+        sf_mem_free<Bucket>(_buffer);
 
         _capacity = new_capacity;
         _buffer = new_buffer;
     }
 
-    void init_buffer(Option<Bucket>* buffer) {
+    void init_buffer_empty(Bucket* buffer, usize capacity) {
         if (!buffer) {
             return;
         }
 
-        for (u16 i{0}; i < _capacity; ++i) {
-            buffer[i].set_none();
+        for (u16 i{0}; i < capacity; ++i) {
+            buffer[i].state = Bucket::EMPTY;
         }
     }
 
-    // inner option - bucket can be empty
-    // outer option - bucket with input key was not found
-    Option<Option<Bucket>*> find_bucket(ConstRefOrVal<K>::Type key) noexcept {
-        usize index = static_cast<usize>(hash_fnv1a(key)) % _capacity;
+    // returns "some" if only state of bucket is "FILLED"
+    Option<Bucket*> find_bucket(ConstLRefOrValType<K> key) noexcept {
+        usize index = static_cast<usize>(_config.hash_fn(key)) % _capacity;
         usize search_count = 0;
 
-        while (_buffer[index].is_some() && key != _buffer[index].unwrap().key && search_count <= _capacity) {
+        while ((_buffer[index].state != Bucket::FILLED && key != _buffer[index].key) && search_count < _capacity) {
             ++index;
             index %= _capacity;
             ++search_count;
         }
 
-        if (_buffer[index].is_none() || search_count >= _capacity) {
-            return None::Value;
+        if (_buffer[index].state == Bucket::FILLED && search_count < _capacity) {
+            return _buffer + index;
         } else {
-            return &_buffer[index];
+            return None::Value;
         }
     }
 };
+
+// fnv1a hash function
+static constexpr u64 PRIME = 1099511628211u;
+static constexpr u64 OFFSET_BASIS = 14695981039346656037u;
+
+template<typename K>
+u64 hashfn_default(ConstLRefOrValType<K> key) noexcept {
+    u64 hash = OFFSET_BASIS;
+
+    u8 bytes[sizeof(K)];
+    sf_mem_copy(bytes, &key, sizeof(K));
+
+    for (u32 i{0}; i < sizeof(K); ++i) {
+        hash ^= bytes[i];
+        hash *= PRIME;
+    }
+
+    return hash;
+}
 
 } // sf

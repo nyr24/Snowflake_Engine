@@ -48,7 +48,7 @@ public:
     bool is_some() { return _tag == Tag::SOME; }
 
     // optimized function, if size <= size of word return by value, else by reference
-    RefOrVal<Some>::Type unwrap() noexcept {
+    LRefOrValType<Some> unwrap() noexcept {
         if (_tag == Tag::NONE) {
             panic("Option is none!");
         }
@@ -58,6 +58,20 @@ public:
     Some& unwrap_ref() noexcept {
         if (_tag == Tag::NONE) {
             panic("Option is none!");
+        }
+        return _storage.some;
+    }
+
+    LRefOrValType<Some> unwrap_or_default(RRefOrValType<Some> default_value) noexcept {
+        if (_tag == Tag::NONE) {
+            return default_value;
+        }
+        return _storage.some;
+    }
+
+    Some& unwrap_ref_or_default(RRefOrValType<Some> default_value) noexcept {
+        if (_tag == Tag::NONE) {
+            return default_value;
         }
         return _storage.some;
     }
