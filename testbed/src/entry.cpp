@@ -1,30 +1,31 @@
 #include "game.hpp"
-#include "sf_ds/iterator.hpp"
-#include "sf_ds/traits.hpp"
+#include "sf_ds/allocator.hpp"
 #include <initializer_list>
+#include <sf_ds/optional.hpp>
 #include <sf_core/game_types.hpp>
 #include <sf_core/entry.hpp>
 #include <sf_core/memory_sf.hpp>
 #include <sf_core/logger.hpp>
+#include <sf_ds/hashmap.hpp>
 #include <sf_ds/array_list.hpp>
-#include <sf_ds/llist.hpp>
 #include <utility>
 
-// template<typename T>
-// using MyIter = sf::PtrRandomAccessIterator<T>;
-//
-// template<typename T, sf::IteratorTrait<T>>
 struct Simple {
-    Simple(u64 d, bool is_dead)
-        : damage{ d }, is_dead{ is_dead }
+    Simple() = default;
+
+    Simple(i32 val)
+        : val{ val }
     {}
 
-    u64 damage;
-    bool is_dead;
+    ~Simple() {
+        LOG_DEBUG("destroyed, {}", val);
+    }
+
+    i32 val;
 };
 
 bool create_game(sf::GameInstance* out_game) {
-    // sf::ArenaAllocator arena{};
+    sf::ArenaAllocator arena{};
 
     out_game->app_config = sf::ApplicationConfig{
         .name = "CROSSBOW",
@@ -38,27 +39,40 @@ bool create_game(sf::GameInstance* out_game) {
     out_game->update = update;
     out_game->render = render;
     out_game->on_resize = on_resize;
-    // out_game->game_state = arena.allocate<GameState>();
+    out_game->game_state = arena.allocate<GameState>();
 
-    sf::LinkedArrayList<int> llist {
-        std::make_pair(std::initializer_list{ 1, 2, 3, 4, 5, 6 }, 6)
-    };
+    using FixedArr = sf::ArrayList<Simple, sf::FixedBufferAllocator<Simple, 100>>;
 
-    llist.remove_at(0);
-    llist.remove_at(1);
-    llist.remove_at(2);
-    llist.remove_at(4);
-    llist.remove_at(5);
-    llist.insert(666);
-    llist.insert(777);
-    llist.insert(888);
-    llist.insert(999);
-    llist.insert(1111);
-    llist.insert(2222);
+    FixedArr s1 = { std::make_pair(
+        std::initializer_list<Simple>{ 1, 2, 3, 4, 5, 6 },
+        sf::FixedBufferAllocator<Simple, 100>{}
+    )};
 
-    for (auto it = llist.begin(); it != llist.end(); ++it) {
-        LOG_INFO("{} ", it->value);
-    }
+    LOG_INFO("count: {}, cap: {}", s1.count(), s1.capacity());
+    s1.clear();
+    LOG_INFO("after: count: {}, cap: {}", s1.count(), s1.capacity());
+
+    // sf::HashMap<FixedArr, int> map{ 100, {
+    //     FixedArr::hash
+    // }};
+
+    // FixedArr s1 = { std::make_pair(
+    //     std::initializer_list<u8>{ 'h', 'e', 'l', 'l', 'o' },
+    //     sf::FixedBufferAllocator<u8, 100>{}
+    // )};
+    //
+    // FixedArr  s2 = { std::make_pair(
+    //     std::initializer_list<u8>{ 'w', 'e', 'l', 'l', 'o' },
+    //     sf::FixedBufferAllocator<u8, 100>{}
+    // )};
+    //
+    // map.put(s1, 1);
+    // map.put(s2, 2);
+    //
+    // auto g1 = map.get(s1);
+    // auto g2 = map.get(s2);
+    //
+    // LOG_INFO("get: {} , {}", g1.unwrap(), g2.unwrap());
 
     return true;
 }
