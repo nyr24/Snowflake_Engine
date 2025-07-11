@@ -1,6 +1,8 @@
 #include "sf_core/memory_sf.hpp"
+#include "sf_core/logger.hpp"
 #include "sf_platform/platform.hpp"
 #include <array>
+#include <new>
 #include <string_view>
 #include <cstring>
 #include <format>
@@ -25,79 +27,56 @@ static std::array<std::string_view, MemoryTag::MEMORY_TAG_MAX_TAGS> memory_tag_s
     "TRANSFORM",
     "ENTITY",
     "ENTITY_NODE",
-    "SCENE"
+    "SCENE",
 };
 
-// ArenaAllocator::ArenaAllocator()
-//     : capacity{ platform_get_mem_page_size() }
-//     , buffer{static_cast<u8*>(sf_mem_alloc(capacity)) }
-//     , len{ 0 }
-// {}
-//
-// ArenaAllocator::ArenaAllocator(u64 capacity_)
-//     : capacity{ capacity_bytes_ }
-//     , buffer{static_cast<u8*>(sf_mem_alloc(capacity)) }
-//     , len{ 0 }
-// {}
-//
-// ArenaAllocator::ArenaAllocator(ArenaAllocator&& rhs) noexcept
-//     : buffer{ rhs.buffer }
-//     , capacity{ rhs.capacity_bytes }
-//     , len{ rhs.len_bytes }
-// {
-//     rhs.buffer = nullptr;
-//     rhs.capacity = 0;
-//     rhs.len = 0;
-// }
-//
-// ArenaAllocator::~ArenaAllocator()
-// {
-//     sf_mem_free(buffer, capacity);
-// }
-//
-// void ArenaAllocator::reallocate(u64 new_capacity) {
-//     capacity = new_capacity;
-//     u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_capacity));
-//     sf::platform_mem_copy(new_buffer, buffer, len);
-//     sf_mem_free(buffer, capacity);
-//     buffer = new_buffer;
-// }
-//
 SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
+#ifdef SF_DEBUG
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
-        // LOG_INFO("unknown memory tag used for mem_alloc, please assign other tag later");
+        LOG_INFO("unknown memory tag used for mem_alloc, please assign other tag later");
     }
+#endif
 
     void* block = sf::platform_mem_alloc(byte_size, alignment);
-    sf::platform_mem_zero(block, byte_size);
+    sf_mem_set(block, byte_size, 0);
 
+#ifdef SF_DEBUG
     mem_stats.total_allocated += byte_size;
     mem_stats.tag_allocated[tag] += byte_size;
+#endif
 
     return block;
 }
 
 SF_EXPORT void sf_mem_free(void* block, u64 byte_size, u16 alignment, MemoryTag tag) {
+#ifdef SF_DEBUG
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
-        // LOG_INFO("unknown memory tag used for mem_free, please assign other tag later");
+        LOG_INFO("unknown memory tag used for mem_free, please assign other tag later");
     }
+#endif
 
-    sf::platform_mem_free(block, alignment);
+    ::operator delete(block, static_cast<std::align_val_t>(alignment), std::nothrow);
 
+#ifdef SF_DEBUG
     mem_stats.total_allocated -= byte_size;
     mem_stats.tag_allocated[tag] -= byte_size;
+#endif
 }
 
-SF_EXPORT void sf_mem_copy(void* dest, const void* src, u64 byte_size) {
-    sf::platform_mem_copy(dest, src, byte_size);
+SF_EXPORT void sf_mem_set(void* block, usize byte_size, i32 value) {
+    std::memset(block, value, byte_size);
 }
 
-SF_EXPORT void sf_mem_set(void* dest, i32 value, u64 byte_size) {
-    sf::platform_mem_set(dest, byte_size, value);
+SF_EXPORT void sf_mem_zero(void* block, usize byte_size) {
+    sf_mem_set(block, byte_size, 0);
 }
 
-SF_EXPORT void sf_mem_zero(void* block, u64 byte_size) {
-    sf::platform_mem_zero(block, byte_size);
+SF_EXPORT void sf_mem_copy(void* dest, void* src, usize byte_size) {
+    std::memcpy(dest, src, byte_size);
+}
+
+SF_EXPORT bool sf_mem_cmp(void* first, void* second, usize byte_size) {
+    return std::memcmp(first, second, byte_size) == 0;
 }
 
 SF_EXPORT i8* get_memory_usage_str() {

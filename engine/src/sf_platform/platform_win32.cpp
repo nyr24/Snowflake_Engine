@@ -132,27 +132,6 @@ void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
     }
 }
 
-void platform_mem_free(void* block, u16 alignment = 0) {
-    if (alignment) {
-        assert(is_power_of_two(alignment) && "alignment should be a power of two");
-        return ::operator delete(block, static_cast<std::align_val_t>(alignment), std::nothrow);
-    } else {
-        return ::operator delete(block, std::nothrow);
-    }
-}
-
-void platform_mem_copy(void* dest, const void* src, u64 byte_size) {
-    std::memcpy(dest, src, byte_size);
-}
-
-void platform_mem_set(void* dest, u64 byte_size, u32 val) {
-    std::memset(dest, val, byte_size);
-}
-
-void platform_mem_zero(void* dest, u64 byte_size) {
-    std::memset(dest, 0, byte_size);
-}
-
 void platform_console_write(const i8* message, u8 color) {
     HANDLE console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
     static u8 levels[6] = { 64, 4, 6, 2, 1, 8 };

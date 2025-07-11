@@ -1,3 +1,4 @@
+#include "sf_core/utility.hpp"
 #include "sf_platform/platform.hpp"
 #include <new>
 
@@ -674,7 +675,7 @@ PlatformState::~PlatformState() {
         munmap(state->go_state.pool_data, state->window_props.shm_pool_size);
         wl_display_disconnect(state->display);
         state->display = nullptr;
-        platform_mem_free(state, alignof(WaylandInternState));
+        sf_mem_free(state, alignof(WaylandInternState));
         state = nullptr;
     }
 }
@@ -698,27 +699,6 @@ void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
     }
 }
 
-void platform_mem_free(void* block, u16 alignment = 0) {
-    if (alignment) {
-        SF_ASSERT_MSG(is_power_of_two(alignment), "alignment should be a power of two");
-        return ::operator delete(block, static_cast<std::align_val_t>(alignment), std::nothrow);
-    } else {
-        return ::operator delete(block, std::nothrow);
-    }
-}
-
-void platform_mem_copy(void* dest, const void* src, u64 byte_size) {
-    std::memcpy(dest, src, byte_size);
-}
-
-void platform_mem_set(void* dest, u64 byte_size, u32 val) {
-    std::memset(dest, val, byte_size);
-}
-
-void platform_mem_zero(void* dest, u64 byte_size) {
-    std::memset(dest, 0, byte_size);
-}
-
 static constexpr std::array<std::string_view, static_cast<u16>(LogLevel::COUNT)> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;28"};
 
 void platform_console_write(const i8* message, u8 color) {
@@ -732,7 +712,6 @@ void platform_console_write(const i8* message, u8 color) {
 
 void platform_console_write_error(const i8* message, u8 color) {
     // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-    // printf("\033[%sm%s\033[0m", color_strings[color], message);
     constexpr usize BUFF_LEN{ 200 };
     char message_buff[BUFF_LEN] = {0};
     const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);

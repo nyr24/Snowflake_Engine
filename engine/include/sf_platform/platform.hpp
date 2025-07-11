@@ -1,6 +1,5 @@
 #pragma once
 #include "sf_core/types.hpp"
-#include "sf_core/utility.hpp"
 #include <new>
 #include <utility>
 
@@ -99,43 +98,8 @@ struct Rect {
     }
 };
 
-// templated versions of memory functions
-template<typename T, bool should_align>
-T* platform_mem_alloc(u64 count) {
-    if constexpr (should_align) {
-        return static_cast<T*>(::operator new(sizeof(T) * count, static_cast<std::align_val_t>(alignof(T)), std::nothrow));
-    } else {
-        return static_cast<T*>(::operator new(sizeof(T) * count, std::nothrow));
-    }
-}
-
-template<typename T, bool should_align>
-void platform_mem_free(T* block) {
-    if constexpr (should_align) {
-        ::operator delete(block, static_cast<std::align_val_t>(alignof(T)), std::nothrow);
-    } else {
-        ::operator delete(block, std::nothrow);
-    }
-}
-
-template<typename T, typename... Args>
-T* platform_mem_construct(Args&&... args) {
-    return new (std::nothrow) T(std::forward<Args>(args)...);
-}
-
-template<typename T, typename... Args>
-T* platform_mem_place(T* ptr, Args&&... args) {
-    return new (ptr) T(std::forward<Args>(args)...);
-}
-
-// non-templated versions of memory functions (void*)
 void*           platform_mem_alloc(u64 byte_size, u16 alignment);
-void            platform_mem_free(void* block, u16 alignment);
-void            platform_mem_copy(void* dest, const void* src, u64 byte_size);
-void            platform_mem_set(void* dest, u64 byte_size, u32 val);
-void            platform_mem_zero(void* dest, u64 byte_size);
 u32             platform_get_mem_page_size();
-
 void            platform_console_write(const i8* message, u8 color);
 void            platform_console_write_error(const i8* message, u8 color);
 f64             platform_get_abs_time();

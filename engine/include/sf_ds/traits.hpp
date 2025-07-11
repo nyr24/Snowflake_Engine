@@ -12,23 +12,20 @@ concept MonoTypeAllocatorTrait = requires(A a, Args... args) {
     std::copyable<A>;
 
     { a.allocate(std::declval<u64>()) } -> std::same_as<T*>;
-    { a.deallocate(std::declval<T*>(), std::declval<u64>()) } -> std::same_as<void>;
+    { a.deallocate(std::declval<u64>()) } -> std::same_as<void>;
     { a.construct(std::declval<T*>(), std::forward<Args>(args)...) } -> std::same_as<void>;
+    { a.destroy(std::declval<T*>(), std::forward<Args>(args)...) } -> std::same_as<void>;
     { a.allocate_and_construct(std::forward<Args>(args)...) } -> std::same_as<T*>;
     { a.reallocate(std::declval<u64>()) } -> std::same_as<void>;
     { a.begin() } -> std::same_as<T*>;
     { a.end() } -> std::same_as<T*>;
     { a.ptr_offset(std::declval<u64>()) } -> std::same_as<T*>;
     { a.ptr_offset_val(std::declval<u64>()) } -> std::same_as<T&>;
-    { a.len() } -> std::same_as<usize>;
+    { a.count() } -> std::same_as<usize>;
     { a.capacity() } -> std::same_as<usize>;
     { a.pop() } -> std::same_as<void>;
     { a.clear() } -> std::same_as<void>;
 };
-
-// TODO:
-template<typename A, typename ...Args>
-concept PolyTypeAllocatorTrait = true;
 
 template<typename MaybeIter, typename T>
 concept IteratorTrait = requires (MaybeIter iter, MaybeIter iter2) {

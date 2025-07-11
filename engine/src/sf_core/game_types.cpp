@@ -1,10 +1,10 @@
 #include "sf_core/game_types.hpp"
-#include "sf_platform/platform.hpp"
+#include "sf_core/memory_sf.hpp"
 
 namespace sf {
 GameInstance::~GameInstance() {
     if (game_state) {
-        sf::platform_mem_free(game_state, false);
+        sf_mem_free(game_state);
         game_state = nullptr;
     }
 }
@@ -22,7 +22,7 @@ GameInstance::GameInstance(GameInstance&& rhs) noexcept
 
 GameInstance& GameInstance::operator=(GameInstance&& rhs) noexcept
 {
-    sf::platform_mem_free(game_state, false);
+    sf_mem_free(game_state);
     game_state = rhs.game_state;
     rhs.game_state = nullptr;
     init = rhs.init;

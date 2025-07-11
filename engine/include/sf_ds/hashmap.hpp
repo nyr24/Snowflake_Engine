@@ -35,22 +35,25 @@ struct HashMapConfig {
     f32         load_factor;
     f32         grow_factor;
 
-    HashMapConfig(HashFn<K> hash_fn)
+    HashMapConfig(
+        HashFn<K> hash_fn = hashfn_default<K>,
+        EqualFn<K> equal_fn = equal_fn_default<K>,
+        f32 load_factor = 0.8f,
+        f32 grow_factor = 2.0f
+    )
         : hash_fn{ hash_fn }
-        , equal_fn{ equal_fn_default<K> }
-        , load_factor{ 0.8f }
-        , grow_factor{ 2.0f }
+        , equal_fn{ equal_fn }
+        , load_factor{ load_factor }
+        , grow_factor{ grow_factor }
     {}
 };
 
 template<typename K>
 static HashMapConfig<K> map_default_config {
-    .hash_fn = hashfn_default<K>,
-    .equal_fn = [](ConstLRefOrValType<K> first, ConstLRefOrValType<K> second) -> bool {
-        return first == second;
-    },
-    .load_factor = 0.8f,
-    .grow_factor = 2.0f,
+    hashfn_default<K>,
+    equal_fn_default<K>,
+    0.8f,
+    2.0f,
 };
 
 template<typename K, typename V>
@@ -82,7 +85,7 @@ public:
     HashMap(u64 prealloc_count, const HashMapConfig<K>& config = map_default_config<K>)
         : _capacity(static_cast<usize>(prealloc_count))
         , _count{ 0 }
-        , _buffer{ static_cast<Bucket*>(sf_mem_alloc<Bucket>(prealloc_count)) }
+        , _buffer{ static_cast<Bucket*>(sf_mem_alloc_typed<Bucket, true>(prealloc_count)) }
         , _config{ std::move(config) }
     {
         init_buffer_empty(_buffer, _capacity);
@@ -98,7 +101,7 @@ public:
 
         usize index = static_cast<usize>(_config.hash_fn(key)) % _capacity;
 
-        while (_buffer[index].state == Bucket::FILLED && key != _buffer[index].key) {
+        while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
             ++index;
             index %= _capacity;
         }
@@ -119,7 +122,7 @@ public:
 
         usize index = static_cast<usize>(_config.hash_fn(key)) % _capacity;
 
-        while (_buffer[index].state == Bucket::FILLED && key != _buffer[index].key) {
+        while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
             ++index;
             index %= _capacity;
         }
@@ -142,7 +145,7 @@ public:
 
         usize index = static_cast<usize>(_config.hash_fn(key)) % _capacity;
 
-        while (_buffer[index].state == Bucket::FILLED && key != _buffer[index].key) {
+        while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
             ++index;
             index %= _capacity;
         }
@@ -188,7 +191,7 @@ public:
 private:
     void realloc() noexcept {
         usize new_capacity = _capacity * _config.grow_factor;
-        Bucket* new_buffer = static_cast<Bucket*>(sf_mem_alloc<Bucket>(new_capacity));
+        Bucket* new_buffer = static_cast<Bucket*>(sf_mem_alloc_typed<Bucket, true>(new_capacity));
         init_buffer_empty(new_buffer, new_capacity);
 
         for (usize i{0}; i < _capacity; ++i) {
@@ -208,7 +211,7 @@ private:
             new_buffer[new_index] = std::move(bucket);
         }
 
-        sf_mem_free<Bucket>(_buffer);
+        sf_mem_free_typed<Bucket, true>(_buffer);
 
         _capacity = new_capacity;
         _buffer = new_buffer;
@@ -229,7 +232,7 @@ private:
         usize index = static_cast<usize>(_config.hash_fn(key)) % _capacity;
         usize search_count = 0;
 
-        while ((_buffer[index].state != Bucket::FILLED && key != _buffer[index].key) && search_count < _capacity) {
+        while ((_buffer[index].state != Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) && search_count < _capacity) {
             ++index;
             index %= _capacity;
             ++search_count;
