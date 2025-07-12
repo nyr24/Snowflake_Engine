@@ -8,13 +8,14 @@
 #include "sf_core/types.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/utility.hpp"
+#include <concepts>
 #include <initializer_list>
 #include <iterator>
 #include <utility>
 
 namespace sf {
 
-template<typename T>
+template<typename T, std::unsigned_integral Utype = u32>
 struct LinkedArrayList {
 private:
     struct Header {
@@ -142,16 +143,16 @@ private:
 
 // data members
 private:
-    usize       _capacity;
-    usize       _count;
+    Utype       _capacity;
+    Utype       _count;
     ListNode*   _buffer;
-    u32         _head_offset;
-    u32         _tail_offset;
+    Utype       _head_offset;
+    Utype       _tail_offset;
 
 public:
     using ListNodeType = ListNode;
 
-    LinkedArrayList(u64 prealloc_count) noexcept
+    LinkedArrayList(Utype prealloc_count) noexcept
         : _capacity{ prealloc_count }
         , _buffer{ static_cast<ListNode*>(sf_mem_alloc(_capacity * sizeof(ListNode), alignof(ListNode))) }
         , _head_offset{0}
@@ -160,7 +161,18 @@ public:
         zero_node(_buffer);
     }
 
-    LinkedArrayList(std::pair<std::initializer_list<T>, u64>&& args) noexcept
+    LinkedArrayList(std::initializer_list<T> init_list) noexcept
+        : _capacity{ static_cast<Utype>(init_list.size()) }
+        , _buffer{ static_cast<ListNode*>(sf_mem_alloc(_capacity * sizeof(ListNode), alignof(ListNode))) }
+        , _head_offset{0}
+        , _tail_offset{0}
+    {
+        for (auto it = init_list.begin(); it != init_list.end(); ++it) {
+            insert(*it);
+        }
+    }
+
+    LinkedArrayList(std::pair<std::initializer_list<T>, Utype>&& args) noexcept
         : _capacity{ args.second }
         , _buffer{ static_cast<ListNode*>(sf_mem_alloc(_capacity * sizeof(ListNode), alignof(ListNode))) }
         , _head_offset{0}
@@ -234,11 +246,11 @@ public:
         return (_buffer + _head_offset).header.forward_count == 0 && (_buffer + _tail_offset).header.backward_count == 0;
     }
 
-    usize count() noexcept {
+    Utype count() noexcept {
         return _count;
     }
 
-    usize capacity() noexcept {
+    Utype capacity() noexcept {
         return _capacity;
     }
 
@@ -326,7 +338,7 @@ private:
     }
 
     void reallocate() {
-        usize new_capacity = _capacity * 2;
+        Utype new_capacity = _capacity * 2;
         ListNode* new_buffer = static_cast<ListNode*>(sf_mem_alloc(new_capacity * sizeof(ListNode), alignof(ListNode)));
         sf_mem_copy(new_buffer, _buffer, _capacity * sizeof(ListNode));
         sf_mem_free(_buffer, _capacity * sizeof(ListNode), alignof(ListNode));

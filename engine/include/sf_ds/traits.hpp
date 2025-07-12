@@ -21,8 +21,8 @@ concept MonoTypeAllocatorTrait = requires(A a, Args... args) {
     { a.end() } -> std::same_as<T*>;
     { a.ptr_offset(std::declval<u64>()) } -> std::same_as<T*>;
     { a.ptr_offset_val(std::declval<u64>()) } -> std::same_as<T&>;
-    { a.count() } -> std::same_as<usize>;
-    { a.capacity() } -> std::same_as<usize>;
+    { a.count() } -> std::unsigned_integral;
+    { a.capacity() } -> std::unsigned_integral;
     { a.pop() } -> std::same_as<void>;
     { a.clear() } -> std::same_as<void>;
 };

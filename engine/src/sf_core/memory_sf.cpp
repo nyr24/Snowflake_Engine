@@ -33,7 +33,7 @@ static std::array<std::string_view, MemoryTag::MEMORY_TAG_MAX_TAGS> memory_tag_s
 SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
 #ifdef SF_DEBUG
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
-        LOG_INFO("unknown memory tag used for mem_alloc, please assign other tag later");
+        // LOG_INFO("unknown memory tag used for mem_alloc, please assign other tag later");
     }
 #endif
 
@@ -51,7 +51,7 @@ SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
 SF_EXPORT void sf_mem_free(void* block, u64 byte_size, u16 alignment, MemoryTag tag) {
 #ifdef SF_DEBUG
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
-        LOG_INFO("unknown memory tag used for mem_free, please assign other tag later");
+        // LOG_INFO("unknown memory tag used for mem_free, please assign other tag later");
     }
 #endif
 
