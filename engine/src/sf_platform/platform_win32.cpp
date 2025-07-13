@@ -1,17 +1,31 @@
 #include "sf_platform/platform.hpp"
 
-#ifdef SF_PLATFORM_WINDOWS
+#if defined(SF_PLATFORM_WINDOWS)
+#include "sf_core/utility.hpp"
+#include "sf_core/types.hpp"
+#include "sf_core/memory_sf.hpp"
 #include <cstring>
 #include <string_view>
 #include <Windows.h>
 #include <windowsx.h>
-#include "sf_core/types.hpp"
-#include "sf_core/memory_sf.hpp"
 
 namespace sf {
 struct WindowsInternState {
     HINSTANCE   h_instance;
     HWND        hwnd;
+};
+
+struct Rect {
+    i32 x;
+    i32 y;
+    i32 width;
+    i32 height;
+
+    Rect(i32 x_in, i32 y_in, i32 width_in, i32 height_in)
+        : x{ x_in }, y{ y_in }, width{ width_in }, height{ height_in }
+    {
+        return Rect{ .x = x, .y = y, .width = width, .height = height };
+    }
 };
 
 static f64 clock_frequency;
@@ -20,7 +34,7 @@ static LARGE_INTEGER start_time;
 HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);
 
 PlatformState::PlatformState()
-    : internal_state{ sf_mem_alloc(sizeof(WindowsInternState), alignof(WindowsInternState)) }
+    : internal_state{ platform_mem_alloc(sizeof(WindowsInternState), alignof(WindowsInternState)) }
 {
     std::memset(internal_state, 0, sizeof(internal_state));
 }
@@ -124,12 +138,12 @@ f64 platform_get_abs_time() {
 }
 
 void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
-    if (alignment) {
-        assert(is_power_of_two(alignment) && "alignment should be a power of two");
-        return ::operator new(byte_size, static_cast<std::align_val_t>(alignment), std::nothrow);
-    } else {
-        return ::operator new(byte_size, std::nothrow);
+    HANDLE heap_handle = GetProcessHeap();
+    void* ptr = HeapAlloc(heap_handle, HEAP_ZERO_MEMORY, byte_size);
+    if (!ptr) {
+        panic("Out of memory");
     }
+    return ptr;
 }
 
 void platform_console_write(const i8* message, u8 color) {

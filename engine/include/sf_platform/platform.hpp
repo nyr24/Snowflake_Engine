@@ -1,7 +1,5 @@
 #pragma once
 #include "sf_core/types.hpp"
-#include "sf_core/utility.hpp"
-#include <new>
 
 // Win32
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
@@ -87,36 +85,17 @@ struct PlatformState {
     void* internal_state;
 };
 
-struct Rect {
-    i32 x;
-    i32 y;
-    i32 width;
-    i32 height;
+void* platform_mem_alloc(u64 byte_size, u16 alignment);
 
-    static Rect init(i32 x, i32 y, i32 width, i32 height) {
-        return Rect{ .x = x, .y = y, .width = width, .height = height };
-    }
-};
-
-// TODO: implement windows case
 template<typename T, bool should_align>
 T* platform_mem_alloc_typed(u64 count) {
     if constexpr (should_align) {
-        T* ptr = static_cast<T*>(::operator new(sizeof(T) * count, static_cast<std::align_val_t>(alignof(T)), std::nothrow));
-        if (!ptr) {
-            panic("Out of memory");
-        }
-        return ptr;
+        return static_cast<T*>(platform_mem_alloc(sizeof(T) * count, alignof(T)));
     } else {
-        T* ptr = static_cast<T*>(::operator new(sizeof(T) * count, std::nothrow));
-        if (!ptr) {
-            panic("Out of memory");
-        }
-        return ptr;
+        return static_cast<T*>(platform_mem_alloc(sizeof(T) * count, 0));
     }
 }
 
-void*           platform_mem_alloc(u64 byte_size, u16 alignment);
 u32             platform_get_mem_page_size();
 void            platform_console_write(const i8* message, u8 color);
 void            platform_console_write_error(const i8* message, u8 color);

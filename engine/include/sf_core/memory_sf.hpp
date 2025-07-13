@@ -2,6 +2,7 @@
 #include "sf_core/types.hpp"
 #include "sf_platform/platform.hpp"
 #include <new>
+#include <utility>
 
 namespace sf {
 enum MemoryTag {

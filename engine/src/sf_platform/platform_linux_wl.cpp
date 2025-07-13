@@ -1,13 +1,13 @@
-#include "sf_core/utility.hpp"
 #include "sf_platform/platform.hpp"
-#include <new>
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
+#include "sf_core/utility.hpp"
 #include "sf_platform/wayland-util-custom.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_platform/xdg-shell-protocol.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
+#include <new>
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>
 #include <wayland-client.h>
