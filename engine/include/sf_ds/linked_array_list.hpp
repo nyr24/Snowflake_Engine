@@ -152,9 +152,18 @@ private:
 public:
     using ListNodeType = ListNode;
 
-    LinkedArrayList(Utype prealloc_count) noexcept
+    LinkedArrayList() noexcept
+        : _capacity{0}
+        , _buffer{nullptr}
+        , _head_offset{0}
+        , _tail_offset{0}
+    {
+        zero_node(_buffer);
+    }
+
+    explicit LinkedArrayList(Utype prealloc_count) noexcept
         : _capacity{ prealloc_count }
-        , _buffer{ static_cast<ListNode*>(sf_mem_alloc(_capacity * sizeof(ListNode), alignof(ListNode))) }
+        , _buffer{ sf_mem_alloc_typed<ListNode, true>(_capacity) }
         , _head_offset{0}
         , _tail_offset{0}
     {
@@ -163,7 +172,7 @@ public:
 
     LinkedArrayList(std::initializer_list<T> init_list) noexcept
         : _capacity{ static_cast<Utype>(init_list.size()) }
-        , _buffer{ static_cast<ListNode*>(sf_mem_alloc(_capacity * sizeof(ListNode), alignof(ListNode))) }
+        , _buffer{ sf_mem_alloc_typed<ListNode, true>(_capacity) }
         , _head_offset{0}
         , _tail_offset{0}
     {
@@ -174,7 +183,7 @@ public:
 
     LinkedArrayList(std::pair<std::initializer_list<T>, Utype>&& args) noexcept
         : _capacity{ args.second }
-        , _buffer{ static_cast<ListNode*>(sf_mem_alloc(_capacity * sizeof(ListNode), alignof(ListNode))) }
+        , _buffer{ sf_mem_alloc_typed<ListNode, true>(_capacity) }
         , _head_offset{0}
         , _tail_offset{0}
     {
@@ -186,7 +195,7 @@ public:
     ~LinkedArrayList() noexcept
     {
         if (_buffer) {
-            sf_mem_free(_buffer, _capacity * sizeof(ListNode), alignof(ListNode));
+            sf_mem_free_typed<ListNode, true>(_buffer);
             _buffer = nullptr;
         }
     }
@@ -195,7 +204,7 @@ public:
     requires SameTypes<T, U>
     void insert(U&& value) noexcept {
         if (_count == _capacity) {
-            reallocate();
+            grow();
         }
 
         if (_count == 0) {
@@ -337,7 +346,7 @@ private:
         return node_it;
     }
 
-    void reallocate() {
+    void grow() {
         Utype new_capacity = _capacity * 2;
         ListNode* new_buffer = static_cast<ListNode*>(sf_mem_alloc(new_capacity * sizeof(ListNode), alignof(ListNode)));
         sf_mem_copy(new_buffer, _buffer, _capacity * sizeof(ListNode));

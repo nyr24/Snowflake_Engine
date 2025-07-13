@@ -4,6 +4,7 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/utility.hpp"
 #include <concepts>
+#include <type_traits>
 #include <utility>
 
 namespace sf {
@@ -62,13 +63,13 @@ public:
 
         usize padding_bytes = reinterpret_cast<usize>(_buffer + _count) % align_of_T;
         if (_count + padding_bytes + sizeo_of_T > _capacity) {
-            this->reallocate(_capacity * 2);
+            reallocate(_capacity * 2);
         }
 
         T* ptr_to_return = reinterpret_cast<T*>(_buffer + _count + padding_bytes);
         _count += padding_bytes + sizeo_of_T;
 
-        this->construct(ptr_to_return, std::forward<Args>(args)...);
+        construct(ptr_to_return, std::forward<Args>(args)...);
 
         return ptr_to_return;
     }
@@ -95,7 +96,7 @@ private:
     template<typename T, typename ...Args>
     void construct(T* ptr, Args&&... args) noexcept
     {
-        ::new (ptr) T(std::forward<Args>(args)...);
+        sf_mem_place(ptr, args...);
     }
 };
 
@@ -114,12 +115,12 @@ public:
     using ValueType = T;
     using Pointer   = T*;
 
-    T* allocate(u64 alloc_count) noexcept
+    T* allocate(Utype alloc_count) noexcept
     {
         Utype free_capacity = _capacity - _count;
 
         if (free_capacity < alloc_count) {
-            this->reallocate(_capacity * 2);
+            reallocate(_capacity * 2);
         }
 
         T* return_memory = _buffer + _count;
@@ -131,7 +132,7 @@ public:
     template<typename ...Args>
     void construct(T* ptr, Args&&... args) noexcept
     {
-        ::new (ptr) T(std::forward<Args>(args)...);
+        sf_mem_place(ptr, args...);
     }
 
     template<typename ...Args>
@@ -142,12 +143,25 @@ public:
         return place_ptr;
     }
 
-    void deallocate(u64 dealloc_count) noexcept
+    template<typename ...Args>
+    void insert_at(Utype index, Args&&... args) noexcept {
+        SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
+
+        T* item = _buffer + index;
+
+        if constexpr (std::is_destructible_v<T>) {
+            item->~T();
+        }
+
+        construct(item, std::forward<Args>(args)...);
+    }
+
+    void deallocate(Utype dealloc_count) noexcept
     {
         SF_ASSERT_MSG((dealloc_count) <= _count, "Can't deallocate more than all current elements");
 
-        if constexpr (std::is_destructible<T>::value) {
-            T* curr = this->end_before_one();
+        if constexpr (std::is_destructible_v<T>) {
+            T* curr = end_before_one();
 
             for (Utype i{0}; i < dealloc_count; ++i) {
                 (curr - i)->~T();
@@ -157,27 +171,72 @@ public:
         _count -= dealloc_count;
     }
 
-    template<typename ...Args>
-    void destroy(T* ptr, Args&&... args) noexcept
-    {
-        ::operator delete(ptr, std::nothrow);
+    void remove_at(Utype index) noexcept {
+        SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
+
+        if (index == _count - 1) {
+            deallocate(1);
+            return;
+        }
+
+        T* item = _buffer + index;
+
+        if constexpr (std::is_destructible_v<T>) {
+            item->~T();
+        }
+
+        sf_mem_move(item + 1, item, _count - index - 1);
+
+        --_count;
+    }
+
+    // swaps element to the end and always removes it from the end, escaping memmove call
+    void remove_unordered_at(Utype index) noexcept {
+        SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
+
+        if (index == _count - 1) {
+            deallocate(1);
+            return;
+        }
+
+        T* item = _buffer + index;
+        T* last = end_before_one();
+
+        if constexpr (std::is_destructible_v<T>) {
+            item->~T();
+        }
+
+        if constexpr (std::is_move_assignable_v<T>) {
+            *item = std::move(*last);
+        } else {
+            *item = *last;
+        }
+
+        --_count;
+    }
+
+    void pop() noexcept {
+        deallocate(1);
+    }
+
+    void clear() noexcept {
+        deallocate(_count);
     }
 
     void reallocate(Utype new_capacity) noexcept
     {
-        T* new_buffer = sf_mem_alloc_typed<T, true>(new_capacity);
-        sf_mem_copy(new_buffer, _buffer, _count * sizeof(T));
-        sf_mem_free(_buffer, _capacity * sizeof(T), alignof(T));
-        _capacity = new_capacity;
-        _buffer = new_buffer;
-    }
-
-    void pop() noexcept {
-        this->deallocate(1);
-    }
-
-    void clear() noexcept {
-        this->deallocate(this->count());
+        if (new_capacity > _capacity) {
+            T* new_buffer = sf_mem_alloc_typed<T, true>(new_capacity);
+            sf_mem_copy(new_buffer, _buffer, _count * sizeof(T));
+            sf_mem_free(_buffer, _capacity * sizeof(T), alignof(T));
+            _capacity = new_capacity;
+            _buffer = new_buffer;
+        } else if (new_capacity < _capacity) {
+            if (new_capacity < _count) {
+                deallocate(_count - new_capacity);
+            }
+            _capacity = new_capacity;
+        }
     }
 
     T* begin() noexcept { return _buffer; }
@@ -195,11 +254,16 @@ public:
     const T& ptr_offset_val(Utype ind) const noexcept { return *(ptr_offset(ind)); }
 
     // constructors and assignments
-
-    DefaultArrayAllocator(u64 count) noexcept
-        : _capacity{ count }
+    DefaultArrayAllocator() noexcept
+        : _capacity{ 0 }
         , _count{ 0 }
-        , _buffer{ sf_mem_alloc_typed<T, true>(_capacity) }
+        , _buffer{ nullptr }
+    {}
+
+    explicit DefaultArrayAllocator(Utype capacity) noexcept
+        : _capacity{ capacity }
+        , _count{ 0 }
+        , _buffer{ sf_mem_alloc_typed<T, false>(_capacity) }
     {}
 
     DefaultArrayAllocator(DefaultArrayAllocator<T>&& rhs) noexcept
@@ -270,7 +334,7 @@ public:
     using ValueType = T;
     using Pointer   = T*;
 
-    T* allocate(u64 alloc_count) noexcept
+    T* allocate(Utype alloc_count) noexcept
     {
         Utype free_capacity = Capacity - _count;
 
@@ -287,7 +351,7 @@ public:
     template<typename ...Args>
     void construct(T* ptr, Args&&... args) noexcept
     {
-        ::new (ptr) T(std::forward<Args>(args)...);
+        sf_mem_place(ptr, args...);
     }
 
     template<typename ...Args>
@@ -298,12 +362,25 @@ public:
         return place_ptr;
     }
 
-    void deallocate(u64 dealloc_count) noexcept
+    template<typename ...Args>
+    void insert_at(Utype index, Args&&... args) noexcept {
+        SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
+
+        T* item = _buffer + index;
+
+        if constexpr (std::is_destructible_v<T>) {
+            item->~T();
+        }
+
+        construct(item, std::forward<Args>(args)...);
+    }
+
+    void deallocate(Utype dealloc_count) noexcept
     {
         SF_ASSERT_MSG((dealloc_count) <= _count, "Can't deallocate more than all current elements");
 
-        if constexpr (std::is_destructible<T>::value) {
-            T* curr = this->end_before_one();
+        if constexpr (std::is_destructible_v<T>) {
+            T* curr = end_before_one();
 
             for (Utype i{0}; i < dealloc_count; ++i) {
                 (curr - i)->~T();
@@ -313,23 +390,56 @@ public:
         _count -= dealloc_count;
     }
 
-    template<typename ...Args>
-    void destroy(T* ptr, Args&&... args) noexcept
-    {
-        ::operator delete(ptr, std::nothrow);
-    }
-
     void reallocate(Utype new_capacity) noexcept
     {
         panic("Reallocation can't be made on stack based buffer");
     }
 
+    void remove_at(Utype index) noexcept {
+        SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
+
+        if (index == _count - 1) {
+            deallocate(1);
+            return;
+        }
+
+        T* item = _buffer + index;
+
+        if constexpr (std::is_destructible_v<T>) {
+            item->~T();
+        }
+
+        sf_mem_move(item + 1, item, _count - index - 1);
+
+        --_count;
+    }
+
+    // swaps element to the end and always removes it from the end, escaping memmove call
+    void remove_unordered_at(Utype index) noexcept {
+        SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
+
+        if (index == _count - 1) {
+            deallocate(1);
+            return;
+        }
+
+        T* item = _buffer + index;
+        T* last = end_before_one();
+
+        if constexpr (std::is_destructible_v<T>) {
+            item->~T();
+        }
+
+        *item = *last;
+        --_count;
+    }
+
     void pop() noexcept {
-        this->deallocate(1);
+        deallocate(1);
     }
 
     void clear() noexcept {
-        this->deallocate(_count);
+        deallocate(_count);
     }
 
     T* begin() noexcept { return _buffer; }
@@ -351,7 +461,7 @@ public:
         : _count{ 0 }
     {}
 
-    FixedBufferAllocator(u64 count) noexcept
+    explicit FixedBufferAllocator(Utype count) noexcept
         : _count{ 0 }
     {}
 

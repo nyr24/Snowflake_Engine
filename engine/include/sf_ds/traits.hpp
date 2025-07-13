@@ -14,7 +14,6 @@ concept MonoTypeAllocatorTrait = requires(A a, Args... args) {
     { a.allocate(std::declval<u64>()) } -> std::same_as<T*>;
     { a.deallocate(std::declval<u64>()) } -> std::same_as<void>;
     { a.construct(std::declval<T*>(), std::forward<Args>(args)...) } -> std::same_as<void>;
-    { a.destroy(std::declval<T*>(), std::forward<Args>(args)...) } -> std::same_as<void>;
     { a.allocate_and_construct(std::forward<Args>(args)...) } -> std::same_as<T*>;
     { a.reallocate(std::declval<u64>()) } -> std::same_as<void>;
     { a.begin() } -> std::same_as<T*>;
@@ -25,6 +24,9 @@ concept MonoTypeAllocatorTrait = requires(A a, Args... args) {
     { a.capacity() } -> std::unsigned_integral;
     { a.pop() } -> std::same_as<void>;
     { a.clear() } -> std::same_as<void>;
+    { a.insert_at(std::declval<u64>()) } -> std::same_as<void>;
+    { a.remove_at(std::declval<u64>()) } -> std::same_as<void>;
+    { a.remove_unordered_at(std::declval<u64>()) } -> std::same_as<void>;
 };
 
 template<typename MaybeIter, typename T>

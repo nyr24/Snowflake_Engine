@@ -1,5 +1,4 @@
 #include "sf_core/memory_sf.hpp"
-#include "sf_core/logger.hpp"
 #include "sf_platform/platform.hpp"
 #include <array>
 #include <new>
@@ -73,6 +72,10 @@ SF_EXPORT void sf_mem_zero(void* block, usize byte_size) {
 
 SF_EXPORT void sf_mem_copy(void* dest, void* src, usize byte_size) {
     std::memcpy(dest, src, byte_size);
+}
+
+SF_EXPORT void sf_mem_move(void* dest, void* src, usize byte_size) {
+    std::memmove(dest, src, byte_size);
 }
 
 SF_EXPORT bool sf_mem_cmp(void* first, void* second, usize byte_size) {

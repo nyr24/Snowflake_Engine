@@ -6,10 +6,12 @@
 #include "sf_ds/iterator.hpp"
 #include "sf_ds/traits.hpp"
 #include <cassert>
+#include <concepts>
+#include <utility>
 
 namespace sf {
 
-template<typename T, MonoTypeAllocatorTrait<T> A = DefaultArrayAllocator<T>>
+template<typename T, MonoTypeAllocatorTrait<T> A = DefaultArrayAllocator<T>, std::unsigned_integral Utype = u32>
 struct ArrayList {
 private:
     A _allocator;
@@ -22,14 +24,29 @@ public:
         _allocator.allocate_and_construct(std::forward<Args>(args)...);
     }
 
-    template<typename ...Args>
     void append(const T& item) noexcept {
         _allocator.allocate_and_construct(item);
     }
 
-    template<typename ...Args>
     void append(T&& item) noexcept {
         _allocator.allocate_and_construct(std::move(item));
+    }
+
+    template<typename ...Args>
+    void insert_at(Utype index, Args&&... args) noexcept {
+        _allocator.insert_at(index, std::forward<Args>(args)...);
+    }
+
+    void reallocate(Utype new_capacity) noexcept {
+        _allocator.reallocate(new_capacity);
+    }
+
+    void remove_at(Utype index) noexcept {
+        _allocator.remove_at(index);
+    }
+
+    void remove_unordered_at(Utype index) noexcept {
+        _allocator.remove_unordered_at(index);
     }
 
     void pop() noexcept {
@@ -62,12 +79,12 @@ public:
         return hash;
     }
 
-    T& operator[](usize ind) noexcept {
+    T& operator[](Utype ind) noexcept {
         SF_ASSERT_MSG((ind >= 0 && ind < _allocator.count()), "out of bounds");
         return _allocator.ptr_offset_val(ind);
     }
 
-    const T& operator[](usize ind) const noexcept {
+    const T& operator[](Utype ind) const noexcept {
         SF_ASSERT_MSG((ind >= 0 && ind < _allocator.count()), "out of bounds");
         return _allocator.ptr_offset_val(ind);
     }
@@ -110,9 +127,16 @@ public:
     }
 
     // constructors and assignments
+    ArrayList() noexcept
+        : _allocator{ DefaultArrayAllocator<T>{} }
+    {}
 
-    ArrayList(std::initializer_list<T> init_list)
-        : _allocator{ DefaultArrayAllocator<T>{ init_list.size() } }
+    explicit ArrayList(Utype capacity) noexcept
+        : _allocator{ DefaultArrayAllocator<T>{ capacity } }
+    {}
+
+    ArrayList(std::initializer_list<T> init_list) noexcept
+        : _allocator{ DefaultArrayAllocator<T>{ static_cast<Utype>(init_list.size()) } }
     {
         _allocator.allocate(init_list.size());
 
@@ -127,7 +151,7 @@ public:
         }
     }
 
-    ArrayList(std::pair<std::initializer_list<T>, A>&& args)
+    ArrayList(std::pair<std::initializer_list<T>, A>&& args) noexcept
         : _allocator{ std::move(args.second) }
     {
         _allocator.allocate(args.first.size());
@@ -143,11 +167,11 @@ public:
         }
     }
 
-    ArrayList(A&& _allocator)
+    ArrayList(A&& _allocator) noexcept
         : _allocator{ std::move(_allocator) }
     {}
 
-    ArrayList(const ArrayList<T, A>& rhs)
+    ArrayList(const ArrayList<T, A>& rhs) noexcept
         : _allocator{ rhs._allocator }
     {}
 
@@ -155,7 +179,7 @@ public:
         : _allocator{ std::move(rhs._allocator ) }
     {}
 
-    ArrayList<T, A>& operator=(const ArrayList<T, A>& rhs) {
+    ArrayList<T, A>& operator=(const ArrayList<T, A>& rhs) noexcept {
         _allocator = rhs._allocator ;
         return *this;
     }

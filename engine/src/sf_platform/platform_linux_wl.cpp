@@ -693,9 +693,17 @@ bool PlatformState::start_event_loop() {
 void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
     if (alignment) {
         SF_ASSERT_MSG(is_power_of_two(alignment), "alignment should be a power of two");
-        return ::operator new(byte_size, static_cast<std::align_val_t>(alignment), std::nothrow);
+        void* ptr = ::operator new(byte_size, static_cast<std::align_val_t>(alignment), std::nothrow);
+        if (!ptr) {
+            panic("Out of memory");
+        }
+        return ptr;
     } else {
-        return ::operator new(byte_size, std::nothrow);
+        void* ptr = ::operator new(byte_size, std::nothrow);
+        if (!ptr) {
+            panic("Out of memory");
+        }
+        return ptr;
     }
 }
 

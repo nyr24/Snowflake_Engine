@@ -1,7 +1,7 @@
 #pragma once
 #include "sf_core/types.hpp"
+#include "sf_core/utility.hpp"
 #include <new>
-#include <utility>
 
 // Win32
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
@@ -97,6 +97,24 @@ struct Rect {
         return Rect{ .x = x, .y = y, .width = width, .height = height };
     }
 };
+
+// TODO: implement windows case
+template<typename T, bool should_align>
+T* platform_mem_alloc_typed(u64 count) {
+    if constexpr (should_align) {
+        T* ptr = static_cast<T*>(::operator new(sizeof(T) * count, static_cast<std::align_val_t>(alignof(T)), std::nothrow));
+        if (!ptr) {
+            panic("Out of memory");
+        }
+        return ptr;
+    } else {
+        T* ptr = static_cast<T*>(::operator new(sizeof(T) * count, std::nothrow));
+        if (!ptr) {
+            panic("Out of memory");
+        }
+        return ptr;
+    }
+}
 
 void*           platform_mem_alloc(u64 byte_size, u16 alignment);
 u32             platform_get_mem_page_size();

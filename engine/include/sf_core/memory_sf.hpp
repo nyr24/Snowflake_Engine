@@ -25,11 +25,7 @@ enum MemoryTag {
 // templated versions of memory functions
 template<typename T, bool should_align>
 T* sf_mem_alloc_typed(u64 count) {
-    if constexpr (should_align) {
-        return static_cast<T*>(::operator new(sizeof(T) * count, static_cast<std::align_val_t>(alignof(T)), std::nothrow));
-    } else {
-        return static_cast<T*>(::operator new(sizeof(T) * count, std::nothrow));
-    }
+    return platform_mem_alloc_typed<T, should_align>(count);
 }
 
 template<typename T, bool should_align>
@@ -57,6 +53,7 @@ SF_EXPORT void  sf_mem_free(void* block, usize byte_size = 0, u16 alignment = 0,
 SF_EXPORT void  sf_mem_set(void* block, usize byte_size, i32 value);
 SF_EXPORT void  sf_mem_zero(void* block, usize byte_size);
 SF_EXPORT void  sf_mem_copy(void* dest, void* src, usize byte_size);
+SF_EXPORT void  sf_mem_move(void* dest, void* src, usize byte_size);
 SF_EXPORT bool  sf_mem_cmp(void* first, void* second, usize byte_size);
 SF_EXPORT i8*   get_memory_usage_str();
 
