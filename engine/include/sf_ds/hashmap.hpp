@@ -163,7 +163,7 @@ public:
     Option<V> get(ConstLRefOrValType<K> key) noexcept {
         Option<Bucket*> maybe_bucket = find_bucket(key);
         if (maybe_bucket.is_none()) {
-            return None::Value;
+            return None::VALUE;
         }
 
         return maybe_bucket.unwrap()->value;
@@ -242,7 +242,7 @@ private:
         if (_buffer[index].state == Bucket::FILLED && search_count < _capacity) {
             return _buffer + index;
         } else {
-            return None::Value;
+            return None::VALUE;
         }
     }
 };

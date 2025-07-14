@@ -1,26 +1,37 @@
 #include "sf_core/application.hpp"
+#include "sf_core/event.hpp"
+#include "sf_core/input.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
+#include <chrono>
 
-static sf::ApplicationState app_state;
-static bool app_initialized{ false };
+namespace sf {
 
-bool sf::create_app(sf::GameInstance* game_inst) {
-    if (app_initialized) {
+static ApplicationState application_state;
+static bool is_application_initialized{ false };
+
+bool application_create(sf::GameInstance* game_inst) {
+    if (is_application_initialized) {
         LOG_ERROR("application create called more than once");
         return false;
     }
 
-    app_state.game_inst = game_inst;
+    application_state.game_inst = game_inst;
 
     // init subsystems
-    sf::init_logging();
+    init_logging();
 
-    app_state.is_running = true;
-    app_state.is_suspended = false;
-    app_state.platform_state = sf::PlatformState{};
+    application_state.width = game_inst->app_config.width;
+    application_state.height = game_inst->app_config.height;
+    application_state.is_running = true;
+    application_state.is_suspended = false;
+    application_state.platform_state = sf::PlatformState{};
 
-    bool start_success = app_state.platform_state.startup(
+    event_set_listener(SystemEventCode::APPLICATION_QUIT, nullptr, application_on_event);
+    event_set_listener(SystemEventCode::KEY_PRESSED, nullptr, application_on_key);
+    event_set_listener(SystemEventCode::KEY_RELEASED, nullptr, application_on_key);
+
+    bool start_success = application_state.platform_state.startup(
         game_inst->app_config.name,
         game_inst->app_config.start_pos_x,
         game_inst->app_config.start_pos_y,
@@ -38,33 +49,80 @@ bool sf::create_app(sf::GameInstance* game_inst) {
         return false;
     }
 
-    app_state.game_inst->on_resize(app_state.game_inst, app_state.width, app_state.height);
+    application_state.game_inst->on_resize(application_state.game_inst, application_state.width, application_state.height);
 
-    app_initialized = true;
+    is_application_initialized = true;
     return true;
 }
 
-void sf::run_app() {
-    while (app_state.is_running) {
-        if (!app_state.platform_state.start_event_loop()) {
-            app_state.is_running = false;
+void application_run() {
+    while (application_state.is_running) {
+        if (!application_state.platform_state.start_event_loop()) {
+            application_state.is_running = false;
         }
 
-        if (!app_state.is_suspended) {
-            if (!app_state.game_inst->update(app_state.game_inst, 0.0f)) {
+        if (!application_state.is_suspended) {
+            if (!application_state.game_inst->update(application_state.game_inst, 0.0f)) {
                 LOG_FATAL("Game update failed, shutting down");
-                app_state.is_running = false;
+                application_state.is_running = false;
                 break;
             }
 
-            if (!app_state.game_inst->render(app_state.game_inst, 0.0f)) {
+            if (!application_state.game_inst->render(application_state.game_inst, 0.0f)) {
                 LOG_FATAL("Game render failed, shutting down");
-                app_state.is_running = false;
+                application_state.is_running = false;
                 break;
             }
+
+            // update input at the end of the frame
+            ApplicationState::TimepointType now_time = std::chrono::steady_clock::now();
+            f64 delta_time = (now_time - application_state.last_time).count();
+            input_update(delta_time);
+            application_state.last_time = now_time;
         }
     }
 
-    app_state.is_running = false;
+    application_state.is_running = false;
 }
 
+bool application_on_event(u8 code, void* sender, void* listener_inst, EventContext* context) {
+    switch (static_cast<SystemEventCode>(code)) {
+        case SystemEventCode::APPLICATION_QUIT: {
+            application_state.is_running = false;
+            return true;
+        } break;
+        default: break;
+    };
+
+    return false;
+}
+
+bool application_on_key(u8 code, void* sender, void* listener_inst, EventContext* context) {
+    if (!context) {
+        return false;
+    }
+
+    if (code == static_cast<u8>(SystemEventCode::KEY_PRESSED)) {
+        u8 key_code = context->data.u8[0];
+        switch (static_cast<Key>(key_code)) {
+            case Key::ESCAPE: {
+                event_fire(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
+                return true;
+            };
+            default: {
+                LOG_DEBUG("Key '{}' was pressed", key_code);
+            } break;
+        }
+    } else if (code == static_cast<u8>(SystemEventCode::KEY_RELEASED)) {
+        u8 key_code = context->data.u8[0];
+        switch (static_cast<Key>(key_code)) {
+            default: {
+                LOG_DEBUG("Key '{}' was released", key_code);
+            } break;
+        }
+    }
+
+    return false;
+}
+
+} // sf

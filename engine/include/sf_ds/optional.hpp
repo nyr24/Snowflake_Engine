@@ -4,7 +4,7 @@
 namespace sf {
 
 enum struct None {
-    Value
+    VALUE
 };
 
 template<typename Some>
@@ -78,7 +78,7 @@ public:
 
     void set_none() {
         _tag = Tag::NONE;
-        _storage.none = None::Value;
+        _storage.none = None::VALUE;
     }
  
     // forward reference needed
@@ -87,6 +87,10 @@ public:
     void set_some(SomeT&& some_val) {
         _tag = Tag::SOME;
         _storage.some = std::forward<Some>(some_val);
+    }
+
+    operator bool() {
+        return this->is_some();
     }
 };
 

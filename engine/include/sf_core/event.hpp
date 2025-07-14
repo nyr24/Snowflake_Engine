@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sf_core/types.hpp"
-#include "sf_ds/array_list.hpp"
 #include "sf_platform/platform.hpp"
 
 namespace sf {
@@ -27,7 +26,7 @@ struct EventContext {
 };
 
 // Should return true if handled.
-using OnEventFn = bool(*)(u8 code, void* sender, void* listener_inst, EventContext context);
+using OnEventFn = bool(*)(u8 code, void* sender, void* listener_inst, EventContext* context);
 
 struct Event {
     void*       listener;
@@ -36,26 +35,19 @@ struct Event {
 
 // System internal event codes. Application should use codes beyond 255.
 enum SystemEventCode : u8 {
-    EVENT_CODE_APPLICATION_QUIT,
-    EVENT_CODE_KEY_PRESSED,
-    EVENT_CODE_KEY_RELEASED,
-    EVENT_CODE_BUTTON_PRESSED,
-    EVENT_CODE_BUTTON_RELEASED,
-    EVENT_CODE_MOUSE_MOVED,
-    EVENT_CODE_MOUSE_WHEEL,
-    EVENT_CODE_RESIZED,
-    MAX_EVENT_CODE = 0xFF
+    APPLICATION_QUIT,
+    KEY_PRESSED,
+    KEY_RELEASED,
+    BUTTON_PRESSED,
+    BUTTON_RELEASED,
+    MOUSE_MOVED,
+    MOUSE_WHEEL,
+    RESIZED,
+    COUNT = 0xFF
 };
 
-struct EventSystemState {
-    ArrayList<Event> event_lists[SystemEventCode::MAX_EVENT_CODE];
-
-    EventSystemState();
-
-    // NOTE: deside u8 or u16
-    SF_EXPORT bool set_listener(u8 code, void* listener, OnEventFn on_event);
-    SF_EXPORT bool unset_listener(u8 code, void* listener, OnEventFn on_event);
-    SF_EXPORT bool fire_event(u8 code, void* sender, EventContext context);
-};
+SF_EXPORT bool event_set_listener(u8 code, void* listener, OnEventFn on_event);
+SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event);
+SF_EXPORT bool event_fire(u8 code, void* sender, EventContext* context);
 
 } // sf

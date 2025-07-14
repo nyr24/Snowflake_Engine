@@ -1,11 +1,12 @@
 #include "sf_platform/platform.hpp"
 
 #if defined(SF_PLATFORM_WINDOWS)
+#include "sf_core/event.hpp"
+#include "sf_core/input.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_core/types.hpp"
 #include "sf_core/memory_sf.hpp"
 #include <cstring>
-#include <string_view>
 #include <Windows.h>
 #include <windowsx.h>
 
@@ -68,8 +69,8 @@ bool PlatformState::startup(
     }
 
     // Create a window
-    Rect window_client_sizes = Rect::init(x, y, width, height);
-    Rect window_border_sizes = Rect::init(x, y, width, height);
+    Rect window_client_sizes = Rect(x, y, width, height);
+    Rect window_border_sizes = Rect(x, y, width, height);
 
     u32 window_style = WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION;
     u32 window_ex_style = WS_EX_APPWINDOW;
@@ -177,7 +178,7 @@ HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
             return 1;
         case WM_CLOSE:
             // will be handled by the application
-            // TODO: fire event for the app to quit
+            event_fire(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
             return 0;
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -189,26 +190,31 @@ HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
             u32 width = r.right - r.left;
             u32 height = r.bottom - r.top;
 
-            // TODO: fire an event for window resize
+            EventContext context;
+            context.data.u32[0] = width;
+            context.data.u32[1] = height;
+
+            event_fire(static_cast<u8>(SystemEventCode::RESIZED), nullptr, &context);
         } break;
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN;
         case WM_KEYUP:
         case WM_SYSKEYUP: {
-            bool pressed = WM_KEYDOWN || WM_SYSKEYDOWN;
-            // TODO: process input
+            bool is_pressed = (msg == WM_KEYDOWN) || (msg == WM_SYSKEYDOWN);
+            u8 key = static_cast<u8>(w_param);
+            input_process_key(key, is_pressed);
         } break;
         case WM_MOUSEMOVE: {
-            i32 x_pos = GET_X_PARAM(l_param);
-            i32 y_pos = GET_Y_PARAM(l_param);
-            // TODO: process input
+            i16 x_pos = static_cast<i16>(GET_X_PARAM(l_param));
+            i16 y_pos = static_cast<i16>(GET_Y_PARAM(l_param));
+            input_process_mouse_move(MousePos{ .x = x_pos, .y = y_pos });
         } break;
         case MOUSEWHEEL: {
             i32 z_delta = GET_WHEEL_DELTA_PARAM(w_param);
             if (z_delta != 0) {
                 z_delta = z_delta < 0 ? -1 : 1;
             }
-            // TODO: process input
+            input_process_mouse_wheel(static_cast<i8>(z_delta));
         } break;
         case WM_LBUTTONDOWN:
         case WM_MBUTTONDOWN:
@@ -216,8 +222,21 @@ HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
         case WM_LBUTTONUP:
         case WM_MBUTTONUP:
         case WM_RBUTTONUP: {
-            bool pressed = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN;
-            // TODO: process input
+            bool is_pressed = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN;
+            MouseButton button = MouseButton::LEFT;
+            switch (msg) {
+                case WM_RBUTTONDOWN:
+                case WM_RBUTTONUP: {
+                    button = MouseButton::RIGHT;
+                } break;
+                case WM_MBUTTONDOWN:
+                case WM_MBUTTONUP: {
+                    button = MouseButton::MIDDLE;
+                } break;
+                default: break;
+            };
+
+            input_process_button(button, is_pressed);
         } break;
         default: return DefWindowProc(hwnd, msg, w_param, l_param);
     }
