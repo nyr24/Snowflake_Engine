@@ -1,3 +1,4 @@
+#include "sf_core/game_types.hpp"
 #include "sf_platform/platform.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
@@ -7,6 +8,8 @@
 #include "sf_platform/xdg-shell-protocol.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
+#include "sf_core/input.hpp"
+#include "sf_core/application.hpp"
 #include <new>
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>
@@ -124,6 +127,7 @@ struct WaylandInternState {
 };
 
 static void draw_frame(WaylandInternState* state);
+Key translate_keycode(u32 x_keycode);
 
 static void randname(i8 *buf) {
     struct timespec ts;
@@ -457,26 +461,25 @@ static void keyboard_handle_keymap(void* data, wl_keyboard* keyboard, u32 format
 // To translate this to an XKB scancode, you must add 8 to the evdev scancode.
 static void keyboard_handle_key(
     void* data, wl_keyboard* keyboard, u32 serial,
-    u32 time, u32 key_code, u32 key_state)
+    u32 time, u32 key_code, u32 key_state
+)
 {
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     i8 buf[128];
 
     key_code += 8;
-    xkb_keysym_t sym = xkb_state_key_get_one_sym(
-        state->go_state.keyboard_state.xkb_state, key_code );
+    xkb_keysym_t sym = xkb_state_key_get_one_sym(state->go_state.keyboard_state.xkb_state, key_code);
     xkb_keysym_get_name(sym, buf, sizeof(buf));
-    std::string_view key_state_sv = key_state == WL_KEYBOARD_KEY_STATE_PRESSED ? "press" : "release";
-    // LOG_INFO("key: {} scan_code: {} state: {}", buf, sym, key_state_sv);
+    // xkb_state_key_get_utf8(state->go_state.keyboard_state.xkb_state, key_code, buf, sizeof(buf));
 
-    // TODO: switch on keys
-    // swtich (keycode)
-    // XKB_KEY_Alt_L
+    Key translated_key = translate_keycode(sym);
+    LOG_INFO("key_code: {} translated_code: {} sym: {}", key_code, static_cast<u8>(translated_key), sym);
 
-    xkb_state_key_get_utf8(state->go_state.keyboard_state.xkb_state, key_code ,
-        buf, sizeof(buf)
-    );
-    // LOG_INFO("utf8: {}", buf);
+    if (translated_key == Key::COUNT) {
+        return;
+    }
+
+    input_process_key(translated_key, key_state == WL_KEYBOARD_KEY_STATE_PRESSED);
 }
 
 static void keyboard_handle_enter(void* data, wl_keyboard* keyboard, u32 serial, wl_surface* surface, wl_array* keys)
@@ -680,14 +683,36 @@ PlatformState::~PlatformState() {
     }
 }
 
-bool PlatformState::start_event_loop() {
+bool PlatformState::start_event_loop(ApplicationState& application_state) {
     WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
     wl_callback* cb = wl_surface_frame(state->go_state.surface);
     wl_callback_add_listener(cb, &state->listeners.callback_listener, state);
 
-    while (wl_display_dispatch(state->display) != -1) {}
+    while (wl_display_dispatch(state->display) != -1 && application_state.is_running) {
+        if (!application_state.is_suspended) {
+            ApplicationState::TimepointType now_time = std::chrono::steady_clock::now();
+            f64 delta_time = (now_time - application_state.last_time).count();
 
-    return true;
+            if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
+                LOG_FATAL("Game update failed, shutting down");
+                application_state.is_running = false;
+                break;
+            }
+
+            if (!application_state.game_inst->render(application_state.game_inst, delta_time)) {
+                LOG_FATAL("Game render failed, shutting down");
+                application_state.is_running = false;
+                break;
+            }
+
+            // update input at the end of the frame
+            input_update(delta_time);
+            application_state.last_time = now_time;
+        }
+    }
+
+    application_state.is_running = false;
+    return false;
 }
 
 void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
@@ -748,6 +773,272 @@ void platform_sleep(u64 ms) {
 
 u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
+}
+
+Key translate_keycode(u32 x_keycode) {
+    switch (x_keycode) {
+        case XKB_KEY_BackSpace:
+            return Key::BACKSPACE;
+        case XKB_KEY_Return:
+            return Key::ENTER;
+        case XKB_KEY_Tab:
+            return Key::TAB;
+            //case XKB_KEY_Shift: return Key::SHIFT;
+            //case XKB_KEY_Control: return Key::CONTROL;
+
+        case XKB_KEY_Pause:
+            return Key::PAUSE;
+        case XKB_KEY_Caps_Lock:
+            return Key::CAPITAL;
+
+        case XKB_KEY_Escape:
+            return Key::ESCAPE;
+
+            // Not supported
+            // case : return Key::CONVERT;
+            // case : return Key::NONCONVERT;
+            // case : return Key::ACCEPT;
+
+        case XKB_KEY_Mode_switch:
+            return Key::MODECHANGE;
+
+        case XKB_KEY_space:
+            return Key::SPACE;
+        case XKB_KEY_Prior:
+            return Key::PRIOR;
+        case XKB_KEY_Next:
+            return Key::NEXT;
+        case XKB_KEY_End:
+            return Key::END;
+        case XKB_KEY_Home:
+            return Key::HOME;
+        case XKB_KEY_Left:
+            return Key::LEFT;
+        case XKB_KEY_Up:
+            return Key::UP;
+        case XKB_KEY_Right:
+            return Key::RIGHT;
+        case XKB_KEY_Down:
+            return Key::DOWN;
+        case XKB_KEY_Select:
+            return Key::SELECT;
+        case XKB_KEY_Print:
+            return Key::PRINT;
+        case XKB_KEY_Execute:
+            return Key::EXECUTE;
+        // case XKB_KEY_snapshot: return Key::SNAPSHOT; // not supported
+        case XKB_KEY_Insert:
+            return Key::INSERT;
+        case XKB_KEY_Delete:
+            return Key::DELETE;
+        case XKB_KEY_Help:
+            return Key::HELP;
+
+        case XKB_KEY_Meta_L:
+            return Key::LWIN;  // TODO: not sure this is right
+        case XKB_KEY_Meta_R:
+            return Key::RWIN;
+            // case XKB_KEY_apps: return Key::APPS; // not supported
+
+            // case XKB_KEY_sleep: return Key::SLEEP; //not supported
+
+        case XKB_KEY_KP_0:
+            return Key::NUMPAD0;
+        case XKB_KEY_KP_1:
+            return Key::NUMPAD1;
+        case XKB_KEY_KP_2:
+            return Key::NUMPAD2;
+        case XKB_KEY_KP_3:
+            return Key::NUMPAD3;
+        case XKB_KEY_KP_4:
+            return Key::NUMPAD4;
+        case XKB_KEY_KP_5:
+            return Key::NUMPAD5;
+        case XKB_KEY_KP_6:
+            return Key::NUMPAD6;
+        case XKB_KEY_KP_7:
+            return Key::NUMPAD7;
+        case XKB_KEY_KP_8:
+            return Key::NUMPAD8;
+        case XKB_KEY_KP_9:
+            return Key::NUMPAD9;
+        case XKB_KEY_multiply:
+            return Key::MULTIPLY;
+        case XKB_KEY_KP_Add:
+            return Key::ADD;
+        case XKB_KEY_KP_Separator:
+            return Key::SEPARATOR;
+        case XKB_KEY_KP_Subtract:
+            return Key::SUBTRACT;
+        case XKB_KEY_KP_Decimal:
+            return Key::DECIMAL;
+        case XKB_KEY_KP_Divide:
+            return Key::DIVIDE;
+        case XKB_KEY_F1:
+            return Key::F1;
+        case XKB_KEY_F2:
+            return Key::F2;
+        case XKB_KEY_F3:
+            return Key::F3;
+        case XKB_KEY_F4:
+            return Key::F4;
+        case XKB_KEY_F5:
+            return Key::F5;
+        case XKB_KEY_F6:
+            return Key::F6;
+        case XKB_KEY_F7:
+            return Key::F7;
+        case XKB_KEY_F8:
+            return Key::F8;
+        case XKB_KEY_F9:
+            return Key::F9;
+        case XKB_KEY_F10:
+            return Key::F10;
+        case XKB_KEY_F11:
+            return Key::F11;
+        case XKB_KEY_F12:
+            return Key::F12;
+        case XKB_KEY_F13:
+            return Key::F13;
+        case XKB_KEY_F14:
+            return Key::F14;
+        case XKB_KEY_F15:
+            return Key::F15;
+        case XKB_KEY_F16:
+            return Key::F16;
+        case XKB_KEY_F17:
+            return Key::F17;
+        case XKB_KEY_F18:
+            return Key::F18;
+        case XKB_KEY_F19:
+            return Key::F19;
+        case XKB_KEY_F20:
+            return Key::F20;
+        case XKB_KEY_F21:
+            return Key::F21;
+        case XKB_KEY_F22:
+            return Key::F22;
+        case XKB_KEY_F23:
+            return Key::F23;
+        case XKB_KEY_F24:
+            return Key::F24;
+
+        case XKB_KEY_Num_Lock:
+            return Key::NUMLOCK;
+        case XKB_KEY_Scroll_Lock:
+            return Key::SCROLL;
+
+        case XKB_KEY_KP_Equal:
+            return Key::NUMPAD_EQUAL;
+
+        case XKB_KEY_Shift_L:
+            return Key::LSHIFT;
+        case XKB_KEY_Shift_R:
+            return Key::RSHIFT;
+        case XKB_KEY_Control_L:
+            return Key::LCONTROL;
+        case XKB_KEY_Control_R:
+            return Key::RCONTROL;
+        // case XKB_KEY_Menu: return Key::LMENU;
+        case XKB_KEY_Menu:
+            return Key::RMENU;
+
+        case XKB_KEY_semicolon:
+            return Key::SEMICOLON;
+        case XKB_KEY_plus:
+            return Key::PLUS;
+        case XKB_KEY_comma:
+            return Key::COMMA;
+        case XKB_KEY_minus:
+            return Key::MINUS;
+        case XKB_KEY_period:
+            return Key::PERIOD;
+        case XKB_KEY_slash:
+            return Key::SLASH;
+        case XKB_KEY_grave:
+            return Key::GRAVE;
+
+        case XKB_KEY_a:
+        case XKB_KEY_A:
+            return Key::A;
+        case XKB_KEY_b:
+        case XKB_KEY_B:
+            return Key::B;
+        case XKB_KEY_c:
+        case XKB_KEY_C:
+            return Key::C;
+        case XKB_KEY_d:
+        case XKB_KEY_D:
+            return Key::D;
+        case XKB_KEY_e:
+        case XKB_KEY_E:
+            return Key::E;
+        case XKB_KEY_f:
+        case XKB_KEY_F:
+            return Key::F;
+        case XKB_KEY_g:
+        case XKB_KEY_G:
+            return Key::G;
+        case XKB_KEY_h:
+        case XKB_KEY_H:
+            return Key::H;
+        case XKB_KEY_i:
+        case XKB_KEY_I:
+            return Key::I;
+        case XKB_KEY_j:
+        case XKB_KEY_J:
+            return Key::J;
+        case XKB_KEY_k:
+        case XKB_KEY_K:
+            return Key::K;
+        case XKB_KEY_l:
+        case XKB_KEY_L:
+            return Key::L;
+        case XKB_KEY_m:
+        case XKB_KEY_M:
+            return Key::M;
+        case XKB_KEY_n:
+        case XKB_KEY_N:
+            return Key::N;
+        case XKB_KEY_o:
+        case XKB_KEY_O:
+            return Key::O;
+        case XKB_KEY_p:
+        case XKB_KEY_P:
+            return Key::P;
+        case XKB_KEY_q:
+        case XKB_KEY_Q:
+            return Key::Q;
+        case XKB_KEY_r:
+        case XKB_KEY_R:
+            return Key::R;
+        case XKB_KEY_s:
+        case XKB_KEY_S:
+            return Key::S;
+        case XKB_KEY_t:
+        case XKB_KEY_T:
+            return Key::T;
+        case XKB_KEY_u:
+        case XKB_KEY_U:
+            return Key::U;
+        case XKB_KEY_v:
+        case XKB_KEY_V:
+            return Key::V;
+        case XKB_KEY_w:
+        case XKB_KEY_W:
+            return Key::W;
+        case XKB_KEY_x:
+        case XKB_KEY_X:
+            return Key::X;
+        case XKB_KEY_y:
+        case XKB_KEY_Y:
+            return Key::Y;
+        case XKB_KEY_z:
+        case XKB_KEY_Z:
+            return Key::Z;
+
+        default: return Key::COUNT;
+    }
 }
 
 }

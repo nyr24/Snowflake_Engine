@@ -122,7 +122,7 @@ PlatformState::~PlatformState() {
     }
 }
 
-bool PlatformState::start_event_loop() {
+bool PlatformState::start_event_loop(ApplicationState& app_state) {
     MSG message;
     while (PeekMessageA(&message, nullptr, 0, 0, PM_REMOVE)) {
         TranslateMessage(&message);

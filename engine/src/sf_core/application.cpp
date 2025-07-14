@@ -56,33 +56,38 @@ bool application_create(sf::GameInstance* game_inst) {
 }
 
 void application_run() {
+#ifdef SF_PLATFORM_WAYLAND
+    application_state.platform_state.start_event_loop(application_state);
+#else
     while (application_state.is_running) {
         if (!application_state.platform_state.start_event_loop()) {
             application_state.is_running = false;
         }
 
         if (!application_state.is_suspended) {
-            if (!application_state.game_inst->update(application_state.game_inst, 0.0f)) {
+            ApplicationState::TimepointType now_time = std::chrono::steady_clock::now();
+            f64 delta_time = (now_time - application_state.last_time).count();
+
+            if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
                 LOG_FATAL("Game update failed, shutting down");
                 application_state.is_running = false;
                 break;
             }
 
-            if (!application_state.game_inst->render(application_state.game_inst, 0.0f)) {
+            if (!application_state.game_inst->render(application_state.game_inst, delta_time)) {
                 LOG_FATAL("Game render failed, shutting down");
                 application_state.is_running = false;
                 break;
             }
 
             // update input at the end of the frame
-            ApplicationState::TimepointType now_time = std::chrono::steady_clock::now();
-            f64 delta_time = (now_time - application_state.last_time).count();
             input_update(delta_time);
             application_state.last_time = now_time;
         }
     }
 
     application_state.is_running = false;
+#endif
 }
 
 bool application_on_event(u8 code, void* sender, void* listener_inst, EventContext* context) {
@@ -110,14 +115,14 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, EventContext
                 return true;
             };
             default: {
-                LOG_DEBUG("Key '{}' was pressed", key_code);
+                LOG_DEBUG("Key '{}' was pressed", (char)key_code);
             } break;
         }
     } else if (code == static_cast<u8>(SystemEventCode::KEY_RELEASED)) {
         u8 key_code = context->data.u8[0];
         switch (static_cast<Key>(key_code)) {
             default: {
-                LOG_DEBUG("Key '{}' was released", key_code);
+                LOG_DEBUG("Key '{}' was released", (char)key_code);
             } break;
         }
     }

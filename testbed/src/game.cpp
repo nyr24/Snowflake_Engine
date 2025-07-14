@@ -5,11 +5,11 @@ bool init(const sf::GameInstance* game_inst) {
     return true;
 }
 
-bool update(const sf::GameInstance* game_inst, f32 delta_time) {
+bool update(const sf::GameInstance* game_inst, f64 delta_time) {
     return true;
 }
 
-bool render(const sf::GameInstance* game_inst, f32 delta_time) {
+bool render(const sf::GameInstance* game_inst, f64 delta_time) {
     return true;
 }
 

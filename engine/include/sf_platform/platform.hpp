@@ -65,6 +65,8 @@
 #endif
 
 namespace sf {
+struct ApplicationState;
+
 struct PlatformState {
     PlatformState();
     PlatformState(PlatformState&& rhs) noexcept;
@@ -80,7 +82,7 @@ struct PlatformState {
         i32 width,
         i32 height
     );
-    bool start_event_loop();
+    bool start_event_loop(ApplicationState& app_state);
 
     void* internal_state;
 };

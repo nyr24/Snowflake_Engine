@@ -1,9 +1,12 @@
+#include "sf_core/input.hpp"
+#include "sf_core/utility.hpp"
 #include "sf_platform/platform.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
+#include <iostream>
 #include <xcb/xcb.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
@@ -163,7 +166,7 @@ PlatformState::~PlatformState() {
     }
 }
 
-bool PlatformState::start_event_loop() {
+bool PlatformState::start_event_loop(ApplicationState& app_state) {
     X11InternState* state = static_cast<X11InternState*>(this->internal_state);
 
     xcb_generic_event_t* event;
@@ -171,7 +174,7 @@ bool PlatformState::start_event_loop() {
 
     bool quit_flagged = false;
 
-    while (event = xcb_poll_for_event(state->connection)) {
+    while ((event = xcb_poll_for_event(state->connection))) {
         if (!event) {
             break;
         }
@@ -269,6 +272,272 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
 }
 
+Key translate_keycode(u32 x_keycode) {
+    switch (x_keycode) {
+        case XK_BackSpace:
+            return Key::BACKSPACE;
+        case XK_Return:
+            return Key::ENTER;
+        case XK_Tab:
+            return Key::TAB;
+            //case XK_Shift: return Key::SHIFT;
+            //case XK_Control: return Key::CONTROL;
+
+        case XK_Pause:
+            return Key::PAUSE;
+        case XK_Caps_Lock:
+            return Key::CAPITAL;
+
+        case XK_Escape:
+            return Key::ESCAPE;
+
+            // Not supported
+            // case : return Key::CONVERT;
+            // case : return Key::NONCONVERT;
+            // case : return Key::ACCEPT;
+
+        case XK_Mode_switch:
+            return Key::MODECHANGE;
+
+        case XK_space:
+            return Key::SPACE;
+        case XK_Prior:
+            return Key::PRIOR;
+        case XK_Next:
+            return Key::NEXT;
+        case XK_End:
+            return Key::END;
+        case XK_Home:
+            return Key::HOME;
+        case XK_Left:
+            return Key::LEFT;
+        case XK_Up:
+            return Key::UP;
+        case XK_Right:
+            return Key::RIGHT;
+        case XK_Down:
+            return Key::DOWN;
+        case XK_Select:
+            return Key::SELECT;
+        case XK_Print:
+            return Key::PRINT;
+        case XK_Execute:
+            return Key::EXECUTE;
+        // case XK_snapshot: return Key::SNAPSHOT; // not supported
+        case XK_Insert:
+            return Key::INSERT;
+        case XK_Delete:
+            return Key::DELETE;
+        case XK_Help:
+            return Key::HELP;
+
+        case XK_Meta_L:
+            return Key::LWIN;  // TODO: not sure this is right
+        case XK_Meta_R:
+            return Key::RWIN;
+            // case XK_apps: return Key::APPS; // not supported
+
+            // case XK_sleep: return Key::SLEEP; //not supported
+
+        case XK_KP_0:
+            return Key::NUMPAD0;
+        case XK_KP_1:
+            return Key::NUMPAD1;
+        case XK_KP_2:
+            return Key::NUMPAD2;
+        case XK_KP_3:
+            return Key::NUMPAD3;
+        case XK_KP_4:
+            return Key::NUMPAD4;
+        case XK_KP_5:
+            return Key::NUMPAD5;
+        case XK_KP_6:
+            return Key::NUMPAD6;
+        case XK_KP_7:
+            return Key::NUMPAD7;
+        case XK_KP_8:
+            return Key::NUMPAD8;
+        case XK_KP_9:
+            return Key::NUMPAD9;
+        case XK_multiply:
+            return Key::MULTIPLY;
+        case XK_KP_Add:
+            return Key::ADD;
+        case XK_KP_Separator:
+            return Key::SEPARATOR;
+        case XK_KP_Subtract:
+            return Key::SUBTRACT;
+        case XK_KP_Decimal:
+            return Key::DECIMAL;
+        case XK_KP_Divide:
+            return Key::DIVIDE;
+        case XK_F1:
+            return Key::F1;
+        case XK_F2:
+            return Key::F2;
+        case XK_F3:
+            return Key::F3;
+        case XK_F4:
+            return Key::F4;
+        case XK_F5:
+            return Key::F5;
+        case XK_F6:
+            return Key::F6;
+        case XK_F7:
+            return Key::F7;
+        case XK_F8:
+            return Key::F8;
+        case XK_F9:
+            return Key::F9;
+        case XK_F10:
+            return Key::F10;
+        case XK_F11:
+            return Key::F11;
+        case XK_F12:
+            return Key::F12;
+        case XK_F13:
+            return Key::F13;
+        case XK_F14:
+            return Key::F14;
+        case XK_F15:
+            return Key::F15;
+        case XK_F16:
+            return Key::F16;
+        case XK_F17:
+            return Key::F17;
+        case XK_F18:
+            return Key::F18;
+        case XK_F19:
+            return Key::F19;
+        case XK_F20:
+            return Key::F20;
+        case XK_F21:
+            return Key::F21;
+        case XK_F22:
+            return Key::F22;
+        case XK_F23:
+            return Key::F23;
+        case XK_F24:
+            return Key::F24;
+
+        case XK_Num_Lock:
+            return Key::NUMLOCK;
+        case XK_Scroll_Lock:
+            return Key::SCROLL;
+
+        case XK_KP_Equal:
+            return Key::NUMPAD_EQUAL;
+
+        case XK_Shift_L:
+            return Key::LSHIFT;
+        case XK_Shift_R:
+            return Key::RSHIFT;
+        case XK_Control_L:
+            return Key::LCONTROL;
+        case XK_Control_R:
+            return Key::RCONTROL;
+        // case XK_Menu: return Key::LMENU;
+        case XK_Menu:
+            return Key::RMENU;
+
+        case XK_semicolon:
+            return Key::SEMICOLON;
+        case XK_plus:
+            return Key::PLUS;
+        case XK_comma:
+            return Key::COMMA;
+        case XK_minus:
+            return Key::MINUS;
+        case XK_period:
+            return Key::PERIOD;
+        case XK_slash:
+            return Key::SLASH;
+        case XK_grave:
+            return Key::GRAVE;
+
+        case XK_a:
+        case XK_A:
+            return Key::A;
+        case XK_b:
+        case XK_B:
+            return Key::B;
+        case XK_c:
+        case XK_C:
+            return Key::C;
+        case XK_d:
+        case XK_D:
+            return Key::D;
+        case XK_e:
+        case XK_E:
+            return Key::E;
+        case XK_f:
+        case XK_F:
+            return Key::F;
+        case XK_g:
+        case XK_G:
+            return Key::G;
+        case XK_h:
+        case XK_H:
+            return Key::H;
+        case XK_i:
+        case XK_I:
+            return Key::I;
+        case XK_j:
+        case XK_J:
+            return Key::J;
+        case XK_k:
+        case XK_K:
+            return Key::K;
+        case XK_l:
+        case XK_L:
+            return Key::L;
+        case XK_m:
+        case XK_M:
+            return Key::M;
+        case XK_n:
+        case XK_N:
+            return Key::N;
+        case XK_o:
+        case XK_O:
+            return Key::O;
+        case XK_p:
+        case XK_P:
+            return Key::P;
+        case XK_q:
+        case XK_Q:
+            return Key::Q;
+        case XK_r:
+        case XK_R:
+            return Key::R;
+        case XK_s:
+        case XK_S:
+            return Key::S;
+        case XK_t:
+        case XK_T:
+            return Key::T;
+        case XK_u:
+        case XK_U:
+            return Key::U;
+        case XK_v:
+        case XK_V:
+            return Key::V;
+        case XK_w:
+        case XK_W:
+            return Key::W;
+        case XK_x:
+        case XK_X:
+            return Key::X;
+        case XK_y:
+        case XK_Y:
+            return Key::Y;
+        case XK_z:
+        case XK_Z:
+            return Key::Z;
+
+        default: return Key::COUNT;
+    }
 }
+
+} // sf
 
 #endif // defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
