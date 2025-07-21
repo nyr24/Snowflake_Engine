@@ -3,7 +3,6 @@
 #include "sf_core/input.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
-#include <chrono>
 
 namespace sf {
 
@@ -30,6 +29,8 @@ bool application_create(sf::GameInstance* game_inst) {
     event_set_listener(SystemEventCode::APPLICATION_QUIT, nullptr, application_on_event);
     event_set_listener(SystemEventCode::KEY_PRESSED, nullptr, application_on_key);
     event_set_listener(SystemEventCode::KEY_RELEASED, nullptr, application_on_key);
+    event_set_listener(SystemEventCode::MOUSE_BUTTON_PRESSED, nullptr, application_on_mouse);
+    event_set_listener(SystemEventCode::MOUSE_BUTTON_RELEASED, nullptr, application_on_mouse);
 
     bool start_success = application_state.platform_state.startup(
         game_inst->app_config.name,
@@ -111,7 +112,7 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, EventContext
         u8 key_code = context->data.u8[0];
         switch (static_cast<Key>(key_code)) {
             case Key::ESCAPE: {
-                event_fire(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
+                event_execute_callback(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
                 return true;
             };
             default: {
@@ -123,6 +124,29 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, EventContext
         switch (static_cast<Key>(key_code)) {
             default: {
                 LOG_DEBUG("Key '{}' was released", (char)key_code);
+            } break;
+        }
+    }
+
+    return false;
+}
+
+bool application_on_mouse(u8 code, void* sender, void* listener_inst, EventContext* context) {
+    if (!context) {
+        return false;
+    }
+
+    u8 mouse_btn = context->data.u8[0];
+    if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_PRESSED)) {
+        switch (static_cast<MouseButton>(mouse_btn)) {
+            default: {
+                LOG_DEBUG("Mouse btn '{}' was pressed", mouse_btn);
+            } break;
+        }
+    } else if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_RELEASED)) {
+        switch (static_cast<MouseButton>(mouse_btn)) {
+            default: {
+                LOG_DEBUG("Mouse btn '{}' was released", mouse_btn);
             } break;
         }
     }

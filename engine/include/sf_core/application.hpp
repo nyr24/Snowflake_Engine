@@ -30,6 +30,7 @@ struct ApplicationState {
 bool application_create(GameInstance* game_inst);
 void application_run();
 bool application_on_event(u8 code, void* sender, void* listener_inst, EventContext* context);
+bool application_on_mouse(u8 code, void* sender, void* listener_inst, EventContext* context);
 bool application_on_key(u8 code, void* sender, void* listener_inst, EventContext* context);
 
 }

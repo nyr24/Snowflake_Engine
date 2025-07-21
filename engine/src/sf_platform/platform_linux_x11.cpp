@@ -1,8 +1,8 @@
-#include "sf_core/input.hpp"
-#include "sf_core/utility.hpp"
 #include "sf_platform/platform.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
+#include "sf_core/input.hpp"
+#include "sf_core/utility.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
@@ -34,6 +34,8 @@ PlatformState::PlatformState()
 {
     std::memset(internal_state, 0, sizeof(internal_state));
 }
+
+static Key translate_keycode(u32 x_keycode);
 
 bool PlatformState::startup(
     const i8* app_name,
@@ -182,16 +184,48 @@ bool PlatformState::start_event_loop(ApplicationState& app_state) {
         switch (event->response_type & ~0x80) {
             case XCB_KEY_PRESS:
             case XCB_KEY_RELEASE: {
-                //  TODO:
+                // Key press event - xcb_key_press_event_t and xcb_key_release_event_t are the same
+                xcb_key_press_event_t* kb_event = reinterpret_cast<xcb_key_press_event_t*>(event);
+                bool pressed = event->response_type == XCB_KEY_PRESS;
+                xcb_keycode_t code = kb_event->detail;
+                KeySym key_sym = XkbKeycodeToKeysym(
+                    state->display,
+                    static_cast<KeyCode>(code),  //event.xkey.keycode,
+                    0,
+                    code & ShiftMask ? 1 : 0);
+
+                Key key = translate_keycode(key_sym);
+                input_process_key(key, pressed);
             } break;
             case XCB_BUTTON_PRESS:
             case XCB_BUTTON_RELEASE: {
-                //  TODO:
+                xcb_button_press_event_t* mouse_event = reinterpret_cast<xcb_button_press_event_t*>(event);
+                bool pressed = event->response_type == XCB_BUTTON_PRESS;
+                MouseButton mouse_button = MouseButton::COUNT;
+                switch (mouse_event->detail) {
+                    case XCB_BUTTON_INDEX_1:
+                        mouse_button = MouseButton::LEFT;
+                        break;
+                    case XCB_BUTTON_INDEX_2:
+                        mouse_button = MouseButton::MIDDLE;
+                        break;
+                    case XCB_BUTTON_INDEX_3:
+                        mouse_button = MouseButton::RIGHT;
+                        break;
+                }
+
+                // Pass over to the input subsystem.
+                if (mouse_button != MouseButton::COUNT) {
+                    input_process_mouse_button(mouse_button, pressed);
+                }
             } break;
-            case XCB_MOTION_NOTIFY:
-            break;
+            case XCB_MOTION_NOTIFY: {
+                // Mouse move
+                xcb_motion_notify_event_t* move_event = reinterpret_cast<xcb_motion_notify_event_t*>(event);
+                input_process_mouse_move(MousePos{ .x = move_event->event_x, .y = move_event->event_y });
+            } break;
             case XCB_CONFIGURE_NOTIFY: {
-                //  TODO:
+                //  TODO: resizing
             } break;
             case XCB_CLIENT_MESSAGE: {
                 client_msg = reinterpret_cast<xcb_client_message_event_t*>(event);
@@ -533,6 +567,27 @@ Key translate_keycode(u32 x_keycode) {
         case XK_z:
         case XK_Z:
             return Key::Z;
+
+        case XK_0:
+            return Key::_0;
+        case XK_1:
+            return Key::_1;
+        case XK_2:
+            return Key::_2;
+        case XK_3:
+            return Key::_3;
+        case XK_4:
+            return Key::_4;
+        case XK_5:
+            return Key::_5;
+        case XK_6:
+            return Key::_6;
+        case XK_7:
+            return Key::_7;
+        case XK_8:
+            return Key::_8;
+        case XK_9:
+            return Key::_9;
 
         default: return Key::COUNT;
     }

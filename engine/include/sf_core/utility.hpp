@@ -21,8 +21,8 @@ concept HasFormatter = requires(std::format_parse_context ctx) {
 };
 
 template<typename T>
-consteval bool smaller_than_word() {
-    return sizeof(T) <= sizeof(usize);
+consteval bool smaller_than_two_words() {
+    return sizeof(T) <= sizeof(void*) * 2;
 }
 
 template<typename T>

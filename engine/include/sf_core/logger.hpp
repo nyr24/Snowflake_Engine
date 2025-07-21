@@ -53,10 +53,10 @@ SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, A
     switch (log_level) {
         case LogLevel::LOG_LEVEL_FATAL:
         case LogLevel::LOG_LEVEL_ERROR:
-            sf::platform_console_write_error(const_cast<const i8*>(message_buff2), static_cast<u8>(log_level));
+            sf::platform_console_write_error(const_cast<const char*>(message_buff2), static_cast<u8>(log_level));
             break;
         default:
-            sf::platform_console_write(const_cast<const i8*>(message_buff2), static_cast<u8>(log_level));
+            sf::platform_console_write(const_cast<const char*>(message_buff2), static_cast<u8>(log_level));
             break;
     }
 }

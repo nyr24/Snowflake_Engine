@@ -27,6 +27,8 @@
 #include <array>
 #include <string_view>
 #include <iostream>
+#include <chrono>
+#include <linux/input-event-codes.h>
 
 namespace sf {
 enum struct ColorXRGB : u32 {
@@ -102,12 +104,14 @@ struct GlobalObjectsState {
 struct Listeners {
     wl_registry_listener    registry_listener;
     wl_buffer_listener      buffer_listener;
-    xdg_wm_base_listener    xdg_wm_base_listener;
     wl_callback_listener    callback_listener;
     wl_seat_listener        seat_listener;
     wl_pointer_listener     pointer_listener;
     wl_keyboard_listener    keyboard_listener;
+    xdg_wm_base_listener    xdg_wm_base_listener;
     xdg_surface_listener    xdg_surface_listener;
+    xdg_toplevel_listener   xdg_toplevel_listener;
+
 };
 
 struct WindowProps {
@@ -127,7 +131,7 @@ struct WaylandInternState {
 };
 
 static void draw_frame(WaylandInternState* state);
-Key translate_keycode(u32 x_keycode);
+static Key translate_keycode(u32 x_keycode);
 
 static void randname(i8 *buf) {
     struct timespec ts;
@@ -190,6 +194,31 @@ static void xdg_surface_handle_configure(void *data,
     draw_frame(state);
 }
 
+static void xdg_toplevel_handle_close(void* data, xdg_toplevel* xdg_toplevel) {
+    event_execute_callback(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
+}
+
+static void xdg_toplevel_handle_configure(void* data, xdg_toplevel* xdg_toplevel, i32 width, i32 height, wl_array* states) {
+    WaylandInternState* state = static_cast<WaylandInternState*>(data);
+    if (width == 0 || height == 0) {
+        return;
+    }
+    LOG_INFO("Wayland configured window to: width {} : height {}", width, height);
+    state->window_props.width = width;
+    state->window_props.height = height;
+}
+
+static void xdg_toplevel_handle_configure_bounds(void* data, xdg_toplevel* xdg_toplevel, i32 width, i32 height) {
+    WaylandInternState* state = static_cast<WaylandInternState*>(data);
+    if (width == 0 || height == 0) {
+        return;
+    }
+    LOG_INFO("Wayland configured window Bounds to: width {} : height {}", width, height);
+    state->window_props.width = std::min(width, state->window_props.width);
+    state->window_props.height = std::min(height, state->window_props.height);
+}
+
+
 static void registry_handle_global(void* data, struct wl_registry* registry,
     u32 name, const char* interface, u32 version)
 {
@@ -238,6 +267,7 @@ static void init_surface(WaylandInternState* state) {
 
     state->go_state.xdg_toplevel = xdg_surface_get_toplevel(state->go_state.xdg_surface);
     xdg_toplevel_set_title(state->go_state.xdg_toplevel, state->window_props.name);
+    // xdg_toplevel_add_listener()
 
     // making all surface as opaque and compositor dont need to worry about drawing windows behind our app
     state->go_state.region_opaque = wl_compositor_create_region(state->go_state.compositor);
@@ -356,77 +386,93 @@ static void pointer_handle_axis_relative_dir(void* data, wl_pointer* pointer, u3
     state->go_state.pointer_state.axis[axis].relative_dir = static_cast<u8>(axis_rel_dir);
 }
 
+static MouseButton map_linux_btn_codes(i32 btn) {
+    switch (btn) {
+        case BTN_LEFT: return MouseButton::LEFT;
+        case BTN_MIDDLE: return MouseButton::MIDDLE;
+        case BTN_RIGHT: return MouseButton::RIGHT;
+        default: return MouseButton::COUNT;
+    };
+}
+
 static void pointer_handle_frame(void* data, wl_pointer* pointer)
 {
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     PointerEventState* pointer_state = &state->go_state.pointer_state;
 
-    // LOG_INFO("pointer frame {}: ", pointer_state->time);
-
     if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_ENTER)) {
-        // LOG_INFO("entered x: {} y: {} ", pointer_state->surface_x, pointer_state->surface_y);
+        input_process_mouse_move(MousePos{ .x = static_cast<i16>(pointer_state->surface_x), .y = static_cast<i16>(pointer_state->surface_y) });
     }
 
-    if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_LEAVE)) {
-        // LOG_INFO("leave ");
-    }
+    // if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_LEAVE)) {
+    // }
 
     if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_MOTION)) {
-        // LOG_INFO("moved x: {} y: {} ", pointer_state->surface_x, pointer_state->surface_y);
+        input_process_mouse_move(MousePos{ .x = static_cast<i16>(pointer_state->surface_x), .y = static_cast<i16>(pointer_state->surface_y) });
     }
 
     if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_BUTTON)) {
-        // LOG_INFO("button: {} state: {} ", pointer_state->button, pointer_state->button_state);
-    }
-
-    u32 axis_events = static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)
-            | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE)
-            | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP)
-            | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120)
-            | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR);
-
-    const i8* axis_name[2] = {
-        "vertical",
-        "horizontal",
-    };
-
-    const i8* axis_relative_dir[2] = {
-        "identical",
-        "inverted",
-    };
-
-    const i8* axis_source[4] = {
-        "wheel",
-        "finger",
-        "continuous",
-        "wheel tilt",
-    };
-
-    if (pointer_state->event_mask & axis_events) {
-        for (size_t i = 0; i < 2; ++i) {
-            if (!pointer_state->axis[i].valid) {
-                continue;
-            }
-            // LOG_INFO("{} axis ", axis_name[i]);
-            if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)) {
-                // LOG_INFO("value {} ", pointer_state->axis[i].value);
-            }
-            if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE)) {
-                // LOG_INFO("source {} ", axis_source[pointer_state->axis_source]);
-            }
-            if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120)) {
-                // LOG_INFO("value120 {} ", pointer_state->axis[i].value120);
-            }
-            if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR)) {
-                // LOG_INFO("relative dir {} ", axis_relative_dir[pointer_state->axis[i].relative_dir]);
-            }
-            if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP)) {
-                // LOG_INFO("stopped ");
-            }
+        MouseButton app_btn_code = map_linux_btn_codes(pointer_state->button);
+        if (app_btn_code != MouseButton::COUNT) {
+            input_process_mouse_button(app_btn_code, pointer_state->button_state == WL_POINTER_BUTTON_STATE_PRESSED);
         }
     }
 
-    std::memset(pointer_state, 0, sizeof(*pointer_state));
+    // wheel event
+    u32 axis_events = static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS) | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE);
+    if (axis_events & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE) && pointer_state->axis_source == WL_POINTER_AXIS_SOURCE_WHEEL) {
+        i8 delta = pointer_state->axis[WL_POINTER_AXIS_VERTICAL_SCROLL].value > 0 ? 1 : -1;
+        input_process_mouse_wheel(delta);
+    }
+
+    // u32 axis_events = static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)
+    //         | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE)
+    //         | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP)
+    //         | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120)
+    //         | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR);
+
+    // const i8* axis_name[2] = {
+    //     "vertical",
+    //     "horizontal",
+    // };
+    //
+    // const i8* axis_relative_dir[2] = {
+    //     "identical",
+    //     "inverted",
+    // };
+    //
+    // const i8* axis_source[4] = {
+    //     "wheel",
+    //     "finger",
+    //     "continuous",
+    //     "wheel tilt",
+    // };
+ 
+    // if (pointer_state->event_mask & axis_events) {
+    //     for (size_t i = 0; i < 2; ++i) {
+    //         if (!pointer_state->axis[i].valid) {
+    //             continue;
+    //         }
+    //         LOG_INFO("{} axis ", axis_name[i]);
+    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)) {
+    //             LOG_INFO("value {} ", pointer_state->axis[i].value);
+    //         }
+    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE)) {
+    //             LOG_INFO("source {} ", axis_source[pointer_state->axis_source]);
+    //         }
+    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120)) {
+    //             LOG_INFO("value120 {} ", pointer_state->axis[i].value120);
+    //         }
+    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR)) {
+    //             LOG_INFO("relative dir {} ", axis_relative_dir[pointer_state->axis[i].relative_dir]);
+    //         }
+    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP)) {
+    //             LOG_INFO("stopped ");
+    //         }
+    //     }
+    // }
+
+    sf_mem_zero(pointer_state, sizeof(PointerEventState));
 }
 
 // Keyboard events
@@ -470,39 +516,17 @@ static void keyboard_handle_key(
     key_code += 8;
     xkb_keysym_t sym = xkb_state_key_get_one_sym(state->go_state.keyboard_state.xkb_state, key_code);
     xkb_keysym_get_name(sym, buf, sizeof(buf));
-    // xkb_state_key_get_utf8(state->go_state.keyboard_state.xkb_state, key_code, buf, sizeof(buf));
 
     Key translated_key = translate_keycode(sym);
-    LOG_INFO("key_code: {} translated_code: {} sym: {}", key_code, static_cast<u8>(translated_key), sym);
 
-    if (translated_key == Key::COUNT) {
-        return;
+    if (translated_key != Key::COUNT) {
+        input_process_key(translated_key, key_state == WL_KEYBOARD_KEY_STATE_PRESSED);
     }
-
-    input_process_key(translated_key, key_state == WL_KEYBOARD_KEY_STATE_PRESSED);
 }
 
 static void keyboard_handle_enter(void* data, wl_keyboard* keyboard, u32 serial, wl_surface* surface, wl_array* keys)
 {
-    WaylandInternState* state = static_cast<WaylandInternState*>(data);
-    u32* key;
-
-    // LOG_INFO("Keyboard enter, pressed keys are:");
-    wl_array_for_each(key, keys, u32*) {
-        i8 buf[128];
-        xkb_keysym_t sym = xkb_state_key_get_one_sym(
-            state->go_state.keyboard_state.xkb_state, *key + 8
-        );
-        xkb_keysym_get_name(sym, buf, sizeof(buf));
-        // LOG_INFO("key: {} scan_code: {}", buf, sym);
-
-        // TODO: switch on keys
-        // XKB_KEY_Alt_L
-
-        xkb_state_key_get_utf8(state->go_state.keyboard_state.xkb_state,
-            *key + 8, buf, sizeof(buf));
-        // LOG_INFO("utf8: {}", buf);
-    }
+    // This space deliberately left blank
 }
 
 static void keyboard_handle_leave(void* data, wl_keyboard* keyboard, u32 serial, wl_surface* surface)
@@ -520,8 +544,7 @@ static void keyboard_handle_modifiers(
     u32 depressed_mods, u32 latched_mods, u32 locked_mods, u32 group
 )
 {
-    WaylandInternState* state = static_cast<WaylandInternState*>(data);
-    xkb_state_update_mask(state->go_state.keyboard_state.xkb_state, depressed_mods, latched_mods, locked_mods, 0, 0, group);
+    // This space deliberately left blank
 }
 
 static void seat_handle_name(void* data, wl_seat* seat, const i8* name) {
@@ -651,6 +674,11 @@ bool PlatformState::startup(
     state->listeners.xdg_surface_listener = xdg_surface_listener{
         .configure = xdg_surface_handle_configure,
     };
+    state->listeners.xdg_toplevel_listener = xdg_toplevel_listener{
+        .configure = xdg_toplevel_handle_configure,
+        .close = xdg_toplevel_handle_close,
+        .configure_bounds = xdg_toplevel_handle_configure_bounds
+    };
 
     wl_registry_add_listener(state->registry, &state->listeners.registry_listener, &state->go_state);
     // waits until we bind to all globals we need
@@ -734,21 +762,21 @@ void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
 
 static constexpr std::array<std::string_view, static_cast<u16>(LogLevel::COUNT)> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;28"};
 
-void platform_console_write(const i8* message, u8 color) {
+void platform_console_write(const char* message, u8 color) {
     // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
     constexpr usize BUFF_LEN{ 256 };
     char message_buff[BUFF_LEN] = {0};
     const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
-    std::cout << std::string_view(const_cast<const i8*>(message_buff), res.out);
+    std::cout << std::string_view(const_cast<const char*>(message_buff), res.out);
 }
 
 
 void platform_console_write_error(const i8* message, u8 color) {
     // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-    constexpr usize BUFF_LEN{ 200 };
+    constexpr usize BUFF_LEN{ 256 };
     char message_buff[BUFF_LEN] = {0};
     const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
-    std::cerr << std::string_view(const_cast<const i8*>(message_buff), res.out);
+    std::cerr << std::string_view(const_cast<const char*>(message_buff), res.out);
 }
 
 f64 platform_get_absolute_time() {
@@ -1036,6 +1064,27 @@ Key translate_keycode(u32 x_keycode) {
         case XKB_KEY_z:
         case XKB_KEY_Z:
             return Key::Z;
+
+        case XKB_KEY_0:
+            return Key::_0;
+        case XKB_KEY_1:
+            return Key::_1;
+        case XKB_KEY_2:
+            return Key::_2;
+        case XKB_KEY_3:
+            return Key::_3;
+        case XKB_KEY_4:
+            return Key::_4;
+        case XKB_KEY_5:
+            return Key::_5;
+        case XKB_KEY_6:
+            return Key::_6;
+        case XKB_KEY_7:
+            return Key::_7;
+        case XKB_KEY_8:
+            return Key::_8;
+        case XKB_KEY_9:
+            return Key::_9;
 
         default: return Key::COUNT;
     }

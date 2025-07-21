@@ -38,8 +38,8 @@ enum SystemEventCode : u8 {
     APPLICATION_QUIT,
     KEY_PRESSED,
     KEY_RELEASED,
-    BUTTON_PRESSED,
-    BUTTON_RELEASED,
+    MOUSE_BUTTON_PRESSED,
+    MOUSE_BUTTON_RELEASED,
     MOUSE_MOVED,
     MOUSE_WHEEL,
     RESIZED,
@@ -48,6 +48,6 @@ enum SystemEventCode : u8 {
 
 SF_EXPORT bool event_set_listener(u8 code, void* listener, OnEventFn on_event);
 SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event);
-SF_EXPORT bool event_fire(u8 code, void* sender, EventContext* context);
+SF_EXPORT bool event_execute_callback(u8 code, void* sender, EventContext* context);
 
 } // sf

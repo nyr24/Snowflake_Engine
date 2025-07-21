@@ -39,7 +39,7 @@ SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event_
     return false;
 }
 
-SF_EXPORT bool event_fire(u8 code, void* sender, EventContext* context) {
+SF_EXPORT bool event_execute_callback(u8 code, void* sender, EventContext* context) {
     if (state.event_lists[code].count() == 0) {
         return false;
     }

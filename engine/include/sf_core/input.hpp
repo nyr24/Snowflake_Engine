@@ -73,6 +73,17 @@ enum struct Key : u8 {
     Y = 0x59,
     Z = 0x5A,
 
+    _0 = 0x0030,
+    _1 = 0x0031,
+    _2 = 0x0032,
+    _3 = 0x0033,
+    _4 = 0x0034,
+    _5 = 0x0035,
+    _6 = 0x0036,
+    _7 = 0x0037,
+    _8 = 0x0038,
+    _9 = 0x0039,
+
     LWIN = 0x5B,
     RWIN = 0x5C,
     APPS = 0x5D,
@@ -170,7 +181,7 @@ SF_EXPORT bool input_was_button_up(MouseButton button);
 SF_EXPORT MousePos input_get_mouse_position();
 SF_EXPORT MousePos input_get_previous_mouse_position();
 
-void input_process_button(MouseButton button, bool pressed);
+void input_process_mouse_button(MouseButton button, bool pressed);
 void input_process_mouse_move(MousePos pos);
 void input_process_mouse_wheel(i8 z_delta);
 
