@@ -1,7 +1,9 @@
-#include "sf_core/game_types.hpp"
 #include "sf_platform/platform.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
+#include "sf_core/clock.hpp"
+#include "sf_core/game_types.hpp"
+#include "sf_core/types.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_platform/wayland-util-custom.hpp"
 #include "sf_core/logger.hpp"
@@ -10,6 +12,7 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/application.hpp"
+#include "sf_core/logger.hpp"
 #include <new>
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>
@@ -27,7 +30,6 @@
 #include <array>
 #include <string_view>
 #include <iostream>
-#include <chrono>
 #include <linux/input-event-codes.h>
 
 namespace sf {
@@ -203,7 +205,6 @@ static void xdg_toplevel_handle_configure(void* data, xdg_toplevel* xdg_toplevel
     if (width == 0 || height == 0) {
         return;
     }
-    LOG_INFO("Wayland configured window to: width {} : height {}", width, height);
     state->window_props.width = width;
     state->window_props.height = height;
 }
@@ -213,7 +214,6 @@ static void xdg_toplevel_handle_configure_bounds(void* data, xdg_toplevel* xdg_t
     if (width == 0 || height == 0) {
         return;
     }
-    LOG_INFO("Wayland configured window Bounds to: width {} : height {}", width, height);
     state->window_props.width = std::min(width, state->window_props.width);
     state->window_props.height = std::min(height, state->window_props.height);
 }
@@ -716,10 +716,17 @@ bool PlatformState::start_event_loop(ApplicationState& application_state) {
     wl_callback* cb = wl_surface_frame(state->go_state.surface);
     wl_callback_add_listener(cb, &state->listeners.callback_listener, state);
 
+    Clock clock;
+    clock.start();
+
+    f64 running_time;
+    u8 frame_count;
+    constexpr f64 target_frame_seconds = 1.0 / 60.0;
+
     while (wl_display_dispatch(state->display) != -1 && application_state.is_running) {
         if (!application_state.is_suspended) {
-            ApplicationState::TimepointType now_time = std::chrono::steady_clock::now();
-            f64 delta_time = (now_time - application_state.last_time).count();
+            f64 delta_time = application_state.clock.update_and_get_delta();
+            f64 frame_start_time = platform_get_abs_time();
 
             if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
                 LOG_FATAL("Game update failed, shutting down");
@@ -733,9 +740,22 @@ bool PlatformState::start_event_loop(ApplicationState& application_state) {
                 break;
             }
 
+            f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
+            running_time += frame_elapsed_time;
+
+        #ifdef SF_LIMIT_FRAME_COUNT
+            f64 frame_remain_seconds = target_frame_seconds - frame_elapsed_time;
+
+            if (frame_remain_seconds > 0.0) {
+                u64 remaining_ms = frame_remain_seconds * 1000.0;
+                platform_sleep(remaining_ms - 1);
+            }
+        #endif
+
+            ++frame_count;
+
             // update input at the end of the frame
             input_update(delta_time);
-            application_state.last_time = now_time;
         }
     }
 
@@ -779,7 +799,7 @@ void platform_console_write_error(const i8* message, u8 color) {
     std::cerr << std::string_view(const_cast<const char*>(message_buff), res.out);
 }
 
-f64 platform_get_absolute_time() {
+f64 platform_get_abs_time() {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     return now.tv_sec + now.tv_nsec * 0.000000001;

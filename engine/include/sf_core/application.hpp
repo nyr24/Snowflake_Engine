@@ -1,9 +1,9 @@
 #pragma once
 
+#include "sf_core/clock.hpp"
 #include "sf_core/event.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_core/types.hpp"
-#include <chrono>
 
 namespace sf {
 struct ApplicationConfig {
@@ -16,15 +16,14 @@ struct ApplicationConfig {
 
 struct GameInstance;
 struct ApplicationState {
-    using TimepointType = std::chrono::time_point<std::chrono::steady_clock>;
-
-    bool                        is_running;
-    bool                        is_suspended;
-    i16                         width;
-    i16                         height;
-    TimepointType               last_time;
     sf::PlatformState           platform_state;
     GameInstance*               game_inst;
+    Clock                       clock;
+    // f64                         last_time;
+    i16                         width;
+    i16                         height;
+    bool                        is_running;
+    bool                        is_suspended;
 };
 
 bool application_create(GameInstance* game_inst);

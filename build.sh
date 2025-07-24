@@ -36,6 +36,11 @@ for arg in "$@"; do
     CMAKE_OPTS+=" -DSF_BUILD_X11=1"
     X11_BUILD_FLAG_SPECIFIED=1
     ;;
+  --limit_fps)
+    echo "FPS limit option enabled"
+    CMAKE_OPTS+=" -DSF_LIMIT_FRAME_COUNT=1"
+    X11_BUILD_FLAG_SPECIFIED=1
+    ;;
   *)
     echo "Unknown argument: $arg"
     ;;

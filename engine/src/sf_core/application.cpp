@@ -4,6 +4,9 @@
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
 
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
+
 namespace sf {
 
 static ApplicationState application_state;

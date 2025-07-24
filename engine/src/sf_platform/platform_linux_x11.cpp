@@ -282,7 +282,7 @@ void platform_console_write_error(const i8* message, u8 color) {
     std::cerr << std::string_view(const_cast<const i8*>(message_buff), res.out);
 }
 
-f64 platform_get_absolute_time() {
+f64 platform_get_abs_time() {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     return now.tv_sec + now.tv_nsec * 0.000000001;
