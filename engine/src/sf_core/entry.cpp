@@ -16,7 +16,7 @@ i32 main() {
     }
 
     if (!sf::application_create(&game_inst)) {
-        LOG_INFO("Application failed to create");
+        LOG_FATAL("Application failed to create");
         return 1;
     }
 

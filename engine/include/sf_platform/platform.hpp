@@ -1,5 +1,6 @@
 #pragma once
 #include "sf_core/types.hpp"
+#include <span>
 
 // Win32
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__)
@@ -103,5 +104,6 @@ void            platform_console_write(const i8* message, u8 color);
 void            platform_console_write_error(const i8* message, u8 color);
 f64             platform_get_abs_time();
 void            platform_sleep(u64 ms);
+void            platform_get_required_extension_names(std::span<const char*> ext_array);
 
 } // sf

@@ -7,6 +7,7 @@
 #include "sf_core/types.hpp"
 #include "sf_core/memory_sf.hpp"
 #include <cstring>
+#include <span>
 #include <Windows.h>
 #include <windowsx.h>
 
@@ -246,6 +247,10 @@ u32 platform_get_mem_page_size() {
     SYSTEM_INFO si;
     GetSystemInfo(&si);
     return static_cast<u32>(si.dwPageSize);
+}
+
+void platform_get_required_extension_names(std::span<const char*> ext_array) {
+    ext_array[0] = "VK_KHR_win32_surface";
 }
 
 }

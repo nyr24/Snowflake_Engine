@@ -7,6 +7,7 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
 #include <iostream>
+#include <span>
 #include <xcb/xcb.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
@@ -38,7 +39,7 @@ PlatformState::PlatformState()
 static Key translate_keycode(u32 x_keycode);
 
 bool PlatformState::startup(
-    const i8* app_name,
+    const char* app_name,
     i32 x,
     i32 y,
     i32 width,
@@ -304,6 +305,10 @@ void platform_sleep(u64 ms) {
 
 u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
+}
+
+void platform_get_required_extension_names(std::span<const char*> ext_array) {
+    ext_array[0] = "VK_KHR_xcb_surface";
 }
 
 Key translate_keycode(u32 x_keycode) {

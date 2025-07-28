@@ -6,13 +6,12 @@
 #include "sf_ds/iterator.hpp"
 #include "sf_ds/optional.hpp"
 #include "sf_core/asserts_sf.hpp"
-#include <concepts>
 #include <functional>
 #include <utility>
 
 namespace sf {
 
-template<typename K, typename V, std::unsigned_integral Utype = u32>
+template<typename K, typename V>
 struct HashMap;
 
 template<typename K>
@@ -57,7 +56,7 @@ static HashMapConfig<K> map_default_config {
     2.0f,
 };
 
-template<typename K, typename V, std::unsigned_integral Utype>
+template<typename K, typename V>
 struct HashMap {
 public:
     using KeyType = K;
@@ -77,14 +76,14 @@ public:
 
 private:
     // 1 capacity = 1 count = sizeof(Bucket<K, V>)
-    Utype               _capacity;
-    Utype               _count;
+    u32                 _capacity;
+    u32                 _count;
     Bucket*             _buffer;
     HashMapConfig<K>    _config = map_default_config<K>;
 
 public:
     HashMap(u64 prealloc_count, const HashMapConfig<K>& config = map_default_config<K>)
-        : _capacity(static_cast<Utype>(prealloc_count))
+        : _capacity(static_cast<u32>(prealloc_count))
         , _count{ 0 }
         , _buffer{ static_cast<Bucket*>(sf_mem_alloc_typed<Bucket, true>(prealloc_count)) }
         , _config{ std::move(config) }
@@ -96,11 +95,11 @@ public:
     template<typename Key, typename Val>
     requires SameTypes<K, Key> && SameTypes<V, Val>
     void put(Key&& key, Val&& val) noexcept {
-        if (_count >= static_cast<Utype>(_capacity * _config.load_factor)) {
+        if (_count >= static_cast<u32>(_capacity * _config.load_factor)) {
             realloc();
         }
 
-        Utype index = static_cast<Utype>(_config.hash_fn(key)) % _capacity;
+        u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
 
         while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
             ++index;
@@ -119,9 +118,9 @@ public:
     template<typename Key, typename Val>
     requires SameTypes<K, Key> && SameTypes<V, Val>
     void put_assume_capacity(K&& key, V&& val) noexcept {
-        SF_ASSERT_MSG(_count <= (static_cast<Utype>(_capacity * _config.load_factor)), "Not enough capacity in HashMap");
+        SF_ASSERT_MSG(_count <= (static_cast<u32>(_capacity * _config.load_factor)), "Not enough capacity in HashMap");
 
-        Utype index = static_cast<Utype>(_config.hash_fn(key)) % _capacity;
+        u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
 
         while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
             ++index;
@@ -140,11 +139,11 @@ public:
     template<typename Key, typename Val>
     requires SameTypes<K, Key> && SameTypes<V, Val>
     bool put_if_empty(K&& key, V&& val) noexcept {
-        if (_count >= static_cast<Utype>(_capacity * _config.load_factor)) {
+        if (_count >= static_cast<u32>(_capacity * _config.load_factor)) {
             realloc();
         }
 
-        Utype index = static_cast<Utype>(_config.hash_fn(key)) % _capacity;
+        u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
 
         while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
             ++index;
@@ -191,18 +190,18 @@ public:
     }
 private:
     void realloc() noexcept {
-        Utype new_capacity = _capacity * _config.grow_factor;
+        u32 new_capacity = _capacity * _config.grow_factor;
         Bucket* new_buffer = static_cast<Bucket*>(sf_mem_alloc_typed<Bucket, true>(new_capacity));
         init_buffer_empty(new_buffer, new_capacity);
 
-        for (Utype i{0}; i < _capacity; ++i) {
+        for (u32 i{0}; i < _capacity; ++i) {
             Bucket&& bucket{ std::move(_buffer[i]) };
             if (bucket.state != Bucket::FILLED) {
                 continue;
             }
 
             u64 hash = _config.hash_fn(bucket.key);
-            Utype new_index = hash % _capacity;
+            u32 new_index = hash % _capacity;
 
             while (new_buffer[new_index].state == Bucket::FILLED) {
                 ++new_index;
@@ -218,7 +217,7 @@ private:
         _buffer = new_buffer;
     }
 
-    void init_buffer_empty(Bucket* buffer, Utype capacity) {
+    void init_buffer_empty(Bucket* buffer, u32 capacity) {
         if (!buffer) {
             return;
         }
@@ -230,8 +229,8 @@ private:
 
     // returns "some" if only state of bucket is "FILLED"
     Option<Bucket*> find_bucket(ConstLRefOrValType<K> key) noexcept {
-        Utype index = static_cast<Utype>(_config.hash_fn(key)) % _capacity;
-        Utype search_count = 0;
+        u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
+        u32 search_count = 0;
 
         while ((_buffer[index].state != Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) && search_count < _capacity) {
             ++index;

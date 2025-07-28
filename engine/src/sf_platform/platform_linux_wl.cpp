@@ -1,4 +1,5 @@
 #include "sf_platform/platform.hpp"
+#include "sf_renderer/renderer.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
 #include "sf_core/clock.hpp"
@@ -28,6 +29,7 @@
 #include <cassert>
 #include <format>
 #include <array>
+#include <span>
 #include <string_view>
 #include <iostream>
 #include <linux/input-event-codes.h>
@@ -740,6 +742,11 @@ bool PlatformState::start_event_loop(ApplicationState& application_state) {
                 break;
             }
 
+            // TODO: refactor packet creation
+            RenderPacket packet;
+            packet.delta_time = 0;
+            renderer_draw_frame(packet);
+
             f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
             running_time += frame_elapsed_time;
 
@@ -821,6 +828,10 @@ void platform_sleep(u64 ms) {
 
 u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
+}
+
+void platform_get_required_extension_names(std::span<const char*> ext_array) {
+    ext_array[0] = "VK_KHR_wayland_surface";
 }
 
 Key translate_keycode(u32 x_keycode) {

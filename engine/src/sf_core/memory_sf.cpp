@@ -82,6 +82,10 @@ SF_EXPORT bool sf_mem_cmp(void* first, void* second, usize byte_size) {
     return std::memcmp(first, second, byte_size) == 0;
 }
 
+SF_EXPORT bool  sf_str_cmp(const char* first, const char* second) {
+    return std::strcmp(first, second) == 0;
+}
+
 SF_EXPORT i8* get_memory_usage_str() {
     constexpr u64 gib = 1024 * 1024 * 1024;
     constexpr u64 mib = 1024 * 1024;

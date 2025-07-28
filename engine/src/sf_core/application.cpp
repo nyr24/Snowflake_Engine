@@ -3,9 +3,7 @@
 #include "sf_core/input.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
-
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
+#include "sf_renderer/renderer.hpp"
 
 namespace sf {
 
@@ -54,6 +52,10 @@ bool application_create(sf::GameInstance* game_inst) {
     }
 
     application_state.game_inst->on_resize(application_state.game_inst, application_state.width, application_state.height);
+
+    if (!renderer_init(game_inst->app_config.name, &application_state.platform_state)) {
+        return false;
+    }
 
     is_application_initialized = true;
     return true;

@@ -6,12 +6,11 @@
 #include "sf_ds/iterator.hpp"
 #include "sf_ds/traits.hpp"
 #include <cassert>
-#include <concepts>
 #include <utility>
 
 namespace sf {
 
-template<typename T, MonoTypeAllocatorTrait<T> A = DefaultArrayAllocator<T>, std::unsigned_integral Utype = u32>
+template<typename T, MonoTypeAllocatorTrait<T> A = DefaultArrayAllocator<T>>
 struct ArrayList {
 private:
     A _allocator;
@@ -33,19 +32,19 @@ public:
     }
 
     template<typename ...Args>
-    void insert_at(Utype index, Args&&... args) noexcept {
+    void insert_at(u32 index, Args&&... args) noexcept {
         _allocator.insert_at(index, std::forward<Args>(args)...);
     }
 
-    void reallocate(Utype new_capacity) noexcept {
+    void reallocate(u32 new_capacity) noexcept {
         _allocator.reallocate(new_capacity);
     }
 
-    void remove_at(Utype index) noexcept {
+    void remove_at(u32 index) noexcept {
         _allocator.remove_at(index);
     }
 
-    void remove_unordered_at(Utype index) noexcept {
+    void remove_unordered_at(u32 index) noexcept {
         _allocator.remove_unordered_at(index);
     }
 
@@ -79,12 +78,12 @@ public:
         return hash;
     }
 
-    T& operator[](Utype ind) noexcept {
+    T& operator[](u32 ind) noexcept {
         SF_ASSERT_MSG((ind >= 0 && ind < _allocator.count()), "out of bounds");
         return _allocator.ptr_offset_val(ind);
     }
 
-    const T& operator[](Utype ind) const noexcept {
+    const T& operator[](u32 ind) const noexcept {
         SF_ASSERT_MSG((ind >= 0 && ind < _allocator.count()), "out of bounds");
         return _allocator.ptr_offset_val(ind);
     }
@@ -101,12 +100,24 @@ public:
         return _allocator.capacity();
     }
 
+    u64 capacity_remain() const noexcept {
+        return _allocator.capacity_remain();
+    }
+
     PtrRandomAccessIterator<T> begin() noexcept {
         return PtrRandomAccessIterator<T>(_allocator.begin());
     }
 
     PtrRandomAccessIterator<T> end() noexcept {
         return PtrRandomAccessIterator<T>(_allocator.end());
+    }
+
+    T* last() noexcept {
+        return _allocator.end();
+    }
+
+    T* last_before_one() noexcept {
+        return _allocator.end_before_one();
     }
 
     T* data() noexcept {
@@ -128,15 +139,19 @@ public:
 
     // constructors and assignments
     ArrayList() noexcept
-        : _allocator{ DefaultArrayAllocator<T>{} }
+        : _allocator{ A{} }
     {}
 
-    explicit ArrayList(Utype capacity) noexcept
-        : _allocator{ DefaultArrayAllocator<T>{ capacity } }
+    explicit ArrayList(u32 capacity) noexcept
+        : _allocator{ A(capacity) }
+    {}
+
+    explicit ArrayList(u32 capacity, u32 count) noexcept
+        : _allocator{ A(capacity, count) }
     {}
 
     ArrayList(std::initializer_list<T> init_list) noexcept
-        : _allocator{ DefaultArrayAllocator<T>{ static_cast<Utype>(init_list.size()) } }
+        : _allocator{ A(init_list.size()) }
     {
         _allocator.allocate(init_list.size());
 
@@ -144,7 +159,7 @@ public:
         auto iter{init_list.begin()};
 
         for (; iter != init_list.end(); ++iter, ++i) {
-            _allocator.construct(
+            _allocator.construct_at(
                 _allocator.ptr_offset(i),
                 *iter
             );
@@ -160,7 +175,7 @@ public:
         auto iter{args.first.begin()};
 
         for (; iter != args.first.end(); ++iter, ++i) {
-            _allocator.construct(
+            _allocator.construct_at(
                 _allocator.ptr_offset(i),
                 *iter
             );
@@ -189,5 +204,8 @@ public:
         return *this;
     }
 };
+
+template<typename T, u32 Capacity>
+using FixedArrayList = ArrayList<T, FixedBufferAllocator<T, Capacity>>;
 
 } // sf

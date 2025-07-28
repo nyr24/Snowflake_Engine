@@ -3,7 +3,6 @@
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/utility.hpp"
-#include <concepts>
 #include <type_traits>
 #include <utility>
 
@@ -13,14 +12,13 @@ namespace sf {
 
 // can't shrink or pop from this one, because of padding, and headers are not implemented on purpose
 // for allocating global single-item stuff from the start of the program and deallocating all at once at the end
-template<std::unsigned_integral Utype = u32>
 struct ArenaAllocator {
 private:
     // in bytes
-    Utype   _capacity;
+    u32 _capacity;
     // in bytes
-    Utype   _count;
-    u8*     _buffer;
+    u32 _count;
+    u8* _buffer;
 
 public:
     ArenaAllocator() noexcept
@@ -29,7 +27,7 @@ public:
         , _count{ 0 }
     {}
 
-    ArenaAllocator(Utype capacity) noexcept
+    ArenaAllocator(u32 capacity) noexcept
         : _capacity{ capacity }
         , _buffer{static_cast<u8*>(sf_mem_alloc(capacity)) }
         , _count{ 0 }
@@ -56,8 +54,8 @@ public:
     template<typename T, typename... Args>
     T* allocate(Args&&... args) noexcept
     {
-        constexpr Utype sizeo_of_T = sizeof(T);
-        constexpr Utype align_of_T = alignof(T);
+        constexpr u32 sizeo_of_T = sizeof(T);
+        constexpr u32 align_of_T = alignof(T);
 
         static_assert(is_power_of_two(align_of_T) && "should be power of 2");
 
@@ -74,7 +72,7 @@ public:
         return ptr_to_return;
     }
 
-    void reallocate(Utype new_capacity) {
+    void reallocate(u32 new_capacity) {
         u8* new_buffer = static_cast<u8*>(sf_mem_alloc(new_capacity));
         sf_mem_copy(new_buffer, _buffer, _count);
         sf_mem_free(_buffer, _capacity);
@@ -85,8 +83,8 @@ public:
     u8* begin() noexcept { return _buffer; }
     u8* data() noexcept { return _buffer; }
     u8* end() noexcept { return _buffer + _count; }
-    Utype count() const noexcept { return _count; }
-    Utype capacity() const noexcept { return _capacity; }
+    u32 count() const noexcept { return _count; }
+    u32 capacity() const noexcept { return _capacity; }
     // const counterparts
     const u8* begin() const noexcept { return _buffer; }
     const u8* data() const noexcept { return _buffer; }
@@ -104,20 +102,20 @@ private:
 // DefaultArrayAllocator
 
 // _capacity and _len are in elements, not bytes
-template<typename T, std::unsigned_integral Utype = u32>
+template<typename T>
 struct DefaultArrayAllocator {
 private:
-    Utype   _capacity;
-    Utype   _count;
-    T*      _buffer;
+    u32 _capacity;
+    u32 _count;
+    T*  _buffer;
 
 public:
     using ValueType = T;
     using Pointer   = T*;
 
-    T* allocate(Utype alloc_count) noexcept
+    T* allocate(u32 alloc_count) noexcept
     {
-        Utype free_capacity = _capacity - _count;
+        u32 free_capacity = _capacity - _count;
 
         if (free_capacity < alloc_count) {
             reallocate(_capacity * 2);
@@ -130,21 +128,33 @@ public:
     }
 
     template<typename ...Args>
-    void construct(T* ptr, Args&&... args) noexcept
+    void construct_at(T* ptr, Args&&... args) noexcept
     {
         sf_mem_place(ptr, args...);
+    }
+
+    void default_construct_at(T* ptr) noexcept
+    {
+        sf_mem_place(ptr);
     }
 
     template<typename ...Args>
     T* allocate_and_construct(Args&&... args) noexcept
     {
         T* place_ptr = allocate(1);
-        construct(place_ptr, std::forward<Args>(args)...);
+        construct_at(place_ptr, std::forward<Args>(args)...);
+        return place_ptr;
+    }
+
+    T* allocate_and_default_construct(u32 count) noexcept
+    {
+        T* place_ptr = allocate(count);
+        default_construct_at(place_ptr);
         return place_ptr;
     }
 
     template<typename ...Args>
-    void insert_at(Utype index, Args&&... args) noexcept {
+    void insert_at(u32 index, Args&&... args) noexcept {
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         T* item = _buffer + index;
@@ -156,14 +166,14 @@ public:
         construct(item, std::forward<Args>(args)...);
     }
 
-    void deallocate(Utype dealloc_count) noexcept
+    void deallocate(u32 dealloc_count) noexcept
     {
         SF_ASSERT_MSG((dealloc_count) <= _count, "Can't deallocate more than all current elements");
 
         if constexpr (std::is_destructible_v<T>) {
             T* curr = end_before_one();
 
-            for (Utype i{0}; i < dealloc_count; ++i) {
+            for (u32 i{0}; i < dealloc_count; ++i) {
                 (curr - i)->~T();
             }
         }
@@ -171,7 +181,7 @@ public:
         _count -= dealloc_count;
     }
 
-    void remove_at(Utype index) noexcept {
+    void remove_at(u32 index) noexcept {
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         if (index == _count - 1) {
@@ -191,7 +201,7 @@ public:
     }
 
     // swaps element to the end and always removes it from the end, escaping memmove call
-    void remove_unordered_at(Utype index) noexcept {
+    void remove_unordered_at(u32 index) noexcept {
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         if (index == _count - 1) {
@@ -223,7 +233,7 @@ public:
         deallocate(_count);
     }
 
-    void reallocate(Utype new_capacity) noexcept
+    void reallocate(u32 new_capacity) noexcept
     {
         if (new_capacity > _capacity) {
             T* new_buffer = sf_mem_alloc_typed<T, true>(new_capacity);
@@ -242,16 +252,17 @@ public:
     T* begin() noexcept { return _buffer; }
     T* end() noexcept { return _buffer + _count; }
     T* end_before_one() noexcept { return _buffer + _count - 1; }
-    T* ptr_offset(Utype ind) noexcept { return _buffer + ind; }
-    T& ptr_offset_val(Utype ind) noexcept { return *(ptr_offset(ind)); }
-    Utype count() const noexcept { return _count; }
-    Utype capacity() const noexcept { return _capacity; }
+    T* ptr_offset(u32 ind) noexcept { return _buffer + ind; }
+    T& ptr_offset_val(u32 ind) noexcept { return *(ptr_offset(ind)); }
+    u32 count() const noexcept { return _count; }
+    u32 capacity() const noexcept { return _capacity; }
+    u32 capacity_remain() const noexcept { return _capacity - _count; }
     // const counterparts
     const T* begin() const noexcept { return _buffer; }
     const T* end() const noexcept { return _buffer + _count; }
     const T* end_before_one() const noexcept { return _buffer + _count - 1; }
-    const T* ptr_offset(Utype ind) const noexcept { return _buffer + ind; }
-    const T& ptr_offset_val(Utype ind) const noexcept { return *(ptr_offset(ind)); }
+    const T* ptr_offset(u32 ind) const noexcept { return _buffer + ind; }
+    const T& ptr_offset_val(u32 ind) const noexcept { return *(ptr_offset(ind)); }
 
     // constructors and assignments
     DefaultArrayAllocator() noexcept
@@ -260,11 +271,20 @@ public:
         , _buffer{ nullptr }
     {}
 
-    explicit DefaultArrayAllocator(Utype capacity) noexcept
+    explicit DefaultArrayAllocator(u32 capacity) noexcept
         : _capacity{ capacity }
         , _count{ 0 }
-        , _buffer{ sf_mem_alloc_typed<T, false>(_capacity) }
+        , _buffer{ sf_mem_alloc_typed<T, true>(_capacity) }
     {}
+
+    explicit DefaultArrayAllocator(u32 capacity, u32 count) noexcept
+        : _capacity{ capacity }
+        , _count{ 0 }
+        , _buffer{ sf_mem_alloc_typed<T, true>(_capacity) }
+    {
+        SF_ASSERT_MSG(capacity >= count, "Count shouldn't be bigger than capacity");
+        allocate_and_default_construct(count);
+    }
 
     DefaultArrayAllocator(DefaultArrayAllocator<T>&& rhs) noexcept
         : _capacity{ rhs._capacity }
@@ -324,19 +344,19 @@ public:
 // FixedBufferAllocator
 
 // _capacity and _len are in elements, not bytes
-template<typename T, usize Capacity, std::unsigned_integral Utype = u32>
+template<typename T, u32 Capacity>
 struct FixedBufferAllocator {
 private:
-    Utype   _count;
-    T       _buffer[Capacity];
+    u32 _count;
+    T   _buffer[Capacity];
 
 public:
     using ValueType = T;
     using Pointer   = T*;
 
-    T* allocate(Utype alloc_count) noexcept
+    T* allocate(u32 alloc_count) noexcept
     {
-        Utype free_capacity = Capacity - _count;
+        u32 free_capacity = Capacity - _count;
 
         if (free_capacity < alloc_count) {
             panic("Not enough memory");
@@ -349,21 +369,33 @@ public:
     }
 
     template<typename ...Args>
-    void construct(T* ptr, Args&&... args) noexcept
+    void construct_at(T* ptr, Args&&... args) noexcept
     {
         sf_mem_place(ptr, args...);
+    }
+
+    void default_construct_at(T* ptr) noexcept
+    {
+        sf_mem_place(ptr);
     }
 
     template<typename ...Args>
     T* allocate_and_construct(Args&&... args) noexcept
     {
         T* place_ptr = allocate(1);
-        construct(place_ptr, std::forward<Args>(args)...);
+        construct_at(place_ptr, std::forward<Args>(args)...);
+        return place_ptr;
+    }
+
+    T* allocate_and_default_construct(u32 count) noexcept
+    {
+        T* place_ptr = allocate(count);
+        default_construct_at(place_ptr);
         return place_ptr;
     }
 
     template<typename ...Args>
-    void insert_at(Utype index, Args&&... args) noexcept {
+    void insert_at(u32 index, Args&&... args) noexcept {
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         T* item = _buffer + index;
@@ -375,14 +407,14 @@ public:
         construct(item, std::forward<Args>(args)...);
     }
 
-    void deallocate(Utype dealloc_count) noexcept
+    void deallocate(u32 dealloc_count) noexcept
     {
         SF_ASSERT_MSG((dealloc_count) <= _count, "Can't deallocate more than all current elements");
 
         if constexpr (std::is_destructible_v<T>) {
             T* curr = end_before_one();
 
-            for (Utype i{0}; i < dealloc_count; ++i) {
+            for (u32 i{0}; i < dealloc_count; ++i) {
                 (curr - i)->~T();
             }
         }
@@ -390,12 +422,12 @@ public:
         _count -= dealloc_count;
     }
 
-    void reallocate(Utype new_capacity) noexcept
+    void reallocate(u32 new_capacity) noexcept
     {
         panic("Reallocation can't be made on stack based buffer");
     }
 
-    void remove_at(Utype index) noexcept {
+    void remove_at(u32 index) noexcept {
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         if (index == _count - 1) {
@@ -415,7 +447,7 @@ public:
     }
 
     // swaps element to the end and always removes it from the end, escaping memmove call
-    void remove_unordered_at(Utype index) noexcept {
+    void remove_unordered_at(u32 index) noexcept {
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         if (index == _count - 1) {
@@ -445,25 +477,33 @@ public:
     T* begin() noexcept { return _buffer; }
     T* end() noexcept { return _buffer + _count; }
     T* end_before_one() noexcept { return _buffer + _count - 1; }
-    T* ptr_offset(Utype ind) noexcept { return _buffer + ind; }
-    T& ptr_offset_val(Utype ind) noexcept { return *(ptr_offset(ind)); }
-    Utype count() const noexcept { return _count; }
-    constexpr Utype capacity() const noexcept { return Capacity; }
+    T* ptr_offset(u32 ind) noexcept { return _buffer + ind; }
+    T& ptr_offset_val(u32 ind) noexcept { return *(ptr_offset(ind)); }
+    u32 count() const noexcept { return _count; }
+    constexpr u32 capacity() const noexcept { return Capacity; }
+    u32 capacity_remain() const noexcept { return Capacity - _count; }
     // const counterparts
     const T* begin() const noexcept { return _buffer; }
     const T* end() const noexcept { return _buffer + _count; }
     const T* end_before_one() const noexcept { return _buffer + _count - 1; }
-    const T* ptr_offset(Utype ind) const noexcept { return _buffer + ind; }
-    const T& ptr_offset_val(Utype ind) const noexcept { return *(ptr_offset(ind)); }
+    const T* ptr_offset(u32 ind) const noexcept { return _buffer + ind; }
+    const T& ptr_offset_val(u32 ind) const noexcept { return *(ptr_offset(ind)); }
 
     // constructors and assignments
     FixedBufferAllocator() noexcept
         : _count{ 0 }
     {}
 
-    explicit FixedBufferAllocator(Utype count) noexcept
-        : _count{ 0 }
-    {}
+    // explicit FixedBufferAllocator(u32 count) noexcept
+    //     : _count{ 0 }
+    // {}
+
+    explicit FixedBufferAllocator(u32 count) noexcept
+        : _count{ count }
+    {
+        SF_ASSERT_MSG(Capacity >= count, "Count shouldn't be bigger than capacity");
+        allocate_and_default_construct(count);
+    }
 
     template<usize RhsCapacity>
     FixedBufferAllocator(const FixedBufferAllocator<T, RhsCapacity>& rhs) noexcept
@@ -502,9 +542,8 @@ public:
     }
 
 
-    template<usize LhsCapacity, usize RhsCapacity>
-    friend bool operator==(const FixedBufferAllocator<T, LhsCapacity>& first, const FixedBufferAllocator<T, RhsCapacity>& second) noexcept {
-        return LhsCapacity == RhsCapacity && first._count == second._count && sf_mem_cmp(first._buffer, second._buffer, first._count * sizeof(T));
+    friend bool operator==(const FixedBufferAllocator<T, Capacity>& first, const FixedBufferAllocator<T, Capacity>& second) noexcept {
+        return first._count == second._count && sf_mem_cmp(first._buffer, second._buffer, first._count * sizeof(T));
     }
 
     ~FixedBufferAllocator() noexcept
