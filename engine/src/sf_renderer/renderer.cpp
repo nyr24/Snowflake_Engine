@@ -4,6 +4,7 @@
 #include "sf_ds/array_list.hpp"
 #include "sf_core/memory_sf.hpp"
 #include <span>
+#include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -39,9 +40,9 @@ bool renderer_init(const char* app_name, PlatformState* platform_state) {
     vk_inst_create_info.enabledExtensionCount = required_extensions.count();
     vk_inst_create_info.ppEnabledExtensionNames = required_extensions.data();
 
-    // Validation layers should be only enabled in debug mode
+    // Validation layers should only be enabled in debug mode
 #ifdef SF_DEBUG
-    sf::FixedArrayList<const char*, 1> required_validation_layers;
+    FixedArrayList<const char*, 1> required_validation_layers;
     required_validation_layers.append("VK_LAYER_KHRONOS_validation");
 
     u32 available_layer_count = 0;
@@ -49,7 +50,6 @@ bool renderer_init(const char* app_name, PlatformState* platform_state) {
     ArrayList<VkLayerProperties> available_layers(available_layer_count, available_layer_count);
     sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data()));
 
-    LOG_INFO("Checking validation layers availability...");
     for (const char* req_layer : required_validation_layers) {
         bool is_available = false;
         for (const VkLayerProperties& available_layer : available_layers) {
@@ -68,11 +68,36 @@ bool renderer_init(const char* app_name, PlatformState* platform_state) {
     vk_inst_create_info.enabledLayerCount = required_validation_layers.count();
     vk_inst_create_info.ppEnabledLayerNames = required_validation_layers.data();
 #endif
+    // TODO:: create vulkan allocator
+    // allocator
+    // vk_context.allocator = VkAllocationCallbacks{
+        // .pfnAllocation =
+    // };
 
-    VkResult result = vkCreateInstance(&vk_inst_create_info, nullptr, &vk_context.instance);
-    if (result != VK_SUCCESS) {
-        return false;
-    }
+    sf_vk_check(vkCreateInstance(&vk_inst_create_info, nullptr, &vk_context.instance));
+
+    // Debugger
+#ifdef SF_DEBUG
+    u32 log_severity =  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+                        // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
+
+    VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+    debug_create_info.messageSeverity = log_severity;
+    debug_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+    debug_create_info.pfnUserCallback = sf_vk_debug_callback;
+
+    PFN_vkCreateDebugUtilsMessengerEXT func =
+        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vk_context.instance, "vkCreateDebugUtilsMessengerEXT");
+
+    SF_ASSERT_MSG(func, "Failed to create debug messenger!");
+
+    sf_vk_check(func(vk_context.instance, &debug_create_info, &vk_context.allocator, &vk_context.debug_messenger));
+#endif
+
+    // TODO: know your device
+    // vkGetPhysicalDeviceMemoryProperties();
 
     return true;
 }
@@ -109,6 +134,39 @@ void sf_vk_check(VkResult vk_result) {
     if (vk_result != VK_SUCCESS) {
         panic("Vk check failed!");
     }
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT           message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT                  message_types,
+    const VkDebugUtilsMessengerCallbackDataEXT*      callback_data,
+    void*                                            user_data
+) {
+    switch (message_severity) {
+        default:
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+            LOG_ERROR("{}", callback_data->pMessage);
+            break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+            LOG_WARN("{}", callback_data->pMessage);
+            break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+            LOG_INFO("{}", callback_data->pMessage);
+            break;
+        case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+            LOG_TRACE("{}", callback_data->pMessage);
+            break;
+    }
+    return VK_FALSE;
+}
+
+VulkanContext::~VulkanContext() {
+    if (debug_messenger) {
+        PFN_vkDestroyDebugUtilsMessengerEXT debug_destroy_fn = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+        debug_destroy_fn(instance, debug_messenger, &allocator);
+    }
+
+    vkDestroyInstance(instance, &allocator);
 }
 
 } // sf

@@ -18,8 +18,14 @@ public:
 };
 
 struct VulkanContext {
-    VkInstance              instance;
-    VkAllocationCallbacks   allocator;
+    VkInstance                  instance;
+    VkAllocationCallbacks       allocator;
+#ifdef SF_DEBUG
+    VkDebugUtilsMessengerEXT    debug_messenger;
+#endif
+
+public:
+    ~VulkanContext();
 };
 
 bool renderer_init(const char* app_name, PlatformState* platform_state);
@@ -28,4 +34,11 @@ bool renderer_begin_frame(f64 delta_time);
 bool renderer_end_frame(f64 delta_time);
 bool renderer_draw_frame(const RenderPacket& packet);
 void sf_vk_check(VkResult vk_result);
+u32 sf_vk_debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT                  messageTypes,
+    const VkDebugUtilsMessengerCallbackDataEXT*      pCallbackData,
+    void*                                            pUserData
+);
+
 } // sf
