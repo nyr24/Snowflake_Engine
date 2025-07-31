@@ -1,13 +1,13 @@
 #pragma once
 
-#include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/utility.hpp"
+#include "sf_core/memory_sf.hpp"
 #include <type_traits>
 #include <utility>
-#include <vulkan/vulkan_core.h>
 
 namespace sf {
+u32 platform_get_mem_page_size();
 
 // ArenaAllocator
 
@@ -98,19 +98,6 @@ private:
         sf_mem_place(ptr, args...);
     }
 };
-
-// TODO: Vulkan allocator
-// struct VulkanAllocatorState {
-//     u32 _capacity;
-//     u32 _count;
-//     u8* _buffer;
-// };
-//
-// PFN_vkAllocationFunction vk_alloc_fn(VulkanAllocatorState* state, usize alloc_bytes, usize alignment, VkSystemAllocationScope vk_alloc_scope);
-// PFN_vkFreeFunction vk_free_fn(VulkanAllocatorState* state, void* memory);
-// PFN_vkReallocationFunction vk_realloc_fn(VulkanAllocatorState* state, void* pOriginal, size_t size, size_t alignment, VkSystemAllocationScope allocationScope);
-// PFN_vk
-
 
 // DefaultArrayAllocator
 

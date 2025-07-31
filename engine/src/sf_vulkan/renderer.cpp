@@ -1,18 +1,33 @@
-#include "sf_renderer/renderer.hpp"
+#include "sf_vulkan/renderer.hpp"
+#include "sf_ds/allocator.hpp"
+#include "sf_vulkan/allocator.hpp"
+#include "sf_vulkan/device.hpp"
+#include "sf_vulkan/types.hpp"
 #include "sf_core/logger.hpp"
+#include "sf_core/asserts_sf.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_ds/array_list.hpp"
-#include "sf_core/memory_sf.hpp"
-#include <span>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
 static VulkanRenderer vk_renderer{};
-static VulkanContext vk_context{};
 
-bool renderer_init(const char* app_name, PlatformState* platform_state) {
-    vk_renderer.platform_state = platform_state;
+static VulkanContext vk_context{
+    .allocator = VulkanAllocator{
+        .state = VulkanAllocatorState(platform_get_mem_page_size() * 10),
+        .callbacks = VkAllocationCallbacks{
+            .pfnAllocation = vk_alloc_fn,
+            .pfnReallocation = vk_realloc_fn,
+            .pfnFree = vk_free_fn,
+            .pfnInternalAllocation = vk_intern_alloc_notification,
+            .pfnInternalFree = vk_intern_free_notification
+        }
+    }
+};
+
+bool renderer_init(const char* app_name, PlatformState& platform_state) {
+    vk_renderer.platform_state = &platform_state;
     vk_renderer.frame_count = 0;
 
     VkApplicationInfo vk_app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
@@ -24,18 +39,30 @@ bool renderer_init(const char* app_name, PlatformState* platform_state) {
     VkInstanceCreateInfo vk_inst_create_info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     vk_inst_create_info.pApplicationInfo = &vk_app_info;
 
-    FixedArrayList<const char*, 3> required_extensions;
+    FixedArrayList<const char*, 5> required_extensions;
     required_extensions.append(VK_KHR_SURFACE_EXTENSION_NAME);
 #ifdef SF_DEBUG
     required_extensions.append(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-
+#endif
+    platform_get_required_extensions(required_extensions);
+#ifdef SF_DEBUG
     // Log required extensions
     LOG_INFO("Required vulkan extensions: ");
     for (const char* ext_name : required_extensions) {
         LOG_INFO("{}", ext_name);
     }
+
+    u32 available_extensions_count{0};
+    vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, nullptr);
+
+    ArrayList<VkExtensionProperties> available_extensions(available_extensions_count, available_extensions_count);
+    vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, available_extensions.data());
+
+    LOG_INFO("Available vulkan extensions: ");
+    for (const VkExtensionProperties& available_extension : available_extensions) {
+        LOG_INFO("{}", available_extension.extensionName);
+    }
 #endif
-    platform_get_required_extension_names(std::span{ required_extensions.last(), required_extensions.capacity_remain() });
 
     vk_inst_create_info.enabledExtensionCount = required_extensions.count();
     vk_inst_create_info.ppEnabledExtensionNames = required_extensions.data();
@@ -68,11 +95,6 @@ bool renderer_init(const char* app_name, PlatformState* platform_state) {
     vk_inst_create_info.enabledLayerCount = required_validation_layers.count();
     vk_inst_create_info.ppEnabledLayerNames = required_validation_layers.data();
 #endif
-    // TODO:: create vulkan allocator
-    // allocator
-    // vk_context.allocator = VkAllocationCallbacks{
-        // .pfnAllocation =
-    // };
 
     sf_vk_check(vkCreateInstance(&vk_inst_create_info, nullptr, &vk_context.instance));
 
@@ -93,11 +115,12 @@ bool renderer_init(const char* app_name, PlatformState* platform_state) {
 
     SF_ASSERT_MSG(func, "Failed to create debug messenger!");
 
-    sf_vk_check(func(vk_context.instance, &debug_create_info, &vk_context.allocator, &vk_context.debug_messenger));
+    sf_vk_check(func(vk_context.instance, &debug_create_info, nullptr, &vk_context.debug_messenger));
 #endif
 
-    // TODO: know your device
-    // vkGetPhysicalDeviceMemoryProperties();
+    platform_create_vk_surface(platform_state, vk_context);
+
+    device_create(vk_context);
 
     return true;
 }
@@ -163,10 +186,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
 VulkanContext::~VulkanContext() {
     if (debug_messenger) {
         PFN_vkDestroyDebugUtilsMessengerEXT debug_destroy_fn = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-        debug_destroy_fn(instance, debug_messenger, &allocator);
+        debug_destroy_fn(instance, debug_messenger, &allocator.callbacks);
     }
 
-    vkDestroyInstance(instance, &allocator);
+    vkDestroyInstance(instance, &allocator.callbacks);
 }
 
 } // sf

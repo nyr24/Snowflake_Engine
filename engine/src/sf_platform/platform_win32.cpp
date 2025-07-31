@@ -1,15 +1,20 @@
-#include "sf_platform/platform.hpp"
+#include "sf_platform/defines.hpp"
 
 #if defined(SF_PLATFORM_WINDOWS)
+#include "sf_platform/platform.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_core/types.hpp"
 #include "sf_core/memory_sf.hpp"
-#include <cstring>
-#include <span>
+#include "sf_vulkan/types.hpp"
+#include "sf_ds/array_list.hpp"
 #include <Windows.h>
 #include <windowsx.h>
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_win32.h>
+#include <cstring>
+#include <span>
 
 namespace sf {
 struct WindowsInternState {
@@ -172,6 +177,26 @@ void platform_sleep(u64 ms) {
     Sleep(ms);
 }
 
+u32 platform_get_mem_page_size() {
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return static_cast<u32>(si.dwPageSize);
+}
+
+void platform_get_required_extensions(FixedArrayList<const char*, 5>& required_extensions) {
+    required_extensions.append("VK_KHR_win32_surface");
+}
+
+void platform_create_vk_surface(PlatformState& plat_state, VulkanContext& context) {
+    WindowsInternState* state = static_cast<WindowsInternState*>(plat_state.internal_state);
+
+    VkWin32SurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
+    create_info.hinstance = state->h_instance;
+    create_info.hwnd = state->hwnd;
+
+    sf_vk_check(vkCreateWin32SurfaceKHR(context.instance, &create_info, &context.allocator, &context.surface));
+}
+
 HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param) {
     switch (msg) {
         case WM_ERASEBKGND:
@@ -243,15 +268,4 @@ HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
     }
 }
 
-u32 platform_get_mem_page_size() {
-    SYSTEM_INFO si;
-    GetSystemInfo(&si);
-    return static_cast<u32>(si.dwPageSize);
-}
-
-void platform_get_required_extension_names(std::span<const char*> ext_array) {
-    ext_array[0] = "VK_KHR_win32_surface";
-}
-
-}
 #endif // SF_PLATFORM_WINDOWS

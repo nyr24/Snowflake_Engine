@@ -1,19 +1,23 @@
-#include "sf_platform/platform.hpp"
-#include "sf_renderer/renderer.hpp"
+#include "sf_platform/defines.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
+// #include "sf_core/defines.hpp"
+#include "sf_platform/platform.hpp"
 #include "sf_core/clock.hpp"
 #include "sf_core/game_types.hpp"
+#include "sf_core/logger.hpp"
 #include "sf_core/types.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_platform/wayland-util-custom.hpp"
-#include "sf_core/logger.hpp"
 #include "sf_platform/xdg-shell-protocol.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/application.hpp"
 #include "sf_core/logger.hpp"
+#include "sf_ds/array_list.hpp"
+#include "sf_vulkan/renderer.hpp"
+#include "sf_vulkan/types.hpp"
 #include <new>
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>
@@ -24,15 +28,16 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <linux/input-event-codes.h>
 #include <cstring>
 #include <ctime>
 #include <cassert>
 #include <format>
 #include <array>
-#include <span>
 #include <string_view>
 #include <iostream>
-#include <linux/input-event-codes.h>
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_wayland.h>
 
 namespace sf {
 enum struct ColorXRGB : u32 {
@@ -134,7 +139,7 @@ struct WaylandInternState {
     WindowProps             window_props;
 };
 
-static void draw_frame(WaylandInternState* state);
+// static void draw_frame(WaylandInternState* state);
 static Key translate_keycode(u32 x_keycode);
 
 static void randname(i8 *buf) {
@@ -195,7 +200,7 @@ static void xdg_surface_handle_configure(void *data,
 {
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     xdg_surface_ack_configure(xdg_surface, serial);
-    draw_frame(state);
+    // draw_frame(state);
 }
 
 static void xdg_toplevel_handle_close(void* data, xdg_toplevel* xdg_toplevel) {
@@ -307,7 +312,7 @@ static void surface_handle_frame_done(void* data, wl_callback* cb, u32 time) {
     wl_callback_destroy(cb);
     cb = wl_surface_frame(state->go_state.surface);
     wl_callback_add_listener(cb, &state->listeners.callback_listener,  static_cast<void*>(state));
-    draw_frame(state);
+    // draw_frame(state);
     state->go_state.last_frame = time;
 }
 
@@ -575,23 +580,23 @@ static void seat_handle_capabilities(void* data, wl_seat* seat, u32 capabilities
     }
 }
 
-static void draw_frame(WaylandInternState* state) {
-    const i32 quot_height = state->window_props.height / 4;
-    ColorXRGB colors[] = { ColorXRGB::PURPLE, ColorXRGB::GREEN, ColorXRGB::RED, ColorXRGB::YELLOW };
-
-    for (i32 height_offset = 0; height_offset < 4; ++height_offset) {
-        for (i32 y = (height_offset * quot_height); y < ((height_offset + 1) * quot_height); ++y) {
-            for (i32 x = 0; x < state->window_props.width; ++x) {
-                i32 px_curr = y * (state->window_props.width) + x;
-                state->go_state.pool_data[px_curr] = static_cast<u32>(colors[height_offset]);
-            }
-        }
-    }
-
-    wl_surface_attach(state->go_state.surface, state->go_state.buffer, 0, 0);
-    wl_surface_damage_buffer(state->go_state.surface, 0, 0, state->window_props.width, state->window_props.height);
-    wl_surface_commit(state->go_state.surface);
-}
+// static void draw_frame(WaylandInternState* state) {
+//     const i32 quot_height = state->window_props.height / 4;
+//     ColorXRGB colors[] = { ColorXRGB::PURPLE, ColorXRGB::GREEN, ColorXRGB::RED, ColorXRGB::YELLOW };
+//
+//     for (i32 height_offset = 0; height_offset < 4; ++height_offset) {
+//         for (i32 y = (height_offset * quot_height); y < ((height_offset + 1) * quot_height); ++y) {
+//             for (i32 x = 0; x < state->window_props.width; ++x) {
+//                 i32 px_curr = y * (state->window_props.width) + x;
+//                 state->go_state.pool_data[px_curr] = static_cast<u32>(colors[height_offset]);
+//             }
+//         }
+//     }
+//
+//     wl_surface_attach(state->go_state.surface, state->go_state.buffer, 0, 0);
+//     wl_surface_damage_buffer(state->go_state.surface, 0, 0, state->window_props.width, state->window_props.height);
+//     wl_surface_commit(state->go_state.surface);
+// }
 
 PlatformState::PlatformState()
     : internal_state{ sf_mem_alloc(sizeof(WaylandInternState), alignof(WaylandInternState)) }
@@ -648,7 +653,7 @@ bool PlatformState::startup(
     state->listeners.xdg_wm_base_listener = xdg_wm_base_listener{
         .ping = xdg_wm_base_handle_ping,
     };
-    state->listeners.callback_listener = wl_callback_listener{ .done = surface_handle_frame_done };
+    // state->listeners.callback_listener = wl_callback_listener{ .done = surface_handle_frame_done };
     state->listeners.seat_listener = wl_seat_listener{
         .capabilities = seat_handle_capabilities,
         .name = seat_handle_name,
@@ -830,8 +835,14 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
 }
 
-void platform_get_required_extension_names(std::span<const char*> ext_array) {
-    ext_array[0] = "VK_KHR_wayland_surface";
+void platform_get_required_extensions(FixedArrayList<const char*, 5>& required_extensions) {
+    required_extensions.append("VK_KHR_wayland_surface");
+}
+
+void platform_create_vk_surface(PlatformState& plat_state, VulkanContext& context) {
+    WaylandInternState* state = static_cast<WaylandInternState*>(plat_state.internal_state);
+    VkWaylandSurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR, nullptr, 0, state->display, state->go_state.surface};
+    sf_vk_check(vkCreateWaylandSurfaceKHR(context.instance, &create_info, &context.allocator.callbacks, &context.surface));
 }
 
 Key translate_keycode(u32 x_keycode) {

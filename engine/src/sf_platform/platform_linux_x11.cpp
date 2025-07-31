@@ -1,13 +1,15 @@
-#include "sf_platform/platform.hpp"
+#include "sf_platform/defines.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_X11)
+#include "sf_platform/platform.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
+#include "sf_vulkan/types.hpp"
+#include "sf_ds/array_list.hpp"
 #include <iostream>
-#include <span>
 #include <xcb/xcb.h>
 #include <X11/keysym.h>
 #include <X11/XKBlib.h>
@@ -15,10 +17,13 @@
 #include <X11/Xlib-xcb.h>
 #include <sys/time.h>
 #include <xcb/xproto.h>
-
 #include <time.h> // nanosleep
 #include <unistd.h> // usleep
 #include <cstring>
+
+#define VK_USE_PLATFORM_XCB_KHR
+#include <vulkan/vulkan_core.h>
+#include <vulkan/vulkan_xcb.h>
 
 namespace sf {
 struct X11InternState {
@@ -307,8 +312,18 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
 }
 
-void platform_get_required_extension_names(std::span<const char*> ext_array) {
-    ext_array[0] = "VK_KHR_xcb_surface";
+void platform_get_required_extensions(FixedArrayList<const char*, 5>& required_extensions) {
+    required_extensions.append("VK_KHR_xcb_surface");
+}
+
+void platform_create_vk_surface(PlatformState& plat_state, VulkanContext& context) {
+    X11InternState* state = static_cast<X11InternState*>(plat_state.internal_state);
+
+    VkXcbSurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
+    create_info.connection = state->connection;
+    create_info.window = state->window;
+
+    sf_vk_check(vkCreateXcbSurfaceKHR(context.instance, &create_info, &context.allocator, &context.surface));
 }
 
 Key translate_keycode(u32 x_keycode) {

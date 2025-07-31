@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sf_core/types.hpp"
-#include "sf_platform/platform.hpp"
+#include "sf_core/defines.hpp"
 
 namespace sf {
 

@@ -1,3 +1,4 @@
+#include "sf_core/defines.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_platform/platform.hpp"
 #include <array>
@@ -36,8 +37,8 @@ SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
     }
 #endif
 
-    void* block = sf::platform_mem_alloc(byte_size, alignment);
-    sf_mem_set(block, byte_size, 0);
+    void* block = platform_mem_alloc(byte_size, alignment);
+    sf_mem_zero(block, byte_size);
 
 #ifdef SF_DEBUG
     mem_stats.total_allocated += byte_size;

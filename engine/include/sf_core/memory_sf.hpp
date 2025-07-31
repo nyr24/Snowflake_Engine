@@ -1,6 +1,7 @@
 #pragma once
+#include "sf_core/defines.hpp"
 #include "sf_core/types.hpp"
-#include "sf_platform/platform.hpp"
+#include "sf_platform/platform_mem_alloc_templated.hpp"
 #include <new>
 #include <utility>
 
@@ -57,6 +58,6 @@ SF_EXPORT void  sf_mem_copy(void* dest, void* src, usize byte_size);
 SF_EXPORT void  sf_mem_move(void* dest, void* src, usize byte_size);
 SF_EXPORT bool  sf_mem_cmp(void* first, void* second, usize byte_size);
 SF_EXPORT bool  sf_str_cmp(const char* first, const char* second);
-SF_EXPORT i8*   get_memory_usage_str();
+SF_EXPORT char* get_memory_usage_str();
 
 } // sf

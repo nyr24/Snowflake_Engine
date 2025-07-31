@@ -1,6 +1,5 @@
 #pragma once
 
-#include "sf_core/logger.hpp"
 #include "sf_core/types.hpp"
 #include "sf_ds/allocator.hpp"
 #include "sf_ds/iterator.hpp"
@@ -54,14 +53,6 @@ public:
 
     void clear() noexcept {
         _allocator.clear();
-    }
-
-    void debug_print() const noexcept {
-        if constexpr (HasFormatter<T, u8>) {
-            for (u32 i{0}; i < _allocator.count(); ++i) {
-                LOG_DEBUG("{} ", _allocator.ptr_offset_val(i));
-            }
-        }
     }
 
     static u64 hash(const sf::ArrayList<T, A>& key) noexcept {

@@ -3,7 +3,8 @@
 #include "sf_core/input.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
-#include "sf_renderer/renderer.hpp"
+#include "sf_platform/defines.hpp"
+#include "sf_vulkan/renderer.hpp"
 
 namespace sf {
 
@@ -53,7 +54,7 @@ bool application_create(sf::GameInstance* game_inst) {
 
     application_state.game_inst->on_resize(application_state.game_inst, application_state.width, application_state.height);
 
-    if (!renderer_init(game_inst->app_config.name, &application_state.platform_state)) {
+    if (!renderer_init(game_inst->app_config.name, application_state.platform_state)) {
         return false;
     }
 
@@ -65,14 +66,21 @@ void application_run() {
 #ifdef SF_PLATFORM_WAYLAND
     application_state.platform_state.start_event_loop(application_state);
 #else
+    Clock clock;
+    clock.start();
+
+    f64 running_time;
+    u8 frame_count;
+    constexpr f64 target_frame_seconds = 1.0 / 60.0;
+
     while (application_state.is_running) {
         if (!application_state.platform_state.start_event_loop()) {
             application_state.is_running = false;
         }
 
         if (!application_state.is_suspended) {
-            ApplicationState::TimepointType now_time = std::chrono::steady_clock::now();
-            f64 delta_time = (now_time - application_state.last_time).count();
+            f64 delta_time = application_state.clock.update_and_get_delta();
+            f64 frame_start_time = platform_get_abs_time();
 
             if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
                 LOG_FATAL("Game update failed, shutting down");
@@ -86,9 +94,27 @@ void application_run() {
                 break;
             }
 
+            // TODO: refactor packet creation
+            RenderPacket packet;
+            packet.delta_time = 0;
+            renderer_draw_frame(packet);
+
+            f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
+            running_time += frame_elapsed_time;
+
+        #ifdef SF_LIMIT_FRAME_COUNT
+            f64 frame_remain_seconds = target_frame_seconds - frame_elapsed_time;
+
+            if (frame_remain_seconds > 0.0) {
+                u64 remaining_ms = frame_remain_seconds * 1000.0;
+                platform_sleep(remaining_ms - 1);
+            }
+        #endif
+
+            ++frame_count;
+
             // update input at the end of the frame
             input_update(delta_time);
-            application_state.last_time = now_time;
         }
     }
 

@@ -1,11 +1,12 @@
 #pragma once
 
 // Unsigned int types.
+#include <cstddef>
+
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
 typedef unsigned long long u64;
-typedef unsigned long long usize;
 
 // Signed int types.
 typedef char i8;
@@ -18,14 +19,7 @@ typedef long long isize;
 typedef float f32;
 typedef double f64;
 
-// Pointer types
-#if defined(__x86_64__) || defined(_M_X64)
-typedef unsigned long long usize;
-typedef long long isize;
-#else
-typedef unsigned long usize;
-typedef long isize;
-#endif
+using usize = size_t;
 
 // Ensure all types are of the correct size.
 static_assert(sizeof(u8) == 1, "Expected u8 to be 1 byte.");

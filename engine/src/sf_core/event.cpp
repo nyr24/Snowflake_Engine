@@ -1,3 +1,4 @@
+#include "sf_core/defines.hpp"
 #include "sf_core/event.hpp"
 #include "sf_ds/array_list.hpp"
 

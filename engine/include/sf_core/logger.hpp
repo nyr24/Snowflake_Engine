@@ -1,7 +1,7 @@
 #pragma once
 
 #include <format>
-#include "sf_platform/platform.hpp"
+#include "sf_core/defines.hpp"
 #include "sf_core/types.hpp"
 
 #define LOG_WARN_ENABLED 1
