@@ -2,7 +2,7 @@
 
 // Shared types between vulkan subsystem
 
-#include "sf_core/types.hpp"
+#include "sf_core/defines.hpp"
 #include "sf_vulkan/allocator.hpp"
 #include <vulkan/vulkan_core.h>
 

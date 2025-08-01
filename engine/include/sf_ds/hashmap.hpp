@@ -1,7 +1,7 @@
 #pragma once
 
+#include "sf_core/defines.hpp"
 #include "sf_core/memory_sf.hpp"
-#include "sf_core/types.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_ds/iterator.hpp"
 #include "sf_ds/optional.hpp"

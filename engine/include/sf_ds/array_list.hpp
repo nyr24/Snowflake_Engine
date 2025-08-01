@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sf_core/types.hpp"
+#include "sf_core/defines.hpp"
 #include "sf_ds/allocator.hpp"
 #include "sf_ds/iterator.hpp"
 #include "sf_ds/traits.hpp"

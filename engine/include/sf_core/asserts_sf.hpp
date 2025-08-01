@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sf_core/types.hpp"
+#include "sf_core/defines.hpp"
 
 #ifdef SF_ASSERTS_ENABLED
 #if _MSC_VER

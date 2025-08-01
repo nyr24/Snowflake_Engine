@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sf_core/types.hpp"
+#include "sf_core/defines.hpp"
 
 namespace sf {
 void* platform_mem_alloc(u64 byte_size, u16 alignment);

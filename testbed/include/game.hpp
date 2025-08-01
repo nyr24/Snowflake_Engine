@@ -1,6 +1,6 @@
 #pragma once
 
-#include <sf_core/types.hpp>
+#include <sf_core/defines.hpp>
 #include <sf_core/game_types.hpp>
 
 struct GameState {

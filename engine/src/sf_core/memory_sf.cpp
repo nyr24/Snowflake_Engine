@@ -30,7 +30,7 @@ static std::array<std::string_view, MemoryTag::MEMORY_TAG_MAX_TAGS> memory_tag_s
     "SCENE",
 };
 
-SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
+SF_EXPORT void* sf_mem_alloc(usize byte_size, u16 alignment, MemoryTag tag) {
 #ifdef SF_DEBUG
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
         // LOG_INFO("unknown memory tag used for mem_alloc, please assign other tag later");
@@ -48,7 +48,7 @@ SF_EXPORT void* sf_mem_alloc(u64 byte_size, u16 alignment, MemoryTag tag) {
     return block;
 }
 
-SF_EXPORT void sf_mem_free(void* block, u64 byte_size, u16 alignment, MemoryTag tag) {
+SF_EXPORT void sf_mem_free(void* block, usize byte_size, u16 alignment, MemoryTag tag) {
 #ifdef SF_DEBUG
     if (tag == MemoryTag::MEMORY_TAG_UNKNOWN) {
         // LOG_INFO("unknown memory tag used for mem_free, please assign other tag later");
@@ -83,7 +83,7 @@ SF_EXPORT bool sf_mem_cmp(void* first, void* second, usize byte_size) {
     return std::memcmp(first, second, byte_size) == 0;
 }
 
-SF_EXPORT bool  sf_str_cmp(const char* first, const char* second) {
+SF_EXPORT bool sf_str_cmp(const char* first, const char* second) {
     return std::strcmp(first, second) == 0;
 }
 

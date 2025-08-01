@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sf_core/types.hpp"
+#include "sf_core/defines.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {

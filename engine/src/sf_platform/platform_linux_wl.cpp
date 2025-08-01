@@ -6,7 +6,7 @@
 #include "sf_core/clock.hpp"
 #include "sf_core/game_types.hpp"
 #include "sf_core/logger.hpp"
-#include "sf_core/types.hpp"
+#include "sf_core/defines.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_platform/wayland-util-custom.hpp"
 #include "sf_platform/xdg-shell-protocol.hpp"

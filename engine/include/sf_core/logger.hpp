@@ -2,7 +2,6 @@
 
 #include <format>
 #include "sf_core/defines.hpp"
-#include "sf_core/types.hpp"
 
 #define LOG_WARN_ENABLED 1
 #define LOG_INFO_ENABLED 1

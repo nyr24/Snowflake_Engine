@@ -1,6 +1,5 @@
 #pragma once
 #include "sf_core/defines.hpp"
-#include "sf_core/types.hpp"
 #include "sf_platform/platform_mem_alloc_templated.hpp"
 #include <new>
 #include <utility>

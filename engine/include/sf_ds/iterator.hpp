@@ -1,5 +1,5 @@
 #pragma once
-#include "sf_core/types.hpp"
+#include "sf_core/defines.hpp"
 #include <cstddef>
 #include <iterator>
 

@@ -5,7 +5,7 @@
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/utility.hpp"
-#include "sf_core/types.hpp"
+#include "sf_core/defines.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_vulkan/types.hpp"
 #include "sf_ds/array_list.hpp"
