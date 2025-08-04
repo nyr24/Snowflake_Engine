@@ -27,6 +27,10 @@ public:
         : ptr{ ptr }
     {}
 
+    PtrForwardIterator(const T* ptr)
+        : ptr{ const_cast<T*>(ptr) }
+    {}
+
     T&& operator*() const {
         return *ptr;
     }

@@ -1,4 +1,5 @@
 #pragma once
+#include "sf_core/defines.hpp"
 #include "sf_core/utility.hpp"
 
 namespace sf {
@@ -44,39 +45,38 @@ public:
         , _tag{ rhs._tag }
     {}
 
-    bool is_none() { return _tag == Tag::NONE; }
-    bool is_some() { return _tag == Tag::SOME; }
+    bool is_none() const { return _tag == Tag::NONE; }
+    bool is_some() const { return _tag == Tag::SOME; }
 
-    // optimized function, if size <= size of word return by value, else by reference
-    LRefOrValType<Some> unwrap() noexcept {
+    ConstLRefOrValType<Some> unwrap_read() const noexcept {
         if (_tag == Tag::NONE) {
             panic("Option is none!");
         }
         return _storage.some;
     }
 
-    Some& unwrap_ref() noexcept {
+    Some& unwrap_write() noexcept {
         if (_tag == Tag::NONE) {
             panic("Option is none!");
         }
         return _storage.some;
     }
 
-    LRefOrValType<Some> unwrap_or_default(RRefOrValType<Some> default_value) noexcept {
+    ConstLRefOrValType<Some> unwrap_or_default_read(RRefOrValType<Some> default_value) const noexcept {
         if (_tag == Tag::NONE) {
             return default_value;
         }
         return _storage.some;
     }
 
-    Some& unwrap_ref_or_default(RRefOrValType<Some> default_value) noexcept {
+    Some& unwrap_or_default_write(RRefOrValType<Some> default_value) noexcept {
         if (_tag == Tag::NONE) {
             return default_value;
         }
         return _storage.some;
     }
 
-    void set_none() {
+    void set_none() const noexcept {
         _tag = Tag::NONE;
         _storage.none = None::VALUE;
     }
@@ -84,12 +84,12 @@ public:
     // forward reference needed
     template<typename SomeT>
     requires sf::SameTypes<Some, SomeT>
-    void set_some(SomeT&& some_val) {
+    void set_some(SomeT&& some_val) const noexcept {
         _tag = Tag::SOME;
         _storage.some = std::forward<Some>(some_val);
     }
 
-    operator bool() {
+    operator bool() const noexcept {
         return this->is_some();
     }
 };
