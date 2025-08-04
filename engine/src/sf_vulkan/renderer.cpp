@@ -56,7 +56,7 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
     u32 available_extensions_count{0};
     vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, nullptr);
 
-    FixedArray<VkExtensionProperties, 100> available_extensions;
+    FixedArray<VkExtensionProperties, 100> available_extensions(available_extensions_count);
     vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, available_extensions.data());
 
     LOG_INFO("Available vulkan extensions: ");
@@ -75,13 +75,13 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
 
     u32 available_layer_count = 0;
     sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, 0));
-    FixedArray<VkLayerProperties, 30> available_layers;
+    FixedArray<VkLayerProperties, 30> available_layers(available_layer_count);
     sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data()));
 
     for (const char* req_layer : required_validation_layers) {
         bool is_available = false;
         for (const VkLayerProperties& available_layer : available_layers) {
-            if (sf_str_cmp(req_layer, available_layer.layerName) == 0) {
+            if (sf_str_cmp(req_layer, available_layer.layerName)) {
                 is_available = true;
                 break;
             }

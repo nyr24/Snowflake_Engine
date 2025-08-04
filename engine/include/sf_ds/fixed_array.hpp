@@ -26,6 +26,12 @@ public:
         : _count{ 0 }
     {}
 
+    explicit FixedArray(u32 count) noexcept
+        : _count{ count }
+    {
+        SF_ASSERT_MSG(count <= Capacity, "Provided count should fit specified capacity");
+    }
+
     FixedArray(std::initializer_list<T> init_list) noexcept
         : _count{ static_cast<u32>(init_list.size()) }
     {

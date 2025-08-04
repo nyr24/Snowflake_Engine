@@ -166,7 +166,7 @@ bool device_meet_requirements(
 
     u32 queue_family_count;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
-    FixedArray<VkQueueFamilyProperties, 15> queue_families;
+    FixedArray<VkQueueFamilyProperties, 15> queue_families(queue_family_count);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families.data());
 
     u8 min_transfer_score{255};
