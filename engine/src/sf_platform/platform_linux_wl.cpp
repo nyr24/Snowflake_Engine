@@ -15,7 +15,7 @@
 #include "sf_core/input.hpp"
 #include "sf_core/application.hpp"
 #include "sf_core/logger.hpp"
-#include "sf_ds/array_list.hpp"
+#include "sf_ds/fixed_array.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/types.hpp"
 #include <new>
@@ -835,7 +835,7 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
 }
 
-void platform_get_required_extensions(FixedArrayList<const char*, 5>& required_extensions) {
+void platform_get_required_extensions(FixedArray<const char*, 5>& required_extensions) {
     required_extensions.append("VK_KHR_wayland_surface");
 }
 

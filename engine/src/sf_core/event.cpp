@@ -1,14 +1,14 @@
 #include "sf_core/defines.hpp"
 #include "sf_core/event.hpp"
-#include "sf_ds/array_list.hpp"
+#include "sf_ds/dynamic_array.hpp"
 
 namespace sf {
 
 struct EventSystemState {
-    ArrayList<Event> event_lists[static_cast<u8>(SystemEventCode::COUNT)];
+    DynamicArray<Event> event_lists[static_cast<u8>(SystemEventCode::COUNT)];
     EventSystemState()
     {
-        for (ArrayList<Event>& list : event_lists) {
+        for (DynamicArray<Event>& list : event_lists) {
             list.reallocate(50);
         }
     }

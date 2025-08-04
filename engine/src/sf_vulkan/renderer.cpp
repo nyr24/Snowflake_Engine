@@ -1,3 +1,4 @@
+#include "sf_vulkan/types.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_ds/allocator.hpp"
 #include "sf_vulkan/allocator.hpp"
@@ -6,7 +7,7 @@
 #include "sf_core/logger.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_platform/platform.hpp"
-#include "sf_ds/array_list.hpp"
+#include "sf_ds/fixed_array.hpp"
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
@@ -39,7 +40,7 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
     VkInstanceCreateInfo vk_inst_create_info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     vk_inst_create_info.pApplicationInfo = &vk_app_info;
 
-    FixedArrayList<const char*, 5> required_extensions;
+    FixedArray<const char*, 5> required_extensions;
     required_extensions.append(VK_KHR_SURFACE_EXTENSION_NAME);
 #ifdef SF_DEBUG
     required_extensions.append(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -55,7 +56,7 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
     u32 available_extensions_count{0};
     vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, nullptr);
 
-    ArrayList<VkExtensionProperties> available_extensions(available_extensions_count, available_extensions_count);
+    FixedArray<VkExtensionProperties, 100> available_extensions;
     vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, available_extensions.data());
 
     LOG_INFO("Available vulkan extensions: ");
@@ -69,12 +70,12 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
 
     // Validation layers should only be enabled in debug mode
 #ifdef SF_DEBUG
-    FixedArrayList<const char*, 1> required_validation_layers;
+    FixedArray<const char*, 1> required_validation_layers;
     required_validation_layers.append("VK_LAYER_KHRONOS_validation");
 
     u32 available_layer_count = 0;
     sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, 0));
-    ArrayList<VkLayerProperties> available_layers(available_layer_count, available_layer_count);
+    FixedArray<VkLayerProperties, 30> available_layers;
     sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data()));
 
     for (const char* req_layer : required_validation_layers) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sf_core/defines.hpp"
-#include "sf_ds/array_list.hpp"
+#include "sf_ds/fixed_array.hpp"
 
 namespace sf {
 struct ApplicationState;
@@ -36,7 +36,7 @@ void    platform_console_write(const i8* message, u8 color);
 void    platform_console_write_error(const i8* message, u8 color);
 f64     platform_get_abs_time();
 void    platform_sleep(u64 ms);
-void    platform_get_required_extensions(FixedArrayList<const char*, 5>& required_extensions);
+void    platform_get_required_extensions(FixedArray<const char*, 5>& required_extensions);
 void    platform_create_vk_surface(PlatformState& plat_state, VulkanContext& context);
 
 } // sf

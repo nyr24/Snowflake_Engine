@@ -27,13 +27,8 @@ consteval bool smaller_than_two_words() {
 
 template<typename T>
 consteval bool should_pass_by_value() {
-    return smaller_than_word<T>() && !std::same_as<T, std::string_view>;
+    return smaller_than_two_words<T>() && !std::same_as<T, std::string_view>;
 }
-
-template<typename T>
-struct LRefOrVal {
-    using Type = std::conditional_t<should_pass_by_value<T>(), T, T&>;
-};
 
 template<typename T>
 struct RRefOrVal {
@@ -44,9 +39,6 @@ template<typename T>
 struct ConstLRefOrVal {
     using Type = std::conditional_t<should_pass_by_value<T>(), T, const T&>;
 };
-
-template<typename T>
-using LRefOrValType = LRefOrVal<T>::Type;
 
 template<typename T>
 using ConstLRefOrValType = ConstLRefOrVal<T>::Type;
