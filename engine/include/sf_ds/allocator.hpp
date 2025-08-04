@@ -21,7 +21,7 @@ private:
 
 public:
     ArenaAllocator() noexcept
-        : _capacity{ platform_get_mem_page_size() }
+        : _capacity{ platform_get_mem_page_size() * 10 }
         , _buffer{static_cast<u8*>(sf_mem_alloc(_capacity)) }
         , _count{ 0 }
     {}
@@ -50,8 +50,9 @@ public:
         }
     }
 
+    // returns handle (relative address to start of the buffer)
     template<typename T, typename... Args>
-    T* allocate(Args&&... args) noexcept
+    usize allocate(Args&&... args) noexcept
     {
         constexpr u32 sizeo_of_T = sizeof(T);
         constexpr u32 align_of_T = alignof(T);
@@ -63,12 +64,12 @@ public:
             reallocate(_capacity * 2);
         }
 
-        T* ptr_to_return = reinterpret_cast<T*>(_buffer + _count + padding_bytes);
+        usize handle_to_return = _count + padding_bytes;
         _count += padding_bytes + sizeo_of_T;
 
-        construct(ptr_to_return, std::forward<Args>(args)...);
+        construct_at<T, Args...>(reinterpret_cast<T*>(_buffer + handle_to_return), std::forward<Args>(args)...);
 
-        return ptr_to_return;
+        return handle_to_return;
     }
 
     void reallocate(u32 new_capacity) {
@@ -77,6 +78,31 @@ public:
         sf_mem_free(_buffer, _capacity);
         _capacity = new_capacity;
         _buffer = new_buffer;
+    }
+
+    template<typename T>
+    T* get_with_handle(u32 handle) const {
+        if (!is_handle_inside_buffer_count(handle)) {
+            return nullptr;
+        }
+
+        return reinterpret_cast<T*>(_buffer + handle);
+    }
+
+    void* get_with_handle(u32 handle) const {
+        if (!is_handle_inside_buffer_count(handle)) {
+            return nullptr;
+        }
+
+        return _buffer + handle;
+    }
+
+    bool is_handle_inside_buffer(u32 handle) const {
+        return handle < _capacity;
+    }
+
+    bool is_handle_inside_buffer_count(u32 handle) const {
+        return handle < _count;
     }
 
     u8* begin() noexcept { return _buffer; }
@@ -91,7 +117,7 @@ public:
 
 private:
     template<typename T, typename ...Args>
-    void construct(T* ptr, Args&&... args) noexcept
+    void construct_at(T* ptr, Args&&... args) noexcept
     {
         sf_mem_place(ptr, args...);
     }

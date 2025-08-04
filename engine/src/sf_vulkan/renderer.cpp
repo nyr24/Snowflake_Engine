@@ -16,7 +16,7 @@ static VulkanRenderer vk_renderer{};
 
 static VulkanContext vk_context{
     .allocator = VulkanAllocator{
-        .state = VulkanAllocatorState(platform_get_mem_page_size() * 10),
+        .state = VulkanAllocatorState(platform_get_mem_page_size() * 25),
         .callbacks = VkAllocationCallbacks{
             .pfnAllocation = vk_alloc_fn,
             .pfnReallocation = vk_realloc_fn,
@@ -97,7 +97,8 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
     vk_inst_create_info.ppEnabledLayerNames = required_validation_layers.data();
 #endif
 
-    sf_vk_check(vkCreateInstance(&vk_inst_create_info, nullptr, &vk_context.instance));
+    vk_context.allocator.callbacks.pUserData = static_cast<void*>(&vk_context.allocator);
+    sf_vk_check(vkCreateInstance(&vk_inst_create_info, &vk_context.allocator.callbacks, &vk_context.instance));
 
     // Debugger
 #ifdef SF_DEBUG

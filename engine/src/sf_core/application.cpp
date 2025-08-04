@@ -52,7 +52,7 @@ bool application_create(sf::GameInstance* game_inst) {
         return false;
     }
 
-    application_state.game_inst->on_resize(application_state.game_inst, application_state.width, application_state.height);
+    application_state.game_inst->resize(application_state.game_inst, application_state.width, application_state.height);
 
     if (!renderer_init(game_inst->app_config.name, application_state.platform_state)) {
         return false;

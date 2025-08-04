@@ -13,5 +13,5 @@ bool render(const sf::GameInstance* game_inst, f64 delta_time) {
     return true;
 }
 
-void on_resize(const sf::GameInstance* game_inst, u32 width, u32 height) {
+void resize(const sf::GameInstance* game_inst, u32 width, u32 height) {
 }

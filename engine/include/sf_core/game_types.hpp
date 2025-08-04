@@ -1,22 +1,25 @@
 #pragma once
 
 #include "sf_core/application.hpp"
-#include <functional>
+#include "sf_ds/allocator.hpp"
 
 namespace sf {
 struct GameInstance {
-    GameInstance() = default;
-    ~GameInstance();
-    GameInstance(GameInstance&& rhs) noexcept;
-    GameInstance& operator=(GameInstance&& rhs) noexcept;
-    GameInstance(const GameInstance& rhs) = delete;
-    GameInstance& operator=(const GameInstance& rhs) = delete;
+    using InitFn = bool(*)(const GameInstance*);
+    using UpdateFn = bool(*)(const GameInstance*, f64 delta_time);
+    using RenderFn = bool(*)(const GameInstance*, f64 delta_time);
+    using ResizeFn = void(*)(const GameInstance*, u32 width, u32 height);
 
-    std::function<bool(const GameInstance*)>                        init;
-    std::function<bool(const GameInstance*, f64 delta_time)>        update;
-    std::function<bool(const GameInstance*, f64 delta_time)>        render;
-    std::function<void(const GameInstance*, u32 width, u32 height)> on_resize;
-    void*                                                           game_state;
-    sf::ApplicationConfig                                           app_config;
+    GameInstance(ArenaAllocator& allocator)
+        : allocator{ allocator }
+    {}
+
+    InitFn init;
+    UpdateFn update;
+    RenderFn render;
+    ResizeFn resize;
+    ArenaAllocator& allocator;
+    ApplicationConfig app_config;
+    u32 game_state_handle;
 };
 }

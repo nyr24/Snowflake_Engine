@@ -12,7 +12,9 @@ struct VulkanAllocatorState {
 
 public:
     VulkanAllocatorState(u32 capacity);
+    ~VulkanAllocatorState();
     void grow_capacity(u32 new_capacity, usize alignment = 0);
+    bool is_address_in_range(void* addr);
 };
 
 void* vk_alloc_fn(void* user_data, usize alloc_bytes, usize alignment, VkSystemAllocationScope vk_alloc_scope);
