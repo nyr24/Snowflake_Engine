@@ -181,17 +181,17 @@ public:
         return true;
     }
 
-    PtrRandomAccessIterator<Bucket> begin() noexcept {
+    constexpr PtrRandomAccessIterator<Bucket> begin() noexcept {
         return PtrRandomAccessIterator<Bucket>(_buffer);
     }
 
-    PtrRandomAccessIterator<Bucket> end() noexcept {
+    constexpr PtrRandomAccessIterator<Bucket> end() noexcept {
         return PtrRandomAccessIterator<Bucket>(_buffer + _capacity);
     }
 private:
     void realloc() noexcept {
         u32 new_capacity = _capacity * _config.grow_factor;
-        Bucket* new_buffer = static_cast<Bucket*>(sf_mem_alloc_typed<Bucket, true>(new_capacity));
+        Bucket* new_buffer = static_cast<Bucket*>(sf_mem_realloc_typed<Bucket>(new_capacity));
         init_buffer_empty(new_buffer, new_capacity);
 
         for (u32 i{0}; i < _capacity; ++i) {
@@ -211,7 +211,9 @@ private:
             new_buffer[new_index] = std::move(bucket);
         }
 
-        sf_mem_free_typed<Bucket, true>(_buffer);
+        if (new_buffer != _buffer) {
+            sf_mem_free_typed<Bucket, true>(_buffer);
+        }
 
         _capacity = new_capacity;
         _buffer = new_buffer;

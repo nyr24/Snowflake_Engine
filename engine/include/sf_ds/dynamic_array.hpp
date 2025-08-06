@@ -21,7 +21,7 @@ public:
     using Pointer   = T*;
 
 public:
-    DynamicArray() noexcept
+    constexpr DynamicArray() noexcept
         : _capacity{ 0 }
         , _count{ 0 }
         , _buffer{ nullptr }
@@ -157,28 +157,20 @@ public:
         --_count;
     }
 
-    void pop() noexcept {
+    constexpr void pop() noexcept {
         deallocate(1);
     }
 
-    void clear() noexcept {
+    constexpr void clear() noexcept {
         deallocate(_count);
     }
 
-    void reallocate(u32 new_capacity) noexcept
-    {
-        if (new_capacity > _capacity) {
-            T* new_buffer = sf_mem_alloc_typed<T, true>(new_capacity);
-            sf_mem_copy(new_buffer, _buffer, _count * sizeof(T));
-            sf_mem_free(_buffer, _capacity * sizeof(T), alignof(T));
-            _capacity = new_capacity;
-            _buffer = new_buffer;
-        } else if (new_capacity < _capacity) {
-            if (new_capacity < _count) {
-                deallocate(_count - new_capacity);
-            }
-            _capacity = new_capacity;
-        }
+    constexpr void grow() noexcept {
+        reallocate(_capacity * 2);
+    }
+
+    void reserve(u32 new_capacity) noexcept {
+        reallocate(new_capacity);
     }
 
     void resize(u32 new_count) noexcept {
@@ -200,13 +192,16 @@ public:
         }
     }
 
-    T* data() noexcept { return _buffer; }
-    T& first() noexcept { return *_buffer; }
-    T* first_ptr() noexcept { return _buffer; }
-    T* last_ptr() noexcept { return _buffer + _count - 1; }
-    u32 count() const noexcept { return _count; }
-    u32 capacity() const noexcept { return _capacity; }
-    u32 capacity_remain() const noexcept { return _capacity - _count; }
+    constexpr bool is_empty() const { return _count == 0; }
+    constexpr bool is_full() const { return _count == _capacity; }
+
+    constexpr T* data() noexcept { return _buffer; }
+    constexpr T& first() noexcept { return *_buffer; }
+    constexpr T* first_ptr() noexcept { return _buffer; }
+    constexpr T* last_ptr() noexcept { return _buffer + _count - 1; }
+    constexpr u32 count() const noexcept { return _count; }
+    constexpr u32 capacity() const noexcept { return _capacity; }
+    constexpr u32 capacity_remain() const noexcept { return _capacity - _count; }
     // const counterparts
     const T* data() const noexcept { return _buffer; }
     const T& first() const noexcept { return *_buffer; }
@@ -214,11 +209,11 @@ public:
     const T* first_ptr() const noexcept { return _buffer; }
     const T* last_ptr() const noexcept { return _buffer + _count - 1; }
 
-    PtrRandomAccessIterator<T> begin() const noexcept {
+    constexpr PtrRandomAccessIterator<T> begin() const noexcept {
         return PtrRandomAccessIterator<T>(_buffer);
     }
 
-    PtrRandomAccessIterator<T> end() const noexcept {
+    constexpr PtrRandomAccessIterator<T> end() const noexcept {
         return PtrRandomAccessIterator<T>(_buffer + _count);
     }
 
@@ -263,6 +258,23 @@ private:
         _count += alloc_count;
 
         return return_memory;
+    }
+
+    void reallocate(u32 new_capacity) noexcept
+    {
+        if (new_capacity > _capacity) {
+            T* new_buffer = sf_mem_realloc_typed<T>(_buffer, new_capacity);
+            if (new_buffer != _buffer) {
+                sf_mem_free_typed<T, true>(_buffer);
+            }
+            _capacity = new_capacity;
+            _buffer = new_buffer;
+        } else if (new_capacity < _capacity) {
+            if (new_capacity < _count) {
+                deallocate(_count - new_capacity);
+            }
+            _capacity = new_capacity;
+        }
     }
 
     template<typename ...Args>

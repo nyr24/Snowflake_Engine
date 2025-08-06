@@ -22,7 +22,7 @@ public:
     using Pointer   = T*;
 
 public:
-    FixedArray() noexcept
+    constexpr FixedArray() noexcept
         : _count{ 0 }
     {}
 
@@ -110,21 +110,24 @@ public:
         --_count;
     }
 
-    void pop() noexcept {
+    constexpr void pop() noexcept {
         deallocate(1);
     }
 
-    void clear() noexcept {
+    constexpr void clear() noexcept {
         deallocate(_count);
     }
 
-    T* data() noexcept { return _buffer; }
-    T& first() noexcept { return *_buffer; }
-    T* first_ptr() noexcept { return _buffer; }
-    T* last_ptr() noexcept { return _buffer + _count - 1; }
-    u32 count() const noexcept { return _count; }
-    u32 capacity() const noexcept { return Capacity; }
-    u32 capacity_remain() const noexcept { return Capacity - _count; }
+    constexpr bool is_empty() const { return _count == 0; }
+    constexpr bool is_full() const { return _count == Capacity; }
+
+    constexpr T* data() noexcept { return _buffer; }
+    constexpr T& first() noexcept { return *_buffer; }
+    constexpr T* first_ptr() noexcept { return _buffer; }
+    constexpr T* last_ptr() noexcept { return _buffer + _count - 1; }
+    constexpr u32 count() const noexcept { return _count; }
+    constexpr u32 capacity() const noexcept { return Capacity; }
+    constexpr u32 capacity_remain() const noexcept { return Capacity - _count; }
     // const counterparts
     const T* data() const noexcept { return _buffer; }
     const T& first() const noexcept { return *_buffer; }
@@ -132,11 +135,11 @@ public:
     const T* first_ptr() const noexcept { return _buffer; }
     const T* last_ptr() const noexcept { return _buffer + _count - 1; }
 
-    PtrRandomAccessIterator<T> begin() const noexcept {
+    constexpr PtrRandomAccessIterator<T> begin() const noexcept {
         return PtrRandomAccessIterator<T>(static_cast<const T*>(_buffer));
     }
 
-    PtrRandomAccessIterator<T> end() const noexcept {
+    constexpr PtrRandomAccessIterator<T> end() const noexcept {
         return PtrRandomAccessIterator<T>(static_cast<const T*>(_buffer + _count));
     }
 

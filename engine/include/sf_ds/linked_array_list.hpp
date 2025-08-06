@@ -347,9 +347,10 @@ private:
 
     void grow() {
         u32 new_capacity = _capacity * 2;
-        ListNode* new_buffer = static_cast<ListNode*>(sf_mem_alloc(new_capacity * sizeof(ListNode), alignof(ListNode)));
-        sf_mem_copy(new_buffer, _buffer, _capacity * sizeof(ListNode));
-        sf_mem_free(_buffer, _capacity * sizeof(ListNode), alignof(ListNode));
+        ListNode* new_buffer = sf_mem_realloc_typed<ListNode>(new_capacity);
+        if (new_buffer != _buffer) {
+            sf_mem_free(_buffer, _capacity * sizeof(ListNode), alignof(ListNode));
+        }
 
         _buffer = new_buffer;
         _capacity = new_capacity;

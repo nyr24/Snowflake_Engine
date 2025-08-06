@@ -1,6 +1,5 @@
 #include "sf_vulkan/types.hpp"
 #include "sf_vulkan/renderer.hpp"
-#include "sf_ds/allocator.hpp"
 #include "sf_vulkan/allocator.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/types.hpp"
@@ -8,6 +7,7 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_ds/fixed_array.hpp"
+#include "sf_vulkan/allocator.hpp"
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
@@ -16,7 +16,7 @@ static VulkanRenderer vk_renderer{};
 
 static VulkanContext vk_context{
     .allocator = VulkanAllocator{
-        .state = VulkanAllocatorState(platform_get_mem_page_size() * 25),
+        .blocks = std::list<VulkanAllocatorBlockList>{ VulkanAllocatorBlockList(platform_get_mem_page_size() * 10), VulkanAllocatorBlockList(platform_get_mem_page_size() * 10) },
         .callbacks = VkAllocationCallbacks{
             .pfnAllocation = vk_alloc_fn,
             .pfnReallocation = vk_realloc_fn,

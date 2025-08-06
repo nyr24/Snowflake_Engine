@@ -52,19 +52,19 @@ public:
 
     // returns handle (relative address to start of the buffer)
     template<typename T, typename... Args>
-    usize allocate(Args&&... args) noexcept
+    u32 allocate(Args&&... args) noexcept
     {
         constexpr u32 sizeo_of_T = sizeof(T);
         constexpr u32 align_of_T = alignof(T);
 
         static_assert(is_power_of_two(align_of_T) && "should be power of 2");
 
-        usize padding_bytes = reinterpret_cast<usize>(_buffer + _count) % align_of_T;
+        u32 padding_bytes = reinterpret_cast<usize>(_buffer + _count) % align_of_T;
         if (_count + padding_bytes + sizeo_of_T > _capacity) {
             reallocate(_capacity * 2);
         }
 
-        usize handle_to_return = _count + padding_bytes;
+        u32 handle_to_return = _count + padding_bytes;
         _count += padding_bytes + sizeo_of_T;
 
         construct_at<T, Args...>(reinterpret_cast<T*>(_buffer + handle_to_return), std::forward<Args>(args)...);

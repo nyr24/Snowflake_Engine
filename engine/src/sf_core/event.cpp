@@ -9,7 +9,7 @@ struct EventSystemState {
     EventSystemState()
     {
         for (DynamicArray<Event>& list : event_lists) {
-            list.reallocate(50);
+            list.reserve(50);
         }
     }
 };
