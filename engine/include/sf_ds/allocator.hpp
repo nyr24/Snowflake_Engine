@@ -2,6 +2,7 @@
 
 #include "sf_core/utility.hpp"
 #include "sf_core/memory_sf.hpp"
+#include "sf_containers/result.hpp"
 #include <utility>
 
 namespace sf {
@@ -13,9 +14,7 @@ u32 platform_get_mem_page_size();
 // for allocating global single-item stuff from the start of the program and deallocating all at once at the end
 struct ArenaAllocator {
 private:
-    // in bytes
     u32 _capacity;
-    // in bytes
     u32 _count;
     u8* _buffer;
 
@@ -54,20 +53,30 @@ public:
     template<typename T, typename... Args>
     u32 allocate(Args&&... args) noexcept
     {
-        constexpr u32 sizeo_of_T = sizeof(T);
-        constexpr u32 align_of_T = alignof(T);
+        static_assert(is_power_of_two(alignof(T)) && "should be power of 2");
 
-        static_assert(is_power_of_two(align_of_T) && "should be power of 2");
-
-        u32 padding_bytes = reinterpret_cast<usize>(_buffer + _count) % align_of_T;
-        if (_count + padding_bytes + sizeo_of_T > _capacity) {
+        u32 padding_bytes = sf_calc_padding(_buffer + _count, alignof(T));
+        if (_count + padding_bytes + sizeof(T) > _capacity) {
             reallocate(_capacity * 2);
         }
 
         u32 handle_to_return = _count + padding_bytes;
-        _count += padding_bytes + sizeo_of_T;
+        _count += padding_bytes + sizeof(T);
 
         construct_at<T, Args...>(reinterpret_cast<T*>(_buffer + handle_to_return), std::forward<Args>(args)...);
+
+        return handle_to_return;
+    }
+
+    u32 allocate(u32 size, u16 alignment) noexcept
+    {
+        u32 padding_bytes = sf_calc_padding(_buffer + _count, alignment);
+        if (_count + padding_bytes + size > _capacity) {
+            reallocate(_capacity * 2);
+        }
+
+        u32 handle_to_return = _count + padding_bytes;
+        _count += padding_bytes + size;
 
         return handle_to_return;
     }
@@ -121,6 +130,42 @@ private:
     {
         sf_mem_place(ptr, args...);
     }
+};
+
+// FreeList allocator
+struct FreeListAllocHeader {
+    u32 size;
+    // padding includes header
+    u32 padding;
+};
+
+struct FreeListNode {
+    FreeListNode* next;
+    u32 size;
+};
+
+struct FreeList {
+
+private:
+    u8* _buffer;
+    // TODO: should we head?
+    FreeListNode* _head;
+    u32 _capacity;
+
+public:
+    static constexpr usize MIN_ALLOC_SIZE = sizeof(FreeListNode);
+
+    FreeList(void* data, u32 capacity) noexcept;
+    void* allocate_block(u32 size, u16 alignment) noexcept;
+    Result<u32> allocate_block_and_return_handle(u32 size, u16 alignment) noexcept;
+    bool free_block(void* ptr) noexcept;
+    bool free_block_with_handle(u32 handle) noexcept;
+    void free_all() noexcept;
+    void insert_node(FreeListNode* prev, FreeListNode* node_to_insert) noexcept;
+    void coallescense_nodes(FreeListNode* prev, FreeListNode* free_node) noexcept;
+    void remove_node(FreeListNode* prev, FreeListNode* node_to_remove) noexcept;
+    u32 get_remain_space() noexcept;
+    usize calc_padding_with_header(void* ptr, u16 alignment, usize header_size);
 };
 
 } // sf

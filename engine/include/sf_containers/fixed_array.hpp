@@ -4,7 +4,7 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_core/memory_sf.hpp"
-#include "sf_ds/iterator.hpp"
+#include "sf_containers/iterator.hpp"
 #include <initializer_list>
 #include <utility>
 
@@ -47,16 +47,25 @@ public:
     FixedArray(const FixedArray<T, Capacity>& rhs) noexcept
         : _count{ rhs._count }
     {
-        sf_mem_copy((void*)(_buffer), (void*)(rhs._buffer), sizeof(T) * _count);
+        sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
     }
 
     FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
-        sf_mem_copy((void*)(_buffer), (void*)(rhs._buffer), sizeof(T) * _count);
+        sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
         return *this;
     }
 
-    FixedArray(FixedArray<T, Capacity>&& rhs) = delete;
-    FixedArray<T, Capacity>& operator=(FixedArray<T, Capacity>&& rhs) = delete;
+    FixedArray(FixedArray<T, Capacity>&& rhs) noexcept
+        : _count{ rhs._count }
+    {
+        sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
+    }
+
+    FixedArray<T, Capacity>& operator=(FixedArray<T, Capacity>&& rhs) noexcept {
+        sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
+        return *this;
+
+    }
 
     friend bool operator==(const FixedArray<T, Capacity>& first, const FixedArray<T, Capacity>& second) noexcept {
         return first._count == second._count && sf_mem_cmp(first._buffer, second._buffer, first._count * sizeof(T));

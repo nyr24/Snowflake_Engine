@@ -3,7 +3,7 @@
 #include "sf_core/defines.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/memory_sf.hpp"
-#include "sf_ds/iterator.hpp"
+#include "sf_containers/iterator.hpp"
 #include <utility>
 
 namespace sf {
@@ -42,8 +42,24 @@ public:
         allocate_and_default_construct(count);
     }
 
+    DynamicArray(std::pair<u32, std::initializer_list<T>> args) noexcept
+        : _capacity{ static_cast<u32>(args.first) }
+        , _count{0}
+        , _buffer{ sf_mem_alloc_typed<T, true>(_capacity) }
+    {
+        SF_ASSERT_MSG(args.second.size() <= _capacity, "Initializer list size don't fit for specified capacity");
+        allocate(args.second.size());
+
+        u32 i{0};
+        for (auto curr = args.second.begin(); curr != args.second.end(); ++curr, ++i) {
+            construct_at(_buffer + i, *curr);
+        }
+    }
+
     DynamicArray(std::initializer_list<T> init_list) noexcept
-        : _count{ static_cast<u32>(init_list.size()) }
+        : _capacity{ static_cast<u32>(init_list.size()) }
+        , _count{0}
+        , _buffer{ sf_mem_alloc_typed<T, true>(_capacity) }
     {
         SF_ASSERT_MSG(init_list.size() <= _capacity, "Initializer list size don't fit for specified capacity");
         allocate(init_list.size());

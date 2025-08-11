@@ -17,6 +17,32 @@ SF_EXPORT void  sf_mem_move(void* dest, void* src, usize byte_size);
 SF_EXPORT bool  sf_mem_cmp(void* first, void* second, usize byte_size);
 SF_EXPORT bool  sf_str_cmp(const char* first, const char* second);
 
+u32 sf_calc_padding(void* address, u16 alignment);
+bool is_address_in_range(void* start, u32 total_size, void* addr);
+u32 ptr_diff(void* ptr1, void* ptr2);
+u32 turn_ptr_into_handle(void* ptr, void* start);
+
+template<typename ReturnPtr = void*>
+ReturnPtr turn_handle_into_ptr(u32 handle, void* start) {
+    return reinterpret_cast<ReturnPtr>(reinterpret_cast<u8*>(start) + handle);
+}
+
+template<typename T>
+T* ptr_step_bytes_forward(T* ptr, u32 byte_count) {
+    return reinterpret_cast<T*>(reinterpret_cast<u8*>(ptr) + byte_count);
+}
+
+template<typename T>
+T* ptr_step_bytes_backward(T* ptr, u32 byte_count) {
+    return reinterpret_cast<T*>(reinterpret_cast<u8*>(ptr) - byte_count);
+}
+
+template<typename T>
+T* sf_align_forward(T* address, u16 alignment) {
+    usize addr = reinterpret_cast<usize>(address);
+    return reinterpret_cast<T*>((addr + (alignment - 1)) & ~(alignment - 1));
+}
+
 // templated versions of memory functions
 template<typename T, bool should_align>
 SF_EXPORT T* sf_mem_alloc_typed(usize count) {

@@ -6,8 +6,10 @@
 #include "sf_core/logger.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_platform/platform.hpp"
-#include "sf_ds/fixed_array.hpp"
+#include "sf_containers/fixed_array.hpp"
 #include "sf_vulkan/allocator.hpp"
+#include "sf_allocators/free_list_allocator.hpp"
+#include <list>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
@@ -16,7 +18,7 @@ static VulkanRenderer vk_renderer{};
 
 static VulkanContext vk_context{
     .allocator = VulkanAllocator{
-        .blocks = std::list<VulkanAllocatorBlockList>{ VulkanAllocatorBlockList(platform_get_mem_page_size() * 10), VulkanAllocatorBlockList(platform_get_mem_page_size() * 10) },
+        .lists = std::list<FreeList>{ FreeList(platform_get_mem_page_size() * 10, false), FreeList(platform_get_mem_page_size() * 10, false) },
         .callbacks = VkAllocationCallbacks{
             .pfnAllocation = vk_alloc_fn,
             .pfnReallocation = vk_realloc_fn,

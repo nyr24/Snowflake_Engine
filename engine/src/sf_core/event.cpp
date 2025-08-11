@@ -1,6 +1,6 @@
 #include "sf_core/defines.hpp"
 #include "sf_core/event.hpp"
-#include "sf_ds/dynamic_array.hpp"
+#include "sf_containers/dynamic_array.hpp"
 
 namespace sf {
 

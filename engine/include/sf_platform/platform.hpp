@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sf_core/defines.hpp"
-#include "sf_ds/fixed_array.hpp"
+#include "sf_containers/fixed_array.hpp"
 
 namespace sf {
 struct ApplicationState;

@@ -3,9 +3,9 @@
 // Shared types between vulkan subsystem
 
 #include "sf_core/defines.hpp"
-#include "sf_ds/dynamic_array.hpp"
-#include "sf_ds/fixed_array.hpp"
-#include "sf_ds/optional.hpp"
+#include "sf_containers/dynamic_array.hpp"
+#include "sf_containers/fixed_array.hpp"
+#include "sf_containers/optional.hpp"
 #include "sf_vulkan/allocator.hpp"
 #include <vulkan/vulkan_core.h>
 

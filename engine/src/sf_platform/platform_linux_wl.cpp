@@ -15,7 +15,7 @@
 #include "sf_core/input.hpp"
 #include "sf_core/application.hpp"
 #include "sf_core/logger.hpp"
-#include "sf_ds/fixed_array.hpp"
+#include "sf_containers/fixed_array.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/types.hpp"
 #include <new>

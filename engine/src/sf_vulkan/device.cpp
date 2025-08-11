@@ -1,12 +1,11 @@
 #include "sf_vulkan/device.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
-#include "sf_core/memory_sf.hpp"
-#include "sf_ds/dynamic_array.hpp"
-#include "sf_ds/fixed_array.hpp"
-#include "sf_ds/optional.hpp"
+#include "sf_containers/dynamic_array.hpp"
+#include "sf_containers/fixed_array.hpp"
+#include "sf_containers/optional.hpp"
 #include "sf_vulkan/types.hpp"
-#include "sf_ds/fixed_array.hpp"
+#include "sf_containers/fixed_array.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {

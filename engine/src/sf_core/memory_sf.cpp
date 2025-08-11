@@ -55,4 +55,36 @@ SF_EXPORT bool sf_str_cmp(const char* first, const char* second) {
     return std::strcmp(first, second) == 0;
 }
 
+u32 sf_calc_padding(void* address, u16 alignment) {
+    void* aligned_addr = sf_align_forward(address, alignment);
+    return reinterpret_cast<usize>(aligned_addr) - reinterpret_cast<usize>(address);
+}
+
+bool is_address_in_range(void* start, u32 total_size, void* addr) {
+    usize start_v = reinterpret_cast<usize>(start);
+    usize addr_v = reinterpret_cast<usize>(addr);
+    usize end = start_v + total_size;
+    return addr_v >= start_v && addr_v < end;
+}
+
+u32 turn_ptr_into_handle(void* ptr, void* start) {
+    usize offset_v = reinterpret_cast<usize>(ptr);
+    usize start_v = reinterpret_cast<usize>(start);
+
+    SF_ASSERT_MSG(offset_v >= start_v, "start_v can't be bigger than ptr");
+
+    return offset_v - start_v;
+}
+
+u32 ptr_diff(void* ptr1, void* ptr2) {
+    usize val_1 = reinterpret_cast<usize>(ptr1);
+    usize val_2 = reinterpret_cast<usize>(ptr2);
+
+    if (val_1 > val_2) {
+        return val_1 - val_2;
+    } else {
+        return val_2 - val_1;
+    }
+}
+
 } // sf

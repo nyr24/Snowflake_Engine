@@ -30,8 +30,8 @@ public:
         , _tag{ Tag::NONE }
     {}
 
-    Option(Some some_val)
-        : _storage{ .some = some_val }
+    Option(RRefOrValType<Some> some_val)
+        : _storage{ .some = std::move(some_val) }
         , _tag{ Tag::SOME }
     {}
 
@@ -48,7 +48,7 @@ public:
     bool is_none() const { return _tag == Tag::NONE; }
     bool is_some() const { return _tag == Tag::SOME; }
 
-    ConstLRefOrValType<Some> unwrap_read() const noexcept {
+    const Some& unwrap_read() const noexcept {
         if (_tag == Tag::NONE) {
             panic("Option is none!");
         }
@@ -62,31 +62,14 @@ public:
         return _storage.some;
     }
 
-    ConstLRefOrValType<Some> unwrap_or_default_read(RRefOrValType<Some> default_value) const noexcept {
-        if (_tag == Tag::NONE) {
-            return default_value;
-        }
-        return _storage.some;
-    }
-
-    Some& unwrap_or_default_write(RRefOrValType<Some> default_value) noexcept {
-        if (_tag == Tag::NONE) {
-            return default_value;
-        }
-        return _storage.some;
-    }
-
-    void set_none() const noexcept {
+    void set_none() noexcept {
         _tag = Tag::NONE;
         _storage.none = None::VALUE;
     }
  
-    // forward reference needed
-    template<typename SomeT>
-    requires sf::SameTypes<Some, SomeT>
-    void set_some(SomeT&& some_val) const noexcept {
+    void set_some(RRefOrValType<Some> some_val) noexcept {
         _tag = Tag::SOME;
-        _storage.some = std::forward<Some>(some_val);
+        _storage.some = std::move(some_val);
     }
 
     operator bool() const noexcept {
