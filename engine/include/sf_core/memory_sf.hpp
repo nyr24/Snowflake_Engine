@@ -21,10 +21,16 @@ u32 sf_calc_padding(void* address, u16 alignment);
 bool is_address_in_range(void* start, u32 total_size, void* addr);
 u32 ptr_diff(void* ptr1, void* ptr2);
 u32 turn_ptr_into_handle(void* ptr, void* start);
+u32 calc_padding_with_header(void* ptr, u16 alignment, u16 header_size);
 
 template<typename ReturnPtr = void*>
 ReturnPtr turn_handle_into_ptr(u32 handle, void* start) {
     return reinterpret_cast<ReturnPtr>(reinterpret_cast<u8*>(start) + handle);
+}
+
+template<typename ReturnPtr = void*>
+ReturnPtr rebase_ptr(void* old_ptr, void* old_base, void* new_base) {
+    return reinterpret_cast<ReturnPtr>(turn_handle_into_ptr(turn_ptr_into_handle(old_ptr, old_base), new_base));
 }
 
 template<typename T>

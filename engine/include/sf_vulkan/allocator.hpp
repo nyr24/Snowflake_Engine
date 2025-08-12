@@ -17,7 +17,7 @@ void vk_intern_alloc_notification(void* user_data, usize alloc_bytes, VkInternal
 void vk_intern_free_notification(void* user_data, usize alloc_bytes, VkInternalAllocationType intern_alloc_type, VkSystemAllocationScope vk_alloc_scope);
 
 struct VulkanAllocator {
-    std::list<FreeList>     lists;
+    std::list<FreeList<{ true, false }>>     lists;
     VkAllocationCallbacks   callbacks;
 };
 

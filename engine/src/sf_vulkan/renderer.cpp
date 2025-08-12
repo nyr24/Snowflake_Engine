@@ -18,7 +18,10 @@ static VulkanRenderer vk_renderer{};
 
 static VulkanContext vk_context{
     .allocator = VulkanAllocator{
-        .lists = std::list<FreeList>{ FreeList(platform_get_mem_page_size() * 10, false), FreeList(platform_get_mem_page_size() * 10, false) },
+        .lists = std::list{
+            FreeList<{ true, false }>(platform_get_mem_page_size() * 10),
+            FreeList<{ true, false }>(platform_get_mem_page_size() * 10)
+        },
         .callbacks = VkAllocationCallbacks{
             .pfnAllocation = vk_alloc_fn,
             .pfnReallocation = vk_realloc_fn,

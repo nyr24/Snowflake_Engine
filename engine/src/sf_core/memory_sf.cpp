@@ -21,9 +21,6 @@ SF_EXPORT void* sf_mem_realloc(void* ptr, usize byte_size) {
     if (!block) {
         panic("Out of memory");
     }
-#ifdef SF_DEBUG
-    sf_mem_zero(block, byte_size);
-#endif
     return block;
 }
 
@@ -85,6 +82,32 @@ u32 ptr_diff(void* ptr1, void* ptr2) {
     } else {
         return val_2 - val_1;
     }
+}
+
+u32 calc_padding_with_header(void* ptr, u16 alignment, u16 header_size) {
+	usize p, a, modulo, padding;
+
+	p = reinterpret_cast<usize>(ptr);
+	a = alignment;
+	modulo = p & (a - 1); // (p % a) as it assumes alignment is a power of two
+
+	padding = 0;
+
+	if (modulo != 0) {
+		padding = a - modulo;
+	}
+
+	if (padding < header_size) {
+		header_size -= padding;
+
+		if ((header_size & (a - 1)) != 0) {
+			padding += a * (1 + (header_size / a));
+		} else {
+			padding += a * (header_size / a);
+		}
+	}
+
+	return static_cast<u32>(padding);
 }
 
 } // sf
