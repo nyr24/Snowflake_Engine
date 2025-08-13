@@ -12,6 +12,17 @@
 namespace sf {
 struct PlatformState;
 
+struct VulkanDeviceQueueFamilyInfo {
+    u8 graphics_family_index;
+    u8 graphics_available_queue_count;
+    u8 present_family_index;
+    u8 present_available_queue_count;
+    u8 compute_family_index;
+    u8 compute_available_queue_count;
+    u8 transfer_family_index;
+    u8 transfer_available_queue_count;
+};
+
 // device
 struct VulkanDevice {
     VkPhysicalDevice                    physical_device;
@@ -19,10 +30,10 @@ struct VulkanDevice {
     VkPhysicalDeviceProperties          properties;
     VkPhysicalDeviceFeatures            features;
     VkPhysicalDeviceMemoryProperties    memory_properties;
-    u32                                 graphics_queue_index;
-    u32                                 present_queue_index;
-    u32                                 transfer_queue_index;
-    u32                                 compute_queue_index;
+    VkQueue                             graphics_queue;
+    VkQueue                             present_queue;
+    VkQueue                             transfer_queue;
+    VulkanDeviceQueueFamilyInfo         queue_family_info;
 };
 
 enum VulkanPhysicalDeviceRequirementsBits : u16 {
@@ -48,13 +59,6 @@ struct VulkanPhysicalDeviceRequirements {
 
     VulkanPhysicalDeviceRequirementsFlags                       flags;
     Option<FixedArray<const char*, MAX_DEVICE_EXTENSION_NAMES>> device_extension_names;
-};
-
-struct VulkanDeviceQueueFamilyInfo {
-    u32 graphics_family_index;
-    u32 present_family_index;
-    u32 compute_family_index;
-    u32 transfer_family_index;
 };
 
 struct VulkanSwapchainSupportInfo {

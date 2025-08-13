@@ -194,7 +194,7 @@ void platform_create_vk_surface(PlatformState& plat_state, VulkanContext& contex
     create_info.hinstance = state->h_instance;
     create_info.hwnd = state->hwnd;
 
-    sf_vk_check(vkCreateWin32SurfaceKHR(context.instance, &create_info, &context.allocator, &context.surface));
+    sf_vk_check(vkCreateWin32SurfaceKHR(context.instance, &create_info, nullptr, &context.surface));
 }
 
 HRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param) {

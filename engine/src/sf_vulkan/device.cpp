@@ -11,10 +11,95 @@
 namespace sf {
 
 bool device_create(VulkanContext& context) {
-    return device_select(context);
-}
+    if (!device_select(context)) {
+        return false;
+    }
 
-bool device_destroy(VulkanContext& context);
+    // Do not create additional queues for shared indices.
+    bool present_shares_graphics_queue = context.device.queue_family_info.graphics_family_index == context.device.queue_family_info.present_family_index;
+    bool transfer_shares_other_queues = context.device.queue_family_info.transfer_family_index == context.device.queue_family_info.graphics_family_index
+        || context.device.queue_family_info.transfer_family_index == context.device.queue_family_info.present_family_index;
+
+    u32 index_count = 1;
+    if (!present_shares_graphics_queue) {
+        index_count++;
+    }
+    if (!transfer_shares_other_queues) {
+        index_count++;
+    }
+
+    constexpr u32 MAX_INDEX_COUNT = 3;
+    FixedArray<u32, MAX_INDEX_COUNT> indices(index_count);
+
+    u8 index = 0;
+    indices[index++] = context.device.queue_family_info.graphics_family_index;
+    if (!present_shares_graphics_queue) {
+        indices[index++] = context.device.queue_family_info.present_family_index;
+    }
+    if (!transfer_shares_other_queues) {
+        indices[index++] = context.device.queue_family_info.transfer_family_index;
+    }
+
+    FixedArray<VkDeviceQueueCreateInfo, MAX_INDEX_COUNT> queue_create_infos(index_count);
+
+    for (u32 i = 0; i < index_count; ++i) {
+        queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queue_create_infos[i].queueFamilyIndex = indices[i];
+        queue_create_infos[i].queueCount = 1;
+        if (indices[i] == context.device.queue_family_info.graphics_family_index && context.device.queue_family_info.graphics_available_queue_count >= 2) {
+            queue_create_infos[i].queueCount = 2;
+        }
+        queue_create_infos[i].flags = 0;
+        queue_create_infos[i].pNext = 0;
+        f32 queue_priority = 1.0f;
+        queue_create_infos[i].pQueuePriorities = &queue_priority;
+    }
+
+    // Request device features.
+    // TODO: should be config driven
+    VkPhysicalDeviceFeatures device_features = {};
+    device_features.samplerAnisotropy = VK_TRUE;  // Request anistrophy
+
+    VkDeviceCreateInfo device_create_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+    device_create_info.queueCreateInfoCount = index_count;
+    device_create_info.pQueueCreateInfos = queue_create_infos.data();
+    device_create_info.pEnabledFeatures = &device_features;
+    device_create_info.enabledExtensionCount = 1;
+    const char* extension_names = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    device_create_info.ppEnabledExtensionNames = &extension_names;
+
+    // Create the device.
+    sf_vk_check(vkCreateDevice(
+        context.device.physical_device,
+        &device_create_info,
+        // &context.allocator.callbacks,
+        nullptr,
+        &context.device.logical_device)
+    );
+
+     // Get queues.
+    vkGetDeviceQueue(
+        context.device.logical_device,
+        context.device.queue_family_info.graphics_family_index,
+        0,
+        &context.device.graphics_queue);
+
+    vkGetDeviceQueue(
+        context.device.logical_device,
+        context.device.queue_family_info.present_family_index,
+        0,
+        &context.device.present_queue);
+
+    vkGetDeviceQueue(
+        context.device.logical_device,
+        context.device.queue_family_info.transfer_family_index,
+        0,
+        &context.device.transfer_queue);
+
+    LOG_INFO("Logical device and queues were successfully created");
+
+    return true;
+}
 
 bool device_select(VulkanContext& context) {
     u32 physical_device_count{0};
@@ -37,8 +122,6 @@ bool device_select(VulkanContext& context) {
         ,
         .device_extension_names = Option<FixedArray<const char*, 10>>(FixedArray<const char*, 10>{ (const char*)(VK_KHR_SWAPCHAIN_EXTENSION_NAME) })
     };
-
-    physical_device_requirements.device_extension_names.unwrap_write().append( static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME) );
 
     for (u32 i{0}; i < physical_device_count; ++i) {
         VkPhysicalDeviceProperties physical_device_properties;
@@ -103,9 +186,7 @@ bool device_select(VulkanContext& context) {
         #endif // SF_DEBUG
 
             context.device.physical_device = physical_devices[i];
-            context.device.graphics_queue_index = queue_family_info.graphics_family_index;
-            context.device.transfer_queue_index = queue_family_info.transfer_family_index;
-            context.device.present_queue_index = queue_family_info.present_family_index;
+            context.device.queue_family_info = queue_family_info;
             context.device.properties = physical_device_properties;
             context.device.properties = physical_device_properties;
             context.device.properties = physical_device_properties;
@@ -158,10 +239,10 @@ bool device_meet_requirements(
         }
     }
 
-    out_queue_family_info.compute_family_index = -1;
-    out_queue_family_info.graphics_family_index = -1;
-    out_queue_family_info.transfer_family_index = -1;
-    out_queue_family_info.present_family_index = -1;
+    out_queue_family_info.compute_family_index = 255;
+    out_queue_family_info.graphics_family_index = 255;
+    out_queue_family_info.transfer_family_index = 255;
+    out_queue_family_info.present_family_index = 255;
 
     u32 queue_family_count;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nullptr);
@@ -176,17 +257,20 @@ bool device_meet_requirements(
         if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             ++curr_transfer_score;
             out_queue_family_info.graphics_family_index = i;
+            out_queue_family_info.graphics_available_queue_count = queue_families[i].queueCount;
         }
 
         if (queue_families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
             ++curr_transfer_score;
             out_queue_family_info.compute_family_index = i;
+            out_queue_family_info.compute_available_queue_count = queue_families[i].queueCount;
         }
 
         if (queue_families[i].queueFlags & VK_QUEUE_TRANSFER_BIT) {
             if (curr_transfer_score < min_transfer_score) {
                 min_transfer_score = curr_transfer_score;
                 out_queue_family_info.transfer_family_index = i;
+                out_queue_family_info.transfer_available_queue_count = queue_families[i].queueCount;
             }
         }
 
@@ -204,10 +288,14 @@ bool device_meet_requirements(
         out_queue_family_info.transfer_family_index
     );
 
-    bool device_meets_requirements = (!requirements_has_graphics(requirements.flags) || requirements_has_graphics(requirements.flags) && out_queue_family_info.graphics_family_index != -1)
-        && (!requirements_has_compute(requirements.flags) || requirements_has_compute(requirements.flags) && out_queue_family_info.compute_family_index != -1)
-        && (!requirements_has_transfer(requirements.flags) || requirements_has_transfer(requirements.flags) && out_queue_family_info.transfer_family_index != -1)
-        && (!requirements_has_present(requirements.flags) || requirements_has_present(requirements.flags) && out_queue_family_info.present_family_index != -1);
+    bool device_meets_requirements = (!requirements_has_graphics(requirements.flags) || requirements_has_graphics(requirements.flags) && out_queue_family_info.graphics_family_index != 255)
+        && (!requirements_has_compute(requirements.flags) || requirements_has_compute(requirements.flags) && out_queue_family_info.compute_family_index != 255)
+        && (!requirements_has_transfer(requirements.flags) || requirements_has_transfer(requirements.flags) && out_queue_family_info.transfer_family_index != 255)
+        && (!requirements_has_present(requirements.flags) || requirements_has_present(requirements.flags) && out_queue_family_info.present_family_index != 255);
+
+    if (!device_meets_requirements) {
+        return false;
+    }
 
     device_query_swapchain_support(device, surface, out_swapchain_support_info);
 
@@ -223,7 +311,7 @@ bool device_meet_requirements(
             DynamicArray<VkExtensionProperties> available_extensions(available_extension_count, available_extension_count);
             sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, available_extensions.data()));
 
-            for (const auto& required_extension : requirements.device_extension_names.unwrap_read()) {
+            for (const auto* required_extension : requirements.device_extension_names.unwrap()) {
                 LOG_INFO("Checking for device {}, extension: {}", properties.deviceName, required_extension);
                 bool is_available{false};
 
@@ -250,6 +338,25 @@ bool device_meet_requirements(
 
     LOG_INFO("Device {} meets all requirements!", properties.deviceName);
     return true;
+}
+
+// called from VulkanContext destructor
+void device_destroy(VulkanContext& context) {
+    context.device.graphics_queue = nullptr;
+    context.device.present_queue = nullptr;
+    context.device.transfer_queue = nullptr;
+
+    if (context.device.logical_device) {
+        vkDestroyDevice(context.device.logical_device, nullptr);
+        context.device.logical_device = nullptr;
+    }
+
+    context.device.physical_device = nullptr;
+
+    context.device.queue_family_info.graphics_family_index = 255;
+    context.device.queue_family_info.present_family_index = 255;
+    context.device.queue_family_info.transfer_family_index = 255;
+    context.device.queue_family_info.compute_family_index = 255;
 }
 
 bool requirements_has_graphics(VulkanPhysicalDeviceRequirementsFlags requirements) { return requirements & VULKAN_PHYSICAL_DEVICE_REQUIREMENT_GRAPHICS; }

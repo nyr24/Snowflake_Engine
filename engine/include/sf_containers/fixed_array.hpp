@@ -33,7 +33,7 @@ public:
     }
 
     FixedArray(std::initializer_list<T> init_list) noexcept
-        : _count{ static_cast<u32>(init_list.size()) }
+        : _count{ 0 }
     {
         SF_ASSERT_MSG(init_list.size() <= Capacity, "Initializer list size don't fit for specified capacity");
         allocate(init_list.size());
@@ -76,8 +76,12 @@ public:
         allocate_and_construct(std::forward<Args>(args)...);
     }
 
-    void append(const T& item) noexcept {
+    void append(ConstLRefOrVal<T> item) noexcept {
         allocate_and_construct(item);
+    }
+
+    void append(T&& item) noexcept {
+        allocate_and_construct(std::move(item));
     }
 
     void remove_at(u32 index) noexcept {
@@ -150,6 +154,14 @@ public:
 
     constexpr PtrRandomAccessIterator<T> end() const noexcept {
         return PtrRandomAccessIterator<T>(static_cast<const T*>(_buffer + _count));
+    }
+
+    constexpr PtrRandomAccessIterator<T> begin() noexcept {
+        return PtrRandomAccessIterator<T>(static_cast<T*>(_buffer));
+    }
+
+    constexpr PtrRandomAccessIterator<T> end() noexcept {
+        return PtrRandomAccessIterator<T>(static_cast<T*>(_buffer + _count));
     }
 
     T& operator[](u32 ind) noexcept {

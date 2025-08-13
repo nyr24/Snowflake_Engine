@@ -50,7 +50,14 @@ public:
     bool is_err() const { return _tag == Tag::ERROR; }
     bool is_ok() const { return _tag == Tag::OK; }
 
-    ConstLRefOrValType<OkType> unwrap() const noexcept {
+    const OkType& unwrap() const noexcept {
+        if (_tag == Tag::ERROR) {
+            panic("Result is error!");
+        }
+        return _storage.ok;
+    }
+
+    OkType& unwrap() noexcept {
         if (_tag == Tag::ERROR) {
             panic("Result is error!");
         }

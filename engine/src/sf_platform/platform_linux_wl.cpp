@@ -842,7 +842,7 @@ void platform_get_required_extensions(FixedArray<const char*, 5>& required_exten
 void platform_create_vk_surface(PlatformState& plat_state, VulkanContext& context) {
     WaylandInternState* state = static_cast<WaylandInternState*>(plat_state.internal_state);
     VkWaylandSurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR, nullptr, 0, state->display, state->go_state.surface};
-    sf_vk_check(vkCreateWaylandSurfaceKHR(context.instance, &create_info, &context.allocator.callbacks, &context.surface));
+    sf_vk_check(vkCreateWaylandSurfaceKHR(context.instance, &create_info, nullptr, &context.surface));
 }
 
 Key translate_keycode(u32 x_keycode) {

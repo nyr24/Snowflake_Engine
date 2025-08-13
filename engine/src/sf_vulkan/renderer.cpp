@@ -1,35 +1,35 @@
 #include "sf_vulkan/types.hpp"
 #include "sf_vulkan/renderer.hpp"
-#include "sf_vulkan/allocator.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/types.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_containers/fixed_array.hpp"
-#include "sf_vulkan/allocator.hpp"
-#include "sf_allocators/free_list_allocator.hpp"
-#include <list>
+// #include "sf_vulkan/allocator.hpp"
+// #include "sf_allocators/free_list_allocator.hpp"
+// #include <list>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
 static VulkanRenderer vk_renderer{};
 
+// TODO: custom allocator
 static VulkanContext vk_context{
-    .allocator = VulkanAllocator{
-        .lists = std::list{
-            FreeList<{ true, false }>(platform_get_mem_page_size() * 10),
-            FreeList<{ true, false }>(platform_get_mem_page_size() * 10)
-        },
-        .callbacks = VkAllocationCallbacks{
-            .pfnAllocation = vk_alloc_fn,
-            .pfnReallocation = vk_realloc_fn,
-            .pfnFree = vk_free_fn,
-            .pfnInternalAllocation = vk_intern_alloc_notification,
-            .pfnInternalFree = vk_intern_free_notification
-        }
-    }
+    // .allocator = VulkanAllocator{
+    //     .lists = std::list{
+    //         FreeList<{ true, false }>(platform_get_mem_page_size() * 10),
+    //         FreeList<{ true, false }>(platform_get_mem_page_size() * 10)
+    //     },
+    //     .callbacks = VkAllocationCallbacks{
+    //         .pfnAllocation = vk_alloc_fn,
+    //         .pfnReallocation = vk_realloc_fn,
+    //         .pfnFree = vk_free_fn,
+    //         .pfnInternalAllocation = vk_intern_alloc_notification,
+    //         .pfnInternalFree = vk_intern_free_notification
+    //     }
+    // }
 };
 
 bool renderer_init(const char* app_name, PlatformState& platform_state) {
@@ -102,8 +102,9 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
     vk_inst_create_info.ppEnabledLayerNames = required_validation_layers.data();
 #endif
 
-    vk_context.allocator.callbacks.pUserData = static_cast<void*>(&vk_context.allocator);
-    sf_vk_check(vkCreateInstance(&vk_inst_create_info, &vk_context.allocator.callbacks, &vk_context.instance));
+    // vk_context.allocator.callbacks.pUserData = static_cast<void*>(&vk_context.allocator);
+    // sf_vk_check(vkCreateInstance(&vk_inst_create_info, &vk_context.allocator.callbacks, &vk_context.instance));
+    sf_vk_check(vkCreateInstance(&vk_inst_create_info, nullptr, &vk_context.instance));
 
     // Debugger
 #ifdef SF_DEBUG
@@ -193,10 +194,11 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
 VulkanContext::~VulkanContext() {
     if (debug_messenger) {
         PFN_vkDestroyDebugUtilsMessengerEXT debug_destroy_fn = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-        debug_destroy_fn(instance, debug_messenger, &allocator.callbacks);
+        debug_destroy_fn(instance, debug_messenger, nullptr);
     }
 
-    vkDestroyInstance(instance, &allocator.callbacks);
+    device_destroy(*this);
+    vkDestroyInstance(instance, nullptr);
 }
 
 } // sf

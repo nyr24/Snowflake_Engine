@@ -4,6 +4,8 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_containers/iterator.hpp"
+#include "sf_core/utility.hpp"
+#include <type_traits>
 #include <utility>
 
 namespace sf {
@@ -99,17 +101,14 @@ public:
         , _buffer{ sf_mem_alloc_typed<T, true>(rhs._capacity) }
     {
         sf_mem_copy(_buffer, rhs._buffer, rhs._count * sizeof(T));
-        sf_mem_copy((void*)(_buffer), (void*)(rhs._buffer), rhs._count * sizeof(T));
     }
 
     DynamicArray<T>& operator=(const DynamicArray<T>& rhs) noexcept {
-        if (_capacity < rhs._count) {
-            sf_mem_free_typed<T, true>(_buffer);
-            _buffer = sf_mem_alloc_typed<T, true>(rhs._capacity);
-            _capacity = rhs._capacity;
+        if (_capacity < rhs._capacity) {
+            reallocate(rhs._capacity);
         }
         _count = rhs._count;
-        sf_mem_copy((void*)(_buffer), (void*)(rhs._buffer), rhs._count * sizeof(T));
+        sf_mem_copy(_buffer, rhs._buffer, rhs._count * sizeof(T));
     }
 
     ~DynamicArray() noexcept
@@ -125,8 +124,12 @@ public:
         allocate_and_construct(std::forward<Args>(args)...);
     }
 
-    void append(const T& item) noexcept {
+    void append(ConstLRefOrVal<T> item) noexcept {
         allocate_and_construct(item);
+    }
+
+    void append(T&& item) noexcept {
+        allocate_and_construct(std::move(item));
     }
 
     void remove_at(u32 index) noexcept {
@@ -202,7 +205,10 @@ public:
     {
         SF_ASSERT_MSG(new_capacity >= new_count, "Invalid resize count");
 
-        reallocate(new_capacity);
+        if (new_capacity > _capacity) {
+            reallocate(new_capacity);
+        }
+
         if (new_count > _count) {
             allocate_and_default_construct(new_count - _count);
         }

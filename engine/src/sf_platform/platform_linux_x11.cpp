@@ -323,7 +323,7 @@ void platform_create_vk_surface(PlatformState& plat_state, VulkanContext& contex
     create_info.connection = state->connection;
     create_info.window = state->window;
 
-    sf_vk_check(vkCreateXcbSurfaceKHR(context.instance, &create_info, &context.allocator, &context.surface));
+    sf_vk_check(vkCreateXcbSurfaceKHR(context.instance, &create_info, nullptr, &context.surface));
 }
 
 Key translate_keycode(u32 x_keycode) {
