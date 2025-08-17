@@ -72,7 +72,8 @@ bool device_create(VulkanContext& context) {
     sf_vk_check(vkCreateDevice(
         context.device.physical_device,
         &device_create_info,
-        // &context.allocator.callbacks,
+        // TODO: custom allocator
+        // &context.allocator,
         nullptr,
         &context.device.logical_device)
     );
@@ -120,7 +121,7 @@ bool device_select(VulkanContext& context) {
             // include this if need compute
             // | VULKAN_PHYSICAL_DEVICE_REQUIREMENT_COMPUTE
         ,
-        .device_extension_names = Option<FixedArray<const char*, 10>>(FixedArray<const char*, 10>{ (const char*)(VK_KHR_SWAPCHAIN_EXTENSION_NAME) })
+        .device_extension_names = Option<FixedArray<const char*, 10>>(FixedArray<const char*, 10>{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME })
     };
 
     for (u32 i{0}; i < physical_device_count; ++i) {
@@ -192,6 +193,7 @@ bool device_select(VulkanContext& context) {
             context.device.properties = physical_device_properties;
             context.device.features = physical_device_features;
             context.device.memory_properties = physical_device_memory_props;
+            context.device.swapchain_support_info = swapchain_support_info;
 
             return true;
         }
@@ -340,6 +342,30 @@ bool device_meet_requirements(
     return true;
 }
 
+bool device_detect_depth_format(VulkanDevice& device) {
+    constexpr u64 CANDIDATES_COUNT{3};
+    VkFormat candidates[CANDIDATES_COUNT] = {
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT
+    };
+
+    u32 flags = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    for (u32 i{0}; i < CANDIDATES_COUNT; ++i) {
+        VkFormatProperties properties;
+        vkGetPhysicalDeviceFormatProperties(device.physical_device, candidates[i], &properties);
+        if ((properties.linearTilingFeatures & flags) == flags) {
+            device.depth_format = candidates[i];
+            return true;
+        } else if ((properties.optimalTilingFeatures & flags) == flags) {
+            device.depth_format = candidates[i];
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // called from VulkanContext destructor
 void device_destroy(VulkanContext& context) {
     context.device.graphics_queue = nullptr;
@@ -347,6 +373,8 @@ void device_destroy(VulkanContext& context) {
     context.device.transfer_queue = nullptr;
 
     if (context.device.logical_device) {
+        // TODO: custom allocator
+        // vkDestroyDevice(context.device.logical_device, &context.allocator);
         vkDestroyDevice(context.device.logical_device, nullptr);
         context.device.logical_device = nullptr;
     }
@@ -357,6 +385,19 @@ void device_destroy(VulkanContext& context) {
     context.device.queue_family_info.present_family_index = 255;
     context.device.queue_family_info.transfer_family_index = 255;
     context.device.queue_family_info.compute_family_index = 255;
+}
+
+Option<u32> find_memory_index(VulkanContext& context, u32 type_filter, u32 property_flags) {
+    VkPhysicalDeviceMemoryProperties memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(context.device.physical_device, &memory_properties);
+
+    for (u32 i{0}; i < memory_properties.memoryTypeCount; ++i) {
+        if ((type_filter & (1 << i)) && ((memory_properties.memoryTypes[i].propertyFlags & property_flags) == property_flags)) {
+            return {i};
+        }
+    }
+
+    return {None::VALUE};
 }
 
 bool requirements_has_graphics(VulkanPhysicalDeviceRequirementsFlags requirements) { return requirements & VULKAN_PHYSICAL_DEVICE_REQUIREMENT_GRAPHICS; }

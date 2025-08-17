@@ -19,8 +19,8 @@ struct ApplicationState {
     sf::PlatformState           platform_state;
     GameInstance*               game_inst;
     Clock                       clock;
-    i16                         width;
-    i16                         height;
+    u32                         width;
+    u32                         height;
     bool                        is_running;
     bool                        is_suspended;
 };

@@ -1,7 +1,6 @@
 #include "sf_platform/defines.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
-// #include "sf_core/defines.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_core/clock.hpp"
 #include "sf_core/game_types.hpp"
@@ -125,10 +124,10 @@ struct Listeners {
 
 struct WindowProps {
     const i8*   name;
-    i32         width;
-    i32         height;
-    i32         stride;
-    i32         shm_pool_size;
+    u32         width;
+    u32         height;
+    u32         stride;
+    u32         shm_pool_size;
 };
 
 struct WaylandInternState {
@@ -221,8 +220,8 @@ static void xdg_toplevel_handle_configure_bounds(void* data, xdg_toplevel* xdg_t
     if (width == 0 || height == 0) {
         return;
     }
-    state->window_props.width = std::min(width, state->window_props.width);
-    state->window_props.height = std::min(height, state->window_props.height);
+    state->window_props.width = std::min(static_cast<u32>(width), state->window_props.width);
+    state->window_props.height = std::min(static_cast<u32>(height), state->window_props.height);
 }
 
 
@@ -620,15 +619,15 @@ PlatformState& PlatformState::operator=(PlatformState&& rhs) noexcept
 
 bool PlatformState::startup(
     const char* app_name,
-    i32 x,
-    i32 y,
-    i32 width,
-    i32 height
+    u32 x,
+    u32 y,
+    u32 width,
+    u32 height
 ) {
     WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
 
     constexpr i32 buff_count = 2;
-    const i32 stride = width * 4;
+    const u32 stride = width * 4;
     state->window_props = WindowProps{
         .name = app_name,
         .width = width,

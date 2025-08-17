@@ -142,9 +142,9 @@ template<FreeListConfig Config>
 Result<u32> FreeList<Config>::allocate_block_and_return_handle(u32 size, u16 alignment) noexcept {
     void* res = allocate_block(size, alignment);
     if (!res) {
-        return { .status = false };
+        return {ResultError::VALUE};
     } else {
-        return { .data = turn_ptr_into_handle(res, _buffer), .status = true };
+        return {turn_ptr_into_handle(res, _buffer)};
     }
 }
 

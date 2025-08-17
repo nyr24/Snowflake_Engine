@@ -1,3 +1,5 @@
+#ifdef SF_TESTS
+
 #include "sf_containers/fixed_array.hpp"
 
 namespace sf {
@@ -11,3 +13,5 @@ FixedArray<const char*, 10> arr{ "hello", "world", "crazy", "boy" };
 const auto res = expect(arr[0], "hello");
 
 } // sf
+
+#endif // SF_TESTS

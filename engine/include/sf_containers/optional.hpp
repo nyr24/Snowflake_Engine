@@ -10,7 +10,7 @@ enum struct None {
 
 template<typename Some>
 struct Option {
-public:
+private:
     union Storage {
         None none;
         Some some;
@@ -59,6 +59,21 @@ public:
         if (_tag == Tag::NONE) {
             panic("Option is none!");
         }
+        return _storage.some;
+    }
+
+    Some unwrap_copy() const noexcept {
+        if (_tag == Tag::NONE) {
+            panic("Option is none!");
+        }
+        return _storage.some;
+    }
+
+    ConstLRefOrVal<Some> unwrap_or_default(ConstLRefOrVal<Some> default_val) const noexcept {
+        if (_tag == Tag::NONE) {
+            return default_val;
+        }
+
         return _storage.some;
     }
 

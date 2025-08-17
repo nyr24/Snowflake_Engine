@@ -1,3 +1,5 @@
+#include "sf_core/memory_sf.hpp"
+#include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/types.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/device.hpp"
@@ -32,7 +34,7 @@ static VulkanContext vk_context{
     // }
 };
 
-bool renderer_init(const char* app_name, PlatformState& platform_state) {
+bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     vk_renderer.platform_state = &platform_state;
     vk_renderer.frame_count = 0;
 
@@ -40,11 +42,12 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
     vk_app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     vk_app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     vk_app_info.apiVersion = VK_API_VERSION_1_4;
-    vk_app_info.pApplicationName = app_name;
+    vk_app_info.pApplicationName = config.name;
 
     VkInstanceCreateInfo vk_inst_create_info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     vk_inst_create_info.pApplicationInfo = &vk_app_info;
 
+    // instance extensions only
     FixedArray<const char*, 5> required_extensions;
     required_extensions.append(VK_KHR_SURFACE_EXTENSION_NAME);
 #ifdef SF_DEBUG
@@ -57,18 +60,26 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
     for (const char* ext_name : required_extensions) {
         LOG_INFO("{}", ext_name);
     }
-
+#endif
     u32 available_extensions_count{0};
     vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, nullptr);
 
     FixedArray<VkExtensionProperties, 100> available_extensions(available_extensions_count);
     vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, available_extensions.data());
 
-    LOG_INFO("Available vulkan extensions: ");
-    for (const VkExtensionProperties& available_extension : available_extensions) {
-        LOG_INFO("{}", available_extension.extensionName);
+    // check if we have all required extensions
+    for (const auto* req_ext_name : required_extensions) {
+        bool is_found{false};
+        for (const auto& av_ext: available_extensions) {
+            if (sf_str_cmp(req_ext_name, av_ext.extensionName)) {
+                is_found = true;
+            }
+        }
+        if (!is_found) {
+            LOG_FATAL("Missing required extension: {}", req_ext_name);
+            return false;
+        }
     }
-#endif
 
     vk_inst_create_info.enabledExtensionCount = required_extensions.count();
     vk_inst_create_info.ppEnabledExtensionNames = required_extensions.data();
@@ -102,8 +113,11 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
     vk_inst_create_info.ppEnabledLayerNames = required_validation_layers.data();
 #endif
 
-    // vk_context.allocator.callbacks.pUserData = static_cast<void*>(&vk_context.allocator);
-    // sf_vk_check(vkCreateInstance(&vk_inst_create_info, &vk_context.allocator.callbacks, &vk_context.instance));
+    vk_context.framebuffer_width = config.width;
+    vk_context.framebuffer_height = config.height;
+
+    // TODO: custom allocator
+    // sf_vk_check(vkCreateInstance(&vk_inst_create_info, &vk_context.allocator, &vk_context.instance));
     sf_vk_check(vkCreateInstance(&vk_inst_create_info, nullptr, &vk_context.instance));
 
     // Debugger
@@ -123,12 +137,16 @@ bool renderer_init(const char* app_name, PlatformState& platform_state) {
 
     SF_ASSERT_MSG(func, "Failed to create debug messenger!");
 
+    // TODO: custom allocator
+    // sf_vk_check(func(vk_context.instance, &debug_create_info, &vk_context.allocator, &vk_context.debug_messenger));
     sf_vk_check(func(vk_context.instance, &debug_create_info, nullptr, &vk_context.debug_messenger));
 #endif
 
     platform_create_vk_surface(platform_state, vk_context);
 
     device_create(vk_context);
+
+    swapchain_create(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain);
 
     return true;
 }
@@ -192,13 +210,28 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
 }
 
 VulkanContext::~VulkanContext() {
-    if (debug_messenger) {
-        PFN_vkDestroyDebugUtilsMessengerEXT debug_destroy_fn = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-        debug_destroy_fn(instance, debug_messenger, nullptr);
+    if (device.logical_device && swapchain.handle) {
+        swapchain_destroy(*this, swapchain);
     }
 
-    device_destroy(*this);
-    vkDestroyInstance(instance, nullptr);
+    if (device.logical_device) {
+        device_destroy(*this);
+    }
+
+    if (surface) {
+        vkDestroySurfaceKHR(instance, surface, &allocator);
+        surface = nullptr;
+    }
+
+    if (debug_messenger) {
+        PFN_vkDestroyDebugUtilsMessengerEXT debug_destroy_fn = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+        debug_destroy_fn(instance, debug_messenger, &allocator);
+    }
+
+    if (instance) {
+        vkDestroyInstance(instance, &allocator);
+        instance = nullptr;
+    }
 }
 
 } // sf

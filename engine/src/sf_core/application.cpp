@@ -19,9 +19,6 @@ bool application_create(sf::GameInstance* game_inst) {
 
     application_state.game_inst = game_inst;
 
-    // init subsystems
-    init_logging();
-
     application_state.width = game_inst->app_config.width;
     application_state.height = game_inst->app_config.height;
     application_state.is_running = true;
@@ -54,7 +51,7 @@ bool application_create(sf::GameInstance* game_inst) {
 
     application_state.game_inst->resize(application_state.game_inst, application_state.width, application_state.height);
 
-    if (!renderer_init(game_inst->app_config.name, application_state.platform_state)) {
+    if (!renderer_init(game_inst->app_config, application_state.platform_state)) {
         return false;
     }
 

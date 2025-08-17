@@ -6,7 +6,6 @@
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/optional.hpp"
-#include "sf_vulkan/allocator.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -23,6 +22,32 @@ struct VulkanDeviceQueueFamilyInfo {
     u8 transfer_available_queue_count;
 };
 
+struct VulkanImage {
+    VkImage         handle;
+    VkDeviceMemory  memory;
+    VkImageView     view;
+    u32             width;
+    u32             height;
+};
+
+struct VulkanSwapchainSupportInfo {
+    VkSurfaceCapabilitiesKHR            capabilities;
+    DynamicArray<VkSurfaceFormatKHR>    formats;
+    DynamicArray<VkPresentModeKHR>      present_modes;
+    u32                                 format_count;
+    u32                                 present_mode_count;
+};
+
+struct VulkanSwapchain {
+    static constexpr u8 MAX_FRAMES_IN_FLIGHT = 2;
+
+    VkSwapchainKHR                      handle;
+    DynamicArray<VkImage>               images;
+    DynamicArray<VkImageView>           views;
+    VulkanImage                         depth_attachment;
+    VkSurfaceFormatKHR                  image_format;
+};
+
 // device
 struct VulkanDevice {
     VkPhysicalDevice                    physical_device;
@@ -34,6 +59,8 @@ struct VulkanDevice {
     VkQueue                             present_queue;
     VkQueue                             transfer_queue;
     VulkanDeviceQueueFamilyInfo         queue_family_info;
+    VulkanSwapchainSupportInfo          swapchain_support_info;
+    VkFormat                            depth_format;
 };
 
 enum VulkanPhysicalDeviceRequirementsBits : u16 {
@@ -61,13 +88,10 @@ struct VulkanPhysicalDeviceRequirements {
     Option<FixedArray<const char*, MAX_DEVICE_EXTENSION_NAMES>> device_extension_names;
 };
 
-struct VulkanSwapchainSupportInfo {
-    VkSurfaceCapabilitiesKHR            capabilities;
-    DynamicArray<VkSurfaceFormatKHR>    formats;
-    DynamicArray<VkPresentModeKHR>      present_modes;
-    u32                                 format_count;
-    u32                                 present_mode_count;
-};
+// struct VulkanAllocator {
+//     VkAllocationCallbacks callbacks;
+// };
+using VulkanAllocator = VkAllocationCallbacks;
 
 // context
 struct VulkanContext {
@@ -75,10 +99,16 @@ struct VulkanContext {
     VulkanAllocator             allocator;
     VulkanDevice                device;
     VkSurfaceKHR                surface;
-
 #ifdef SF_DEBUG
     VkDebugUtilsMessengerEXT    debug_messenger;
 #endif
+    i32                         (*find_memory_index)(u32 type_filter, u32 property_flags);
+    VulkanSwapchain             swapchain;
+    u32                         image_index;
+    u32                         curr_frame;
+    u32                         framebuffer_width;
+    u32                         framebuffer_height;
+    bool                        recreating_swapchain;
 public:
     ~VulkanContext();
 };

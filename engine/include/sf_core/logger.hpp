@@ -36,16 +36,13 @@ constexpr std::array<const i8*, 6> log_level_as_str = {
     "[TRACE]: ",
 };
 
-bool init_logging();
-void shutdown_logging();
-
 template<typename... Args>
 SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, Args&&... args) {
-    constexpr usize BUFF_LEN{ 256 };
+    constexpr usize BUFF_LEN{ 512 };
     char message_buff[BUFF_LEN] = {0};
     std::format_to_n(message_buff, BUFF_LEN, fmt, std::forward<Args>(args)...);
 
-    constexpr usize BUFF_LEN2{ 256 };
+    constexpr usize BUFF_LEN2{ 512 };
     char message_buff2[BUFF_LEN2] = {0};
     std::format_to_n(message_buff2, BUFF_LEN2, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], message_buff);
 

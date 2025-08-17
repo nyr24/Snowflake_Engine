@@ -10,7 +10,7 @@ namespace sf {
 [[noreturn]] void panic(const char* message);
 
 template<typename T>
-constexpr bool is_power_of_two(T x) {
+constexpr bool is_power_of_two(T x)  noexcept {
     return (x & (x-1)) == 0;
 }
 
@@ -21,12 +21,12 @@ concept HasFormatter = requires(std::format_parse_context ctx) {
 };
 
 template<typename T>
-consteval bool smaller_than_two_words() {
+consteval bool smaller_than_two_words() noexcept {
     return sizeof(T) <= sizeof(void*) * 2;
 }
 
 template<typename T>
-consteval bool should_pass_by_value() {
+consteval bool should_pass_by_value() noexcept {
     return smaller_than_two_words<T>() && !std::same_as<T, std::string_view>;
 }
 
@@ -48,5 +48,11 @@ using RRefOrValType = RRefOrVal<T>::Type;
 
 template<typename First, typename Second>
 concept SameTypes = std::same_as<std::remove_cv_t<std::remove_reference_t<First>>, std::remove_cv_t<std::remove_reference_t<Second>>>;
+
+template<typename T>
+T sf_clamp(ConstLRefOrValType<T> val, ConstLRefOrValType<T> min, ConstLRefOrValType<T> max) noexcept {
+    SF_ASSERT_MSG(min <= max, "Min can't be bigger than max");
+    return (val < min ? min : val) > max ? max : val;
+}
 
 } // sf

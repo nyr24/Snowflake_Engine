@@ -6,12 +6,3 @@ SF_EXPORT void sf::report_assertion_failure(const char* expression, const char* 
     sf::log_output(LogLevel::LOG_LEVEL_FATAL, "Assertion failure: {},\n\tmessage: {},\n\tin file: {},\n\tline: {}\n", expression, message, file, line);
 }
 #endif
-
-bool sf::init_logging() {
-    // TODO:
-    return true;
-}
-
-void sf::shutdown_logging() {
-    // TODO:
-}

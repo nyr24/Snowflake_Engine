@@ -4,15 +4,9 @@
 
 namespace sf {
 
-template<typename OkType>
-struct Result {
-    OkType  data;
-    bool    status;
-};
-
 template<typename OkType, typename ErrorType>
 struct ResultMultiError {
-public:
+private:
     union Storage {
         ErrorType err;
         OkType ok;
@@ -32,8 +26,8 @@ public:
         , _tag{ Tag::OK }
     {}
 
-    ResultMultiError(RRefOrValType<ErrorType> error)
-        : _storage{ .err = std::move(error) }
+    ResultMultiError(ErrorType error)
+        : _storage{ .err = error }
         , _tag{ Tag::ERROR }
     {}
 
@@ -64,7 +58,14 @@ public:
         return _storage.ok;
     }
 
-    ConstLRefOrValType<OkType> unwrap_or_default(RRefOrValType<OkType> default_value) const noexcept {
+    OkType unwrap_copy() const noexcept {
+        if (_tag == Tag::ERROR) {
+            panic("Result is error!");
+        }
+        return _storage.ok;
+    }
+
+    ConstLRefOrValType<OkType> unwrap_or_default(ConstLRefOrValType<OkType> default_value) const noexcept {
         if (_tag == Tag::ERROR) {
             return default_value;
         }
@@ -85,5 +86,12 @@ public:
         return this->is_ok();
     }
 };
+
+enum struct ResultError {
+    VALUE
+};
+
+template<typename OkType>
+using Result = ResultMultiError<OkType, ResultError>;
 
 } // sf

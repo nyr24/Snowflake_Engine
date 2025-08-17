@@ -84,6 +84,8 @@ public:
 
     DynamicArray<T>& operator=(DynamicArray<T>&& rhs) noexcept
     {
+        if (this == &rhs) return *this;
+
         sf_mem_free_typed<T, true>(_buffer);
         _capacity = rhs._capacity;
         _count = rhs._count;
@@ -104,11 +106,15 @@ public:
     }
 
     DynamicArray<T>& operator=(const DynamicArray<T>& rhs) noexcept {
+        if (this == &rhs) return *this;
+
         if (_capacity < rhs._capacity) {
             reallocate(rhs._capacity);
         }
         _count = rhs._count;
         sf_mem_copy(_buffer, rhs._buffer, rhs._count * sizeof(T));
+
+        return *this;
     }
 
     ~DynamicArray() noexcept
@@ -189,7 +195,9 @@ public:
     }
 
     void reserve(u32 new_capacity) noexcept {
-        reallocate(new_capacity);
+        if (new_capacity > _capacity) {
+            reallocate(new_capacity);
+        }
     }
 
     void resize(u32 new_count) noexcept {

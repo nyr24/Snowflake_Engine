@@ -45,10 +45,10 @@ static Key translate_keycode(u32 x_keycode);
 
 bool PlatformState::startup(
     const char* app_name,
-    i32 x,
-    i32 y,
-    i32 width,
-    i32 height
+    u32 x,
+    u32 y,
+    u32 width,
+    u32 height
 )
 {
     X11InternState* state = static_cast<X11InternState*>(this->internal_state);
@@ -169,7 +169,7 @@ PlatformState::~PlatformState() {
         X11InternState* state = static_cast<X11InternState*>(this->internal_state);
         XAutoRepeatOn(state->display);
         xcb_destroy_window(state->connection, state->window);
-        sf_mem_free(state, sizeof(X11InternState), alignof(X11InternState));
+        sf_mem_free(state, alignof(X11InternState));
         this->internal_state = nullptr;
     }
 }

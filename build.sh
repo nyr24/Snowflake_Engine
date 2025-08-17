@@ -2,11 +2,15 @@
 
 DEBUG_BUILD_DIR="build/debug/"
 RELEASE_BUILD_DIR="build/release/"
+SHADERS_DIR="engine/shaders/"
+
 BUILD_RELEASE=0
 X11_BUILD_FLAG_SPECIFIED=0;
 WAYLAND_BUILD_FLAG_SPECIFIED=0;
+
 CMAKE_OPTS="-DCMAKE_BUILD_TYPE=DEBUG -DCMAKE_CXX_COMPILER=clang++"
 CMAKE_BUILD_OPTS="-j"
+CMAKE_CXX_COMPILER="/usr/bin/clang++"
 
 for arg in "$@"; do
   case "$arg" in
@@ -41,11 +45,21 @@ for arg in "$@"; do
     CMAKE_OPTS+=" -DSF_LIMIT_FRAME_COUNT=1"
     X11_BUILD_FLAG_SPECIFIED=1
     ;;
+  --test | -t)
+    echo "Building tests..."
+    CMAKE_OPTS+=" -DSF_TESTS=1"
+    ;;
+  --g++)
+    echo "Using gcc compiler"
+    CMAKE_CXX_COMPILER="/usr/bin/g++"
+    ;;
   *)
     echo "Unknown argument: $arg"
     ;;
   esac
 done
+
+CMAKE_OPTS+=CMAKE_CXX_COMPILER
 
 if [ $BUILD_RELEASE -eq 0 ]; then
   echo "Building in debug mode"

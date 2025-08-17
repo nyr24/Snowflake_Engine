@@ -2,11 +2,16 @@
 
 #include "sf_core/defines.hpp"
 #include "sf_containers/fixed_array.hpp"
+#include <vulkan/vulkan_core.h>
 
 namespace sf {
 struct ApplicationState;
 
 struct PlatformState {
+public:
+    void* internal_state;
+
+public:
     PlatformState();
     PlatformState(PlatformState&& rhs) noexcept;
     PlatformState& operator=(PlatformState&& rhs) noexcept;
@@ -16,14 +21,13 @@ struct PlatformState {
 
     bool startup(
         const char* app_name,
-        i32 x,
-        i32 y,
-        i32 width,
-        i32 height
+        u32 x,
+        u32 y,
+        u32 width,
+        u32 height
     );
-    bool start_event_loop(ApplicationState& app_state);
 
-    void* internal_state;
+    bool start_event_loop(ApplicationState& app_state);
 };
 
 struct PlatformState;
