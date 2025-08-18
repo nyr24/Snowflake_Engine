@@ -10,6 +10,8 @@ private:
     union Storage {
         ErrorType err;
         OkType ok;
+
+        ~Storage() noexcept {}
     };
 
     enum struct Tag : u8 {
@@ -21,8 +23,8 @@ private:
     Tag     _tag;
 
 public:
-    ResultMultiError(OkType ok_val)
-        : _storage{ .ok = ok_val}
+    ResultMultiError(RRefOrValType<OkType> ok_val)
+        : _storage{ .ok = std::move(ok_val)}
         , _tag{ Tag::OK }
     {}
 
@@ -40,6 +42,12 @@ public:
         : _storage{ std::move(rhs._storage) }
         , _tag{ rhs._tag }
     {}
+
+    ~ResultMultiError() noexcept {
+        if (_tag == Tag::OK) {
+            _storage.ok.~OkType();
+        }
+    }
 
     bool is_err() const { return _tag == Tag::ERROR; }
     bool is_ok() const { return _tag == Tag::OK; }
@@ -59,6 +67,13 @@ public:
     }
 
     OkType unwrap_copy() const noexcept {
+        if (_tag == Tag::ERROR) {
+            panic("Result is error!");
+        }
+        return _storage.ok;
+    }
+
+    OkType&& unwrap_move() noexcept {
         if (_tag == Tag::ERROR) {
             panic("Result is error!");
         }

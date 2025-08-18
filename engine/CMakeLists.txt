@@ -4,12 +4,78 @@ project(${ENGINE_LIB_NAME} VERSION 0.1.0 LANGUAGES CXX)
 set(SRC_DIR ${ENGINE_DIR}/src)
 set(INCLUDE_DIR ${ENGINE_DIR}/include)
 set(GLM_INCLUDE_DIR ${ENGINE_DIR}/lib/glm)
+set(SHADER_SRC_DIR ${ENGINE_DIR}/shaders)
+set(SHADER_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
+set(SHADER_COMPILER $ENV{VULKAN_SDK}/bin/slangc)
+set(SHADER_TARGET ${PROJECT_NAME}_shaders)
 
 file(GLOB_RECURSE VK-ENGINE-SRCS CONFIGURE_DEPENDS ${SRC_DIR}/*.cpp)
 file(GLOB_RECURSE VK-ENGINE-HEADERS CONFIGURE_DEPENDS ${INCLUDE_DIR}/*.hpp)
+file(GLOB_RECURSE VK-SHADER-SOURCES CONFIGURE_DEPENDS ${SHADER_SRC_DIR}/*.slang)
 
+# compile shaders
+function (add_shaders target)
+  set(SHADER_DIR_TARGET ${SHADER_TARGET}_dir)
+  add_custom_target(${SHADER_DIR_TARGET} DEPENDS ${SHADER_BIN_DIR})
+
+  # Create shader binary directory
+  add_custom_command(
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_BIN_DIR}
+    OUTPUT ${SHADER_BIN_DIR}
+    COMMENT "Creating shader binary directory"
+  )
+
+  # Process each shader file
+  foreach(SHADER_PATH ${VK-SHADER-SOURCES})
+    get_filename_component(SHADER_FILE_NAME ${SHADER_PATH} NAME_WE)
+    get_filename_component(SHADER_EXT ${SHADER_PATH} EXT)
+
+    if(${EXT} MATCHES "slang")
+      set(ENTRY "-entry vertMain -entry fragMain")
+    elseif(${EXT} MATCHES "(comp|compute)")
+      set(ENTRY "-entry main")
+    elseif(${EXT} MATCHES "(geom|geometry)")
+      set(ENTRY "-entry geomMain")
+    elseif(${EXT} MATCHES "(tesc|tessellation_control)")
+      set(ENTRY "-entry tescMain")
+    elseif(${EXT} MATCHES "(tese|tessellation_evaluation)")
+      set(ENTRY "-entry teseMain")
+    endif()
+
+    # Create SPIR-V output path
+    set(SPIRV_OUTPUT ${SHADER_BIN_DIR}/${SHADER_FILE_NAME}.spv)
+
+    # Add compilation command
+    add_custom_command(
+      OUTPUT ${SPIRV_OUTPUT}
+      COMMAND ${SHADER_COMPILER}
+        ${SHADER_PATH}
+        -target spirv
+        -profile spirv_1_4
+        -emit-spirv-directly
+        -fvk-use-entrypoint-name
+        ${ENTRY}
+        -o ${SPIRV_OUTPUT}
+      DEPENDS ${SHADER_PATH} ${SHADER_BINARY_DIR}
+      COMMENT "Compiling ${SHADER_FILE_NAME}"
+    )
+
+    # Collect all SPIR-V outputs
+    list(APPEND SPIRV_FILES ${SPIRV_OUTPUT})
+  endforeach()
+
+  add_custom_target(${SHADER_TARGET} DEPENDS ${SHADER_DIR_TARGET} ${SPIRV_FILES})
+
+  add_dependencies(${PROJECT_NAME} ${SHADER_TARGET})
+endfunction()
+
+# engine library
 add_library(${PROJECT_NAME} SHARED ${VK-ENGINE-SRCS} ${VK-ENGINE-HEADERS})
 
+# shaders
+add_shaders(${PROJECT_NAME})
+
+# glm
 add_subdirectory(${GLM_INCLUDE_DIR})
 
 target_compile_options(

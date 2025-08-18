@@ -4,8 +4,6 @@
 
 #include "sf_core/defines.hpp"
 #include "sf_containers/dynamic_array.hpp"
-#include "sf_containers/fixed_array.hpp"
-#include "sf_containers/optional.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -63,35 +61,15 @@ struct VulkanDevice {
     VkFormat                            depth_format;
 };
 
-enum VulkanPhysicalDeviceRequirementsBits : u16 {
-    VULKAN_PHYSICAL_DEVICE_REQUIREMENT_GRAPHICS = 1 << 0x0000,
-    VULKAN_PHYSICAL_DEVICE_REQUIREMENT_PRESENT = 1 << 0x0001,
-    VULKAN_PHYSICAL_DEVICE_REQUIREMENT_COMPUTE = 1 << 0x0002,
-    VULKAN_PHYSICAL_DEVICE_REQUIREMENT_TRANSFER = 1 << 0x0003,
-    VULKAN_PHYSICAL_DEVICE_REQUIREMENT_SAMPLER_ANISOTROPY = 1 << 0x0004,
-    VULKAN_PHYSICAL_DEVICE_REQUIREMENT_DISCRETE_GPU = 1 << 0x0005,
-};
-
-using VulkanPhysicalDeviceRequirementsFlags = u32;
-
-bool requirements_has_graphics(VulkanPhysicalDeviceRequirementsFlags requirements);
-bool requirements_has_present(VulkanPhysicalDeviceRequirementsFlags requirements);
-bool requirements_has_compute(VulkanPhysicalDeviceRequirementsFlags requirements);
-bool requirements_has_transfer(VulkanPhysicalDeviceRequirementsFlags requirements);
-bool requirements_has_sampler_anisotropy(VulkanPhysicalDeviceRequirementsFlags requirements);
-bool requirements_has_discrete(VulkanPhysicalDeviceRequirementsFlags requirements);
-
-struct VulkanPhysicalDeviceRequirements {
-    static constexpr u32 MAX_DEVICE_EXTENSION_NAMES{ 10 };
-
-    VulkanPhysicalDeviceRequirementsFlags                       flags;
-    Option<FixedArray<const char*, MAX_DEVICE_EXTENSION_NAMES>> device_extension_names;
-};
-
 // struct VulkanAllocator {
 //     VkAllocationCallbacks callbacks;
 // };
 using VulkanAllocator = VkAllocationCallbacks;
+
+struct VulkanPipeline {
+    VkPipeline          handle;
+    VkPipelineLayout    layout;
+};
 
 // context
 struct VulkanContext {
@@ -102,8 +80,8 @@ struct VulkanContext {
 #ifdef SF_DEBUG
     VkDebugUtilsMessengerEXT    debug_messenger;
 #endif
-    i32                         (*find_memory_index)(u32 type_filter, u32 property_flags);
     VulkanSwapchain             swapchain;
+    VulkanPipeline              pipeline;
     u32                         image_index;
     u32                         curr_frame;
     u32                         framebuffer_width;

@@ -78,7 +78,7 @@ void image_view_create(
     create_info.subresourceRange.aspectMask = aspect_flags;
 
     create_info.subresourceRange.baseMipLevel = 0;
-    create_info.subresourceRange.levelCount = 0;
+    create_info.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
     create_info.subresourceRange.baseArrayLayer = 0;
     create_info.subresourceRange.layerCount = 1;
 

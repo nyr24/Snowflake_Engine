@@ -14,6 +14,8 @@ private:
     union Storage {
         None none;
         Some some;
+
+        ~Storage() noexcept {}
     };
 
     enum struct Tag : u8 {
@@ -45,6 +47,12 @@ public:
         , _tag{ rhs._tag }
     {}
 
+    ~Option() noexcept {
+        if (_tag == Tag::SOME) {
+            _storage.some.~Some();
+        }
+    }
+
     bool is_none() const { return _tag == Tag::NONE; }
     bool is_some() const { return _tag == Tag::SOME; }
 
@@ -63,6 +71,13 @@ public:
     }
 
     Some unwrap_copy() const noexcept {
+        if (_tag == Tag::NONE) {
+            panic("Option is none!");
+        }
+        return _storage.some;
+    }
+
+    Some&& unwrap_move() noexcept {
         if (_tag == Tag::NONE) {
             panic("Option is none!");
         }

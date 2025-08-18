@@ -1,4 +1,5 @@
 #include "sf_core/memory_sf.hpp"
+#include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/types.hpp"
 #include "sf_vulkan/renderer.hpp"
@@ -147,6 +148,8 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     device_create(vk_context);
 
     swapchain_create(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain);
+
+    pipeline_create(vk_context);
 
     return true;
 }

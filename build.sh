@@ -2,7 +2,6 @@
 
 DEBUG_BUILD_DIR="build/debug/"
 RELEASE_BUILD_DIR="build/release/"
-SHADERS_DIR="engine/shaders/"
 
 BUILD_RELEASE=0
 X11_BUILD_FLAG_SPECIFIED=0;
