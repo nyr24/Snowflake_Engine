@@ -8,6 +8,8 @@
 
 namespace sf {
 
+static constexpr u8 DEVICE_EXTENSION_CAPACITY{ 10 };
+
 enum VulkanPhysicalDeviceRequirementsBits : u16 {
     VULKAN_PHYSICAL_DEVICE_REQUIREMENT_GRAPHICS = 1 << 0x0000,
     VULKAN_PHYSICAL_DEVICE_REQUIREMENT_PRESENT = 1 << 0x0001,
@@ -30,12 +32,12 @@ struct VulkanPhysicalDeviceRequirements {
     static constexpr u32 MAX_DEVICE_EXTENSION_NAMES{ 10 };
 
     VulkanPhysicalDeviceRequirementsFlags                       flags;
-    Option<FixedArray<const char*, MAX_DEVICE_EXTENSION_NAMES>> device_extension_names;
+    FixedArray<const char*, DEVICE_EXTENSION_CAPACITY>&         device_extension_names;
 };
 
 bool device_create(VulkanContext& context);
 void device_destroy(VulkanContext& context);
-bool device_select(VulkanContext& context);
+bool device_select(VulkanContext& context, FixedArray<const char*, DEVICE_EXTENSION_CAPACITY>& required_extensions);
 bool device_meet_requirements(
     VkPhysicalDevice device,
     VkSurfaceKHR surface,
@@ -47,6 +49,6 @@ bool device_meet_requirements(
 );
 void device_query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface, VulkanSwapchainSupportInfo& out_support_info);
 bool device_detect_depth_format(VulkanDevice& device);
-Option<u32> find_memory_index(VulkanContext& context, u32 type_filter, u32 property_flags);
+Option<u32> find_memory_index(const VulkanContext& context, u32 type_filter, u32 property_flags);
 
 } // sf

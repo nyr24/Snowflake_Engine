@@ -1,3 +1,4 @@
+#include "sf_core/asserts_sf.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/utility.hpp"

@@ -1,6 +1,9 @@
+#include "sf_core/application.hpp"
 #include "sf_core/memory_sf.hpp"
+#include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/swapchain.hpp"
+#include "sf_vulkan/synch.hpp"
 #include "sf_vulkan/types.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/device.hpp"
@@ -12,144 +15,48 @@
 // #include "sf_vulkan/allocator.hpp"
 // #include "sf_allocators/free_list_allocator.hpp"
 // #include <list>
+#include <cstdint>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
-static VulkanRenderer vk_renderer{};
 
-// TODO: custom allocator
-static VulkanContext vk_context{
-    // .allocator = VulkanAllocator{
-    //     .lists = std::list{
-    //         FreeList<{ true, false }>(platform_get_mem_page_size() * 10),
-    //         FreeList<{ true, false }>(platform_get_mem_page_size() * 10)
-    //     },
-    //     .callbacks = VkAllocationCallbacks{
-    //         .pfnAllocation = vk_alloc_fn,
-    //         .pfnReallocation = vk_realloc_fn,
-    //         .pfnFree = vk_free_fn,
-    //         .pfnInternalAllocation = vk_intern_alloc_notification,
-    //         .pfnInternalFree = vk_intern_free_notification
-    //     }
-    // }
-};
+static VulkanRenderer vk_renderer{};
+static VulkanContext vk_context{};
+
+static constexpr u8 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
+
+bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
+void create_debugger();
+bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions);
+bool init_validation_layers(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_VALIDATION_LAYER_CAPACITY>& required_validation_layers);
+void init_synch_primitives(VulkanContext& context);
+void destroy_synch_primitives(VulkanContext& context);
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
-    vk_renderer.platform_state = &platform_state;
-    vk_renderer.frame_count = 0;
-
-    VkApplicationInfo vk_app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
-    vk_app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    vk_app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    vk_app_info.apiVersion = VK_API_VERSION_1_4;
-    vk_app_info.pApplicationName = config.name;
-
-    VkInstanceCreateInfo vk_inst_create_info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-    vk_inst_create_info.pApplicationInfo = &vk_app_info;
-
-    // instance extensions only
-    FixedArray<const char*, 5> required_extensions;
-    required_extensions.append(VK_KHR_SURFACE_EXTENSION_NAME);
-#ifdef SF_DEBUG
-    required_extensions.append(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif
-    platform_get_required_extensions(required_extensions);
-#ifdef SF_DEBUG
-    // Log required extensions
-    LOG_INFO("Required vulkan extensions: ");
-    for (const char* ext_name : required_extensions) {
-        LOG_INFO("{}", ext_name);
+    if (!create_instance(config, platform_state)) {
+        return false;
     }
-#endif
-    u32 available_extensions_count{0};
-    vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, nullptr);
-
-    FixedArray<VkExtensionProperties, 100> available_extensions(available_extensions_count);
-    vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, available_extensions.data());
-
-    // check if we have all required extensions
-    for (const auto* req_ext_name : required_extensions) {
-        bool is_found{false};
-        for (const auto& av_ext: available_extensions) {
-            if (sf_str_cmp(req_ext_name, av_ext.extensionName)) {
-                is_found = true;
-            }
-        }
-        if (!is_found) {
-            LOG_FATAL("Missing required extension: {}", req_ext_name);
-            return false;
-        }
-    }
-
-    vk_inst_create_info.enabledExtensionCount = required_extensions.count();
-    vk_inst_create_info.ppEnabledExtensionNames = required_extensions.data();
-
-    // Validation layers should only be enabled in debug mode
-#ifdef SF_DEBUG
-    FixedArray<const char*, 1> required_validation_layers;
-    required_validation_layers.append("VK_LAYER_KHRONOS_validation");
-
-    u32 available_layer_count = 0;
-    sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, 0));
-    FixedArray<VkLayerProperties, 30> available_layers(available_layer_count);
-    sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data()));
-
-    for (const char* req_layer : required_validation_layers) {
-        bool is_available = false;
-        for (const VkLayerProperties& available_layer : available_layers) {
-            if (sf_str_cmp(req_layer, available_layer.layerName)) {
-                is_available = true;
-                break;
-            }
-        }
-
-        if (!is_available) {
-            LOG_FATAL("Required validation layer is missing: {}", req_layer);
-            return false;
-        }
-    }
-
-    vk_inst_create_info.enabledLayerCount = required_validation_layers.count();
-    vk_inst_create_info.ppEnabledLayerNames = required_validation_layers.data();
-#endif
-
-    vk_context.framebuffer_width = config.width;
-    vk_context.framebuffer_height = config.height;
-
-    // TODO: custom allocator
-    // sf_vk_check(vkCreateInstance(&vk_inst_create_info, &vk_context.allocator, &vk_context.instance));
-    sf_vk_check(vkCreateInstance(&vk_inst_create_info, nullptr, &vk_context.instance));
-
-    // Debugger
-#ifdef SF_DEBUG
-    u32 log_severity =  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
-                        // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
-
-    VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-    debug_create_info.messageSeverity = log_severity;
-    debug_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
-    debug_create_info.pfnUserCallback = sf_vk_debug_callback;
-
-    PFN_vkCreateDebugUtilsMessengerEXT func =
-        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vk_context.instance, "vkCreateDebugUtilsMessengerEXT");
-
-    SF_ASSERT_MSG(func, "Failed to create debug messenger!");
-
-    // TODO: custom allocator
-    // sf_vk_check(func(vk_context.instance, &debug_create_info, &vk_context.allocator, &vk_context.debug_messenger));
-    sf_vk_check(func(vk_context.instance, &debug_create_info, nullptr, &vk_context.debug_messenger));
-#endif
 
     platform_create_vk_surface(platform_state, vk_context);
 
-    device_create(vk_context);
+    // TODO: static functions
+    if (!device_create(vk_context)) {
+        return false;
+    }
 
-    swapchain_create(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain);
+    if (!VulkanSwapchain::create(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain)) {
+        return false;
+    }
 
-    pipeline_create(vk_context);
+    if (!pipeline_create(vk_context)) {
+        return false;
+    }
+
+    VulkanCommandPool::create(vk_context, VulkanCommandPoolType::GRAPHICS, vk_context.device.queue_family_info.graphics_family_index, vk_context.graphics_command_pool);
+    VulkanCommandBuffer::allocate(vk_context, vk_context.graphics_command_pool.handle, vk_context.graphics_command_buffers, true);
+
+    init_synch_primitives(vk_context);
 
     return true;
 }
@@ -158,27 +65,48 @@ void renderer_resize(i16 width, i16 height) {
 }
 
 bool renderer_begin_frame(f64 delta_time) {
+    // TODO: make a fence for synchronization here
+    vkQueueWaitIdle(vk_context.device.present_queue);
+    vk_context.draw_fence.reset(vk_context);
+
+    if (!vk_context.swapchain.acquire_next_image_index(vk_context, UINT64_MAX, vk_context.image_available_semaphore.handle, nullptr, vk_context.image_index)) {
+        return false;
+    }
+    
+    return true;
+}
+
+bool renderer_draw_frame(const RenderPacket& packet) {
+    VulkanCommandBuffer& curr_buffer = vk_context.graphics_command_buffers[vk_context.image_index];
+    curr_buffer.begin_recording(vk_context, 0, vk_context.image_index);
+    
+    VkPipelineStageFlags wait_dest_mask{ VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+    VkSubmitInfo submit_info{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &vk_context.image_available_semaphore.handle,
+        .pWaitDstStageMask = &wait_dest_mask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &curr_buffer.handle,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &vk_context.render_finished_semaphore.handle,
+    };
+
+    curr_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, vk_context.draw_fence);
+
+    if (!vk_context.draw_fence.wait(vk_context)) {
+        return false;
+    }
+
+    curr_buffer.reset(vk_context);
+
+    vk_context.swapchain.present(vk_context, vk_context.device.present_queue, vk_context.render_finished_semaphore.handle, vk_context.image_index);
     return true;
 }
 
 bool renderer_end_frame(f64 delta_time) {
     ++vk_renderer.frame_count;
-    return true;
-}
-
-bool renderer_draw_frame(const RenderPacket& packet) {
-    if (renderer_begin_frame(packet.delta_time)) {
-
-        // TODO:
-
-        bool end_frame_res = renderer_end_frame(packet.delta_time);
-
-        if (!end_frame_res) {
-            LOG_ERROR("end_frame failed, application shutting down...");
-            return false;
-        }
-    }
-
     return true;
 }
 
@@ -213,13 +141,19 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
 }
 
 VulkanContext::~VulkanContext() {
-    if (device.logical_device && swapchain.handle) {
-        swapchain_destroy(*this, swapchain);
+    destroy_synch_primitives(*this);
+    
+    if (graphics_command_pool.handle) {
+        for (auto& cmd_buffer : graphics_command_buffers) {
+            cmd_buffer.free(*this, graphics_command_pool.handle);
+        }
     }
 
-    if (device.logical_device) {
-        device_destroy(*this);
-    }
+    graphics_command_pool.destroy(*this);
+
+    swapchain.destroy(*this);
+
+    device_destroy(*this);
 
     if (surface) {
         vkDestroySurfaceKHR(instance, surface, &allocator);
@@ -235,6 +169,168 @@ VulkanContext::~VulkanContext() {
         vkDestroyInstance(instance, &allocator);
         instance = nullptr;
     }
+}
+
+bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
+    vk_renderer.platform_state = &platform_state;
+    vk_renderer.frame_count = 0;
+
+    VkApplicationInfo vk_app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
+    vk_app_info.pApplicationName = config.name;
+    vk_app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    vk_app_info.pEngineName = "SNOWFLAKE_ENGINE";
+    vk_app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    vk_app_info.apiVersion = VK_API_VERSION_1_4;
+
+    VkInstanceCreateInfo create_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    create_info.pNext = nullptr;
+    create_info.pApplicationInfo = &vk_app_info;
+
+    // Extensions
+    FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY> required_extensions;
+    required_extensions.append(VK_KHR_SURFACE_EXTENSION_NAME);
+    #ifdef SF_DEBUG
+    required_extensions.append(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    #endif
+
+    if (!init_extensions(create_info, required_extensions)) {
+        return false;
+    }
+
+    // Layers
+    #ifdef SF_DEBUG
+    FixedArray<const char*, 1> required_validation_layers;
+    required_validation_layers.append("VK_LAYER_KHRONOS_validation");
+
+    if (!init_validation_layers(create_info, required_validation_layers)) {
+        return false;
+    }
+    #endif
+
+    // TODO: custom allocator
+    sf_vk_check(vkCreateInstance(&create_info, nullptr, &vk_context.instance));
+
+    #ifdef SF_DEBUG
+    create_debugger();
+    #endif
+
+    vk_context.framebuffer_width = config.width;
+    vk_context.framebuffer_height = config.height;
+
+    return true;
+}
+
+void create_debugger() {
+    u32 log_severity =  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+                        // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
+
+    VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+    debug_create_info.messageSeverity = log_severity;
+    debug_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+    debug_create_info.pfnUserCallback = sf_vk_debug_callback;
+
+    PFN_vkCreateDebugUtilsMessengerEXT func =
+        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vk_context.instance, "vkCreateDebugUtilsMessengerEXT");
+
+    SF_ASSERT_MSG(func, "Failed to create debug messenger!");
+
+    // TODO: custom allocator
+    sf_vk_check(func(vk_context.instance, &debug_create_info, nullptr, &vk_context.debug_messenger));
+}
+
+bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
+    platform_get_required_extensions(required_extensions);
+#ifdef SF_DEBUG
+    // Log required extensions
+    LOG_INFO("Required vulkan extensions: ");
+    for (const char* ext_name : required_extensions) {
+        LOG_INFO("{}", ext_name);
+    }
+#endif
+    u32 available_extensions_count{0};
+    vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, nullptr);
+
+    FixedArray<VkExtensionProperties, 40> available_extensions(available_extensions_count);
+    vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, available_extensions.data());
+
+    // check if we have all required extensions
+    for (const char* req_ext_name : required_extensions) {
+        bool is_found{false};
+        for (u32 i{0}; i < available_extensions_count; ++i) {
+            const auto& av_ext = available_extensions[i];
+            if (sf_str_cmp(req_ext_name, av_ext.extensionName)) {
+                is_found = true;
+                break;
+            }
+        }
+        if (!is_found) {
+            LOG_FATAL("Missing required extension: {}", req_ext_name);
+            return false;
+        }
+    }
+
+    create_info.enabledExtensionCount = required_extensions.count();
+    create_info.ppEnabledExtensionNames = required_extensions.data();
+
+    return true;
+}
+
+bool init_validation_layers(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_VALIDATION_LAYER_CAPACITY>& required_validation_layers) {
+    u32 available_layer_count = 0;
+    sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, 0));
+    FixedArray<VkLayerProperties, 30> available_layers(available_layer_count);
+    sf_vk_check(vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers.data()));
+
+    for (const char* req_layer : required_validation_layers) {
+        bool is_available = false;
+        for (const VkLayerProperties& available_layer : available_layers) {
+            if (sf_str_cmp(req_layer, available_layer.layerName)) {
+                is_available = true;
+                break;
+            }
+        }
+
+        if (!is_available) {
+            LOG_FATAL("Required validation layer is missing: {}", req_layer);
+            return false;
+        }
+    }
+
+    create_info.enabledLayerCount = required_validation_layers.count();
+    create_info.ppEnabledLayerNames = required_validation_layers.data();
+    return true;
+}
+
+void init_synch_primitives(VulkanContext& context) {
+    context.image_available_semaphore = VulkanSemaphore::create(context);
+    context.render_finished_semaphore = VulkanSemaphore::create(context);
+    context.draw_fence = VulkanFence::create(context);
+}
+
+void destroy_synch_primitives(VulkanContext& context) {
+    context.image_available_semaphore.destroy(context);
+    context.render_finished_semaphore.destroy(context);
+    context.draw_fence.destroy(context);
+}
+
+VkViewport VulkanContext::get_viewport() const {
+    return {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(framebuffer_width),
+        .height = static_cast<float>(framebuffer_height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+}
+
+VkRect2D VulkanContext::get_scissors() const {
+    return VkRect2D{
+        .offset = { 0, 0 },
+        .extent = { framebuffer_width, framebuffer_height }
+    };
 }
 
 } // sf

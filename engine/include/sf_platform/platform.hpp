@@ -36,11 +36,13 @@ struct VulkanContext;
 // non-templated versions of memory functions (needed for void*)
 void*   platform_mem_alloc(u64 byte_size, u16 alignment);
 u32     platform_get_mem_page_size();
-void    platform_console_write(const i8* message, u8 color);
-void    platform_console_write_error(const i8* message, u8 color);
+void    platform_console_write(char* message_buff, u16 written_count, u8 color);
+void    platform_console_write_error(char* message_buff, u16 written_count, u8 color);
 f64     platform_get_abs_time();
 void    platform_sleep(u64 ms);
-void    platform_get_required_extensions(FixedArray<const char*, 5>& required_extensions);
+
+static constexpr u32 REQUIRED_EXTENSION_CAPACITY = 5;
+void    platform_get_required_extensions(FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions);
 void    platform_create_vk_surface(PlatformState& plat_state, VulkanContext& context);
 
 } // sf

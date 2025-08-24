@@ -312,6 +312,8 @@ static void surface_handle_frame_done(void* data, wl_callback* cb, u32 time) {
     cb = wl_surface_frame(state->go_state.surface);
     wl_callback_add_listener(cb, &state->listeners.callback_listener,  static_cast<void*>(state));
     // draw_frame(state);
+    // wl_surface_damage(state->go_state.surface, 0, 0, state->window_props.width, state->window_props.height);
+    // wl_surface_commit(state->go_state.surface);
     state->go_state.last_frame = time;
 }
 
@@ -719,9 +721,6 @@ PlatformState::~PlatformState() {
 
 bool PlatformState::start_event_loop(ApplicationState& application_state) {
     WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
-    wl_callback* cb = wl_surface_frame(state->go_state.surface);
-    wl_callback_add_listener(cb, &state->listeners.callback_listener, state);
-
     Clock clock;
     clock.start();
 
@@ -733,6 +732,9 @@ bool PlatformState::start_event_loop(ApplicationState& application_state) {
         if (!application_state.is_suspended) {
             f64 delta_time = application_state.clock.update_and_get_delta();
             f64 frame_start_time = platform_get_abs_time();
+
+            // TODO: check for success
+            renderer_begin_frame(delta_time);
 
             if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
                 LOG_FATAL("Game update failed, shutting down");
@@ -767,6 +769,8 @@ bool PlatformState::start_event_loop(ApplicationState& application_state) {
 
             // update input at the end of the frame
             input_update(delta_time);
+            // TODO: check for success
+            renderer_end_frame(delta_time);
         }
     }
 
@@ -793,21 +797,18 @@ void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
 
 static constexpr std::array<std::string_view, static_cast<u16>(LogLevel::COUNT)> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;28"};
 
-void platform_console_write(const char* message, u8 color) {
+void platform_console_write(char* message_buff, u16 written_count, u8 color) {
     // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-    constexpr usize BUFF_LEN{ 256 };
-    char message_buff[BUFF_LEN] = {0};
-    const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
-    std::cout << std::string_view(const_cast<const char*>(message_buff), res.out);
+    char message_buff2[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
+    const std::format_to_n_result res = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "\033[{}m{}\033[0m", color_strings[color], const_cast<const char*>(message_buff));
+    std::cout << std::string_view(const_cast<const char*>(message_buff2), res.out);
 }
 
-
-void platform_console_write_error(const i8* message, u8 color) {
+void platform_console_write_error(char* message_buff, u16 written_count, u8 color) {
     // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-    constexpr usize BUFF_LEN{ 256 };
-    char message_buff[BUFF_LEN] = {0};
-    const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
-    std::cerr << std::string_view(const_cast<const char*>(message_buff), res.out);
+    char message_buff2[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
+    const std::format_to_n_result res = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "\033[{}m{}\033[0m", color_strings[color], const_cast<const char*>(message_buff));
+    std::cerr << std::string_view(const_cast<const char*>(message_buff2), res.out);
 }
 
 f64 platform_get_abs_time() {
@@ -834,7 +835,7 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
 }
 
-void platform_get_required_extensions(FixedArray<const char*, 5>& required_extensions) {
+void platform_get_required_extensions(FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
     required_extensions.append("VK_KHR_wayland_surface");
 }
 

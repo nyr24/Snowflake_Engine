@@ -19,7 +19,7 @@ Result<VkShaderModule> create_shader_module(VulkanContext& context, std::filesys
 
     VkShaderModuleCreateInfo create_info{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = shader_file_contents,
+        .codeSize = shader_file_contents_unwrapped.count(),
         .pCode = reinterpret_cast<u32*>(shader_file_contents_unwrapped.data()),
     };
 

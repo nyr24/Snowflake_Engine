@@ -13,7 +13,7 @@ Result<DynamicArray<char>> read_file(std::filesystem::path file_name) noexcept {
         return {ResultError::VALUE};
     }
 
-    DynamicArray<char> file_contents(file.tellg());
+    DynamicArray<char> file_contents(file.tellg(), file.tellg());
     file.seekg(0, std::ios::beg);
     file.read(file_contents.data(), static_cast<std::streamsize>(file_contents.count()));
 

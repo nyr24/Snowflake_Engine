@@ -7,8 +7,9 @@
 
 namespace sf {
 
-void image_create(
-    VulkanContext& context,
+bool VulkanImage::create(
+    const VulkanContext& context,
+    VulkanImage& out_image,
     VkImageType type,
     u32 width,
     u32 height,
@@ -18,24 +19,27 @@ void image_create(
     VkMemoryPropertyFlags memory_flags,
     bool create_view,
     VkImageAspectFlags aspect_flags,
-    VulkanImage& out_image
+    VkImageLayout image_init_layout
 ) {
     out_image.width = width;
     out_image.height = height;
 
-    VkImageCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-    create_info.imageType = VK_IMAGE_TYPE_2D;
-    create_info.extent.width = width;
-    create_info.extent.height = height;
-    create_info.extent.depth = 1;
-    create_info.mipLevels = 4;
-    create_info.arrayLayers = 1;
-    create_info.format = format;
-    create_info.tiling = tiling;
-    create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    create_info.usage = usage;
-    create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkImageCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .mipLevels = 4,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = tiling,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = image_init_layout,
+    };
+
+    create_info.extent.width = width,
+    create_info.extent.height = height,
+    create_info.extent.depth = 1,
 
     // TODO: custom allocator
     // sf_vk_check(vkCreateImage(context.device.logical_device, &create_info, &context.allocator, &out_image.handle));
@@ -47,7 +51,7 @@ void image_create(
     Option<u32> memory_type = find_memory_index(context, memory_requirements.memoryTypeBits, memory_flags);
     if (memory_type.is_none()) {
         LOG_ERROR("Required memory type not found. Image not valid.");
-        return;
+        return false;
     }
 
     VkMemoryAllocateInfo allocate_info{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
@@ -61,53 +65,53 @@ void image_create(
 
     if (create_view) {
         out_image.view = nullptr;
-        image_view_create(context, format, out_image, aspect_flags);
+        out_image.create_view(context, format, aspect_flags);
     }
+
+    return true;
 }
 
-void image_view_create(
-    VulkanContext& context,
+void VulkanImage::create_view(
+    const VulkanContext& context,
     VkFormat format,
-    VulkanImage& image,
     VkImageAspectFlags aspect_flags
 ) {
-    VkImageViewCreateInfo create_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    create_info.image = image.handle;
-    create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    create_info.format = format;
-    create_info.subresourceRange.aspectMask = aspect_flags;
+    VkImageViewCreateInfo create_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = handle,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+    };
 
-    create_info.subresourceRange.baseMipLevel = 0;
-    create_info.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-    create_info.subresourceRange.baseArrayLayer = 0;
-    create_info.subresourceRange.layerCount = 1;
+    create_info.subresourceRange.aspectMask = aspect_flags,
+    create_info.subresourceRange.baseMipLevel = 0,
+    create_info.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS,
+    create_info.subresourceRange.baseArrayLayer = 0,
+    create_info.subresourceRange.layerCount = 1,
 
     // TODO: custom allocator
     // sf_vk_check(vkCreateImageView(context.device.logical_device, &create_info, &context.allocator, &image.view));
-    sf_vk_check(vkCreateImageView(context.device.logical_device, &create_info, nullptr, &image.view));
+    sf_vk_check(vkCreateImageView(context.device.logical_device, &create_info, nullptr, &view));
 }
 
-void image_destroy(
-    VulkanContext& context,
-    VulkanImage& image
-) {
-    if (image.view) {
+void VulkanImage::destroy(const VulkanContext& context) {
+    if (view) {
         // TODO: custom allocator
         // vkDestroyImageView(context.device.logical_device, image.view, &context.allocator);
-        vkDestroyImageView(context.device.logical_device, image.view, nullptr);
-        image.view = nullptr;
+        vkDestroyImageView(context.device.logical_device, view, nullptr);
+        view = nullptr;
     }
-    if (image.memory) {
+    if (memory) {
         // TODO: custom allocator
         // vkFreeMemory(context.device.logical_device, image.memory, &context.allocator);
-        vkFreeMemory(context.device.logical_device, image.memory, nullptr);
-        image.memory = nullptr;
+        vkFreeMemory(context.device.logical_device, memory, nullptr);
+        memory = nullptr;
     }
-    if (image.handle) {
+    if (handle) {
         // TODO: custom allocator
         // vkDestroyImage(context.device.logical_device, image.handle, &context.allocator);
-        vkDestroyImage(context.device.logical_device, image.handle, nullptr);
-        image.handle = nullptr;
+        vkDestroyImage(context.device.logical_device, handle, nullptr);
+        handle = nullptr;
     }
 }
 

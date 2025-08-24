@@ -270,22 +270,18 @@ void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
 
 static constexpr std::array<std::string_view, 6> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
 
-void platform_console_write(const i8* message, u8 color) {
+void platform_console_write(char* message_buff, u16 written_count, u8 color) {
     // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-    // printf("\033[%sm%s\033[0m", color_strings[color], message);
-    constexpr usize BUFF_LEN{ 200 };
-    char message_buff[BUFF_LEN] = {0};
-    const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
-    std::cout << std::string_view(const_cast<const i8*>(message_buff), res.out);
+    char message_buff2[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
+    const std::format_to_n_result res = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "\033[{}m{}\033[0m", color_strings[color], const_cast<const char*>(message_buff));
+    std::cout << std::string_view(const_cast<const char*>(message_buff2), res.out);
 }
 
-void platform_console_write_error(const i8* message, u8 color) {
+void platform_console_write_error(char* message_buff, u16 written_count, u8 color) {
     // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-    // printf("\033[%sm%s\033[0m", color_strings[color], message);
-    constexpr usize BUFF_LEN{ 200 };
-    char message_buff[BUFF_LEN] = {0};
-    const std::format_to_n_result res = std::format_to_n(message_buff, BUFF_LEN, "\033[{}m{}\033[0m", color_strings[color], message);
-    std::cerr << std::string_view(const_cast<const i8*>(message_buff), res.out);
+    char message_buff2[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
+    const std::format_to_n_result res = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "\033[{}m{}\033[0m", color_strings[color], const_cast<const char*>(message_buff));
+    std::cerr << std::string_view(const_cast<const char*>(message_buff2), res.out);
 }
 
 f64 platform_get_abs_time() {
@@ -312,7 +308,7 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
 }
 
-void platform_get_required_extensions(FixedArray<const char*, 5>& required_extensions) {
+void platform_get_required_extensions(FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
     required_extensions.append("VK_KHR_xcb_surface");
 }
 

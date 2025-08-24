@@ -11,7 +11,9 @@
 namespace sf {
 
 bool device_create(VulkanContext& context) {
-    if (!device_select(context)) {
+    FixedArray<const char*, DEVICE_EXTENSION_CAPACITY> extension_names{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME };
+
+    if (!device_select(context, extension_names)) {
         return false;
     }
 
@@ -57,16 +59,28 @@ bool device_create(VulkanContext& context) {
 
     // Request device features.
     // TODO: should be config driven
-    VkPhysicalDeviceFeatures device_features = {};
-    device_features.samplerAnisotropy = VK_TRUE;  // Request anistrophy
+    VkPhysicalDeviceFeatures device_features = { .samplerAnisotropy = VK_TRUE };
 
-    VkDeviceCreateInfo device_create_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-    device_create_info.queueCreateInfoCount = index_count;
-    device_create_info.pQueueCreateInfos = queue_create_infos.data();
-    device_create_info.pEnabledFeatures = &device_features;
-    device_create_info.enabledExtensionCount = 1;
-    const char* extension_names = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-    device_create_info.ppEnabledExtensionNames = &extension_names;
+    VkPhysicalDeviceSynchronization2FeaturesKHR synch_2_feature{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
+        .synchronization2 = VK_TRUE,
+    };
+
+    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_feature{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+        .pNext = &synch_2_feature,
+        .dynamicRendering = VK_TRUE,
+    };
+
+    VkDeviceCreateInfo device_create_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &dynamic_rendering_feature,
+        .queueCreateInfoCount = index_count,
+        .pQueueCreateInfos = queue_create_infos.data(),
+        .enabledExtensionCount = extension_names.count(),
+        .ppEnabledExtensionNames = extension_names.data(),
+        .pEnabledFeatures = &device_features,
+    };
 
     // Create the device.
     sf_vk_check(vkCreateDevice(
@@ -102,7 +116,7 @@ bool device_create(VulkanContext& context) {
     return true;
 }
 
-bool device_select(VulkanContext& context) {
+bool device_select(VulkanContext& context, FixedArray<const char*, DEVICE_EXTENSION_CAPACITY>& required_extensions) {
     u32 physical_device_count{0};
     sf_vk_check(vkEnumeratePhysicalDevices(context.instance, &physical_device_count, nullptr));
 
@@ -121,7 +135,7 @@ bool device_select(VulkanContext& context) {
             // include this if need compute
             // | VULKAN_PHYSICAL_DEVICE_REQUIREMENT_COMPUTE
         ,
-        .device_extension_names = Option<FixedArray<const char*, 10>>(FixedArray<const char*, 10>{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME })
+        .device_extension_names = required_extensions
     };
 
     for (u32 i{0}; i < physical_device_count; ++i) {
@@ -276,6 +290,10 @@ bool device_meet_requirements(
             }
         }
 
+        if (out_queue_family_info.present_family_index != 255) {
+            continue;
+        }
+
         VkBool32 supports_present{VK_FALSE};
         sf_vk_check(vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &supports_present));
         if (supports_present) {
@@ -283,9 +301,10 @@ bool device_meet_requirements(
         }
     }
 
-    LOG_INFO("Device = {}, queue info:\n\tGraphics queue index: {}\n\tCompute queue index: {}\n\tTransfer queue index: {}",
+    LOG_INFO("Device = {}, queue info:\n\tGraphics queue index: {}\n\tPresent queue index: {}\n\tCompute queue index: {}\n\tTransfer queue index: {}",
         properties.deviceName,
         out_queue_family_info.graphics_family_index,
+        out_queue_family_info.present_family_index,
         out_queue_family_info.compute_family_index,
         out_queue_family_info.transfer_family_index
     );
@@ -305,7 +324,7 @@ bool device_meet_requirements(
         return false;
     }
 
-    if (requirements.device_extension_names.is_some()) {
+    if (requirements.device_extension_names.count() > 0) {
         u32 available_extension_count{0};
         sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, nullptr));
 
@@ -313,13 +332,11 @@ bool device_meet_requirements(
             DynamicArray<VkExtensionProperties> available_extensions(available_extension_count, available_extension_count);
             sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, available_extensions.data()));
 
-            for (const auto* required_extension : requirements.device_extension_names.unwrap()) {
-                LOG_INFO("Checking for device {}, extension: {}", properties.deviceName, required_extension);
+            for (const auto* required_extension : requirements.device_extension_names) {
                 bool is_available{false};
 
                 for (const auto& available_ext : available_extensions) {
                     if (sf_str_cmp(available_ext.extensionName, required_extension)) {
-                        LOG_INFO("Extension: {} is found", required_extension);
                         is_available = true;
                         break;
                     }
@@ -343,7 +360,7 @@ bool device_meet_requirements(
 }
 
 bool device_detect_depth_format(VulkanDevice& device) {
-    constexpr u64 CANDIDATES_COUNT{3};
+    constexpr u8 CANDIDATES_COUNT{3};
     VkFormat candidates[CANDIDATES_COUNT] = {
         VK_FORMAT_D32_SFLOAT,
         VK_FORMAT_D32_SFLOAT_S8_UINT,
@@ -387,7 +404,7 @@ void device_destroy(VulkanContext& context) {
     context.device.queue_family_info.compute_family_index = 255;
 }
 
-Option<u32> find_memory_index(VulkanContext& context, u32 type_filter, u32 property_flags) {
+Option<u32> find_memory_index(const VulkanContext& context, u32 type_filter, u32 property_flags) {
     VkPhysicalDeviceMemoryProperties memory_properties;
     vkGetPhysicalDeviceMemoryProperties(context.device.physical_device, &memory_properties);
 

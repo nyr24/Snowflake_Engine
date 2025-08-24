@@ -11,8 +11,12 @@ namespace fs = std::filesystem;
 
 namespace sf {
 
-bool pipeline_create(VulkanContext& context) {
-    fs::path shader_path = fs::current_path() / "/shaders/shader.spv";
+ bool pipeline_create(VulkanContext& context) {
+    #ifdef SF_DEBUG
+    fs::path shader_path = fs::current_path() / "build/debug/engine/shaders/shader.spv";
+    #else
+    fs::path shader_path = fs::current_path() / "/build/release/engine/shaders/shader.spv";
+    #endif
 
     Result<VkShaderModule> maybe_shader_module = create_shader_module(context, shader_path);
     if (maybe_shader_module.is_err()) {
@@ -44,26 +48,15 @@ bool pipeline_create(VulkanContext& context) {
         .pDynamicStates = dynamic_state.data()
     };
 
-    VkPipelineVertexInputStateCreateInfo vertex_input_info;
+    VkPipelineVertexInputStateCreateInfo vertex_input_info{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
     };
 
-    VkViewport viewport{
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = static_cast<float>(context.framebuffer_width),
-        .height = static_cast<float>(context.framebuffer_height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
-
-    VkRect2D scissors{
-        .offset = { 0, 0 },
-        .extent = VkExtent2D{ context.framebuffer_width, context.framebuffer_height }
-    };
+    VkViewport viewport{ context.get_viewport() };
+    VkRect2D scissors{ context.get_scissors() };
 
     VkPipelineViewportStateCreateInfo viewport_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -75,16 +68,20 @@ bool pipeline_create(VulkanContext& context) {
 
     VkPipelineRasterizationStateCreateInfo rasterization_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .depthClampEnable = VK_FALSE,
+        .rasterizerDiscardEnable = VK_FALSE,
+        // use VK_POLYGON_MODE_WIREFRAME to only see edges of the polygons
         .polygonMode = VK_POLYGON_MODE_FILL,
         .cullMode = VK_CULL_MODE_BACK_BIT,
-        // use VK_POLYGON_MODE_WIREFRAME to only see edges of the polygons
         .frontFace = VK_FRONT_FACE_CLOCKWISE,
-        .depthClampEnable = VK_FALSE,
         .depthBiasEnable = VK_FALSE,
-        .rasterizerDiscardEnable = VK_FALSE,
         .lineWidth = 1.0f,
     };
 
+    VkPipelineMultisampleStateCreateInfo multisample_create_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
+    };
 
     VkPipelineColorBlendAttachmentState color_blending_attachment{
         .blendEnable = true,
@@ -128,7 +125,7 @@ bool pipeline_create(VulkanContext& context) {
         .pInputAssemblyState = &input_assembly_create_info,
         .pViewportState = &viewport_create_info,
         .pRasterizationState = &rasterization_create_info,
-        .pMultisampleState = nullptr,
+        .pMultisampleState = &multisample_create_info,
         .pColorBlendState = &color_blending_state,
         .pDynamicState = &dynamic_create_info,
         .layout = context.pipeline.layout,

@@ -153,26 +153,26 @@ void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
     return ptr;
 }
 
-void platform_console_write(const i8* message, u8 color) {
+static constexpr u8 levels[6] = { 64, 4, 6, 2, 1, 8 };
+
+void platform_console_write(char* message_buff, u16 written_count, u8 color) {
     HANDLE console_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-    static u8 levels[6] = { 64, 4, 6, 2, 1, 8 };
     SetConsoleTextAttribute(console_handle, levels[color]);
 
-    OutputDebugStringA(message.data());
-    LPDWORD count_written = 0;
-    WriteConsoleA(console_handle, message, (DWORD)message.length(), count_written, 0);
+    OutputDebugStringA(message_buff);
+    DWORD res_count_written;
+    WriteConsoleA(console_handle, message, (DWORD)written_count, &res_count_written, 0);
 }
 
-void platform_console_write_error(const i8* message, u8 color) {
+void platform_console_write_error(char* message_buff, u16 written_count, u8 color) {
     HANDLE console_handle = GetStdHandle(STD_ERROR_HANDLE);
-    static u8 levels[6] = { 64, 4, 6, 2, 1, 8 };
     SetConsoleTextAttribute(console_handle, levels[color]);
 
-    OutputDebugStringA(message.data());
-    LPDWORD count_written = 0;
-    WriteConsoleA(console_handle, message, (DWORD)message.length(), count_written, 0);
+    OutputDebugStringA(message_buff);
+    DWORD res_count_written;
+    WriteConsoleA(console_handle, message, (DWORD)written_count, &res_count_written, 0);
 }
-
+ 
 void platform_sleep(u64 ms) {
     Sleep(ms);
 }
@@ -183,7 +183,7 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(si.dwPageSize);
 }
 
-void platform_get_required_extensions(FixedArray<const char*, 5>& required_extensions) {
+void platform_get_required_extensions(FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
     required_extensions.append("VK_KHR_win32_surface");
 }
 

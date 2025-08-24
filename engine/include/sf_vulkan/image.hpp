@@ -1,34 +1,42 @@
 #pragma once
 
-#include "sf_vulkan/types.hpp"
+#include "sf_core/defines.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
+struct VulkanContext;
 
-void image_create(
-    VulkanContext& context,
-    VkImageType type,
-    u32 width,
-    u32 height,
-    VkFormat format,
-    VkImageTiling tiling,
-    VkImageUsageFlags usage_flags,
-    VkMemoryPropertyFlags memory_flags,
-    bool create_view,
-    VkImageAspectFlags aspect_flags,
-    VulkanImage& out_image
-);
+struct VulkanImage {
+public:
+    VkImage         handle;
+    VkDeviceMemory  memory;
+    VkImageView     view;
+    u32             width;
+    u32             height;
 
-void image_view_create(
-    VulkanContext& context,
-    VkFormat format,
-    VulkanImage& image,
-    VkImageAspectFlags aspect_flags
-);
+public:
+    static bool create(
+        const VulkanContext& context,
+        VulkanImage& out_image,
+        VkImageType type,
+        u32 width,
+        u32 height,
+        VkFormat format,
+        VkImageTiling tiling,
+        VkImageUsageFlags usage,
+        VkMemoryPropertyFlags memory_flags,
+        bool create_view,
+        VkImageAspectFlags aspect_flags,
+        VkImageLayout image_init_layout = VK_IMAGE_LAYOUT_UNDEFINED
+    );
 
-void image_destroy(
-    VulkanContext& context,
-    VulkanImage& image
-);
+    void create_view(
+        const VulkanContext& context,
+        VkFormat format,
+        VkImageAspectFlags aspect_flags
+    );
+
+    void destroy(const VulkanContext& context);
+};
 
 } // sf

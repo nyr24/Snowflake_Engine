@@ -14,8 +14,8 @@
 #endif
 
 namespace sf {
-void platform_console_write(const i8* message, u8 color);
-void platform_console_write_error(const i8* message, u8 color);
+void platform_console_write(char* message_buff, u16 written_count, u8 color);
+void platform_console_write_error(char* message_buff, u16 written_count, u8 color);
 
 enum struct LogLevel : u8 {
     LOG_LEVEL_FATAL,
@@ -36,27 +36,28 @@ constexpr std::array<const i8*, 6> log_level_as_str = {
     "[TRACE]: ",
 };
 
+constexpr u16 OUTPUT_PRINT_BUFFER_CAPACITY{ 2056 };
+
 template<typename... Args>
 SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, Args&&... args) {
-    constexpr usize BUFF_LEN{ 512 };
-    char message_buff[BUFF_LEN] = {0};
-    std::format_to_n(message_buff, BUFF_LEN, fmt, std::forward<Args>(args)...);
+    char message_buff1[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
+    auto write_res1 = std::format_to_n(message_buff1, OUTPUT_PRINT_BUFFER_CAPACITY, fmt, std::forward<Args>(args)...);
 
-    constexpr usize BUFF_LEN2{ 512 };
-    char message_buff2[BUFF_LEN2] = {0};
-    std::format_to_n(message_buff2, BUFF_LEN2, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], message_buff);
-
+    char message_buff2[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
+    auto write_res2 = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], const_cast<const char*>(message_buff1));
+    
     switch (log_level) {
         case LogLevel::LOG_LEVEL_FATAL:
         case LogLevel::LOG_LEVEL_ERROR:
-            sf::platform_console_write_error(const_cast<const char*>(message_buff2), static_cast<u8>(log_level));
+            sf::platform_console_write_error(message_buff2, static_cast<u16>(write_res2.size), static_cast<u8>(log_level));
             break;
         default:
-            sf::platform_console_write(const_cast<const char*>(message_buff2), static_cast<u8>(log_level));
+            sf::platform_console_write(message_buff2, static_cast<u16>(write_res2.size), static_cast<u8>(log_level));
             break;
     }
 }
-}
+
+} // sf
 
 #define LOG_FATAL(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__);
 

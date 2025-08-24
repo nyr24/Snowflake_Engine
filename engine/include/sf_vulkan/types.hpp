@@ -4,10 +4,16 @@
 
 #include "sf_core/defines.hpp"
 #include "sf_containers/dynamic_array.hpp"
+#include "sf_vulkan/command_buffer.hpp"
+#include "sf_vulkan/swapchain.hpp"
+#include "sf_vulkan/image.hpp"
+#include "sf_vulkan/synch.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
+
 struct PlatformState;
+struct VulkanContext;
 
 struct VulkanDeviceQueueFamilyInfo {
     u8 graphics_family_index;
@@ -20,30 +26,12 @@ struct VulkanDeviceQueueFamilyInfo {
     u8 transfer_available_queue_count;
 };
 
-struct VulkanImage {
-    VkImage         handle;
-    VkDeviceMemory  memory;
-    VkImageView     view;
-    u32             width;
-    u32             height;
-};
-
 struct VulkanSwapchainSupportInfo {
     VkSurfaceCapabilitiesKHR            capabilities;
     DynamicArray<VkSurfaceFormatKHR>    formats;
     DynamicArray<VkPresentModeKHR>      present_modes;
     u32                                 format_count;
     u32                                 present_mode_count;
-};
-
-struct VulkanSwapchain {
-    static constexpr u8 MAX_FRAMES_IN_FLIGHT = 2;
-
-    VkSwapchainKHR                      handle;
-    DynamicArray<VkImage>               images;
-    DynamicArray<VkImageView>           views;
-    VulkanImage                         depth_attachment;
-    VkSurfaceFormatKHR                  image_format;
 };
 
 // device
@@ -73,22 +61,31 @@ struct VulkanPipeline {
 
 // context
 struct VulkanContext {
-    VkInstance                  instance;
-    VulkanAllocator             allocator;
-    VulkanDevice                device;
-    VkSurfaceKHR                surface;
+    VkInstance                          instance;
+    VulkanAllocator                     allocator;
+    VulkanDevice                        device;
+    VkSurfaceKHR                        surface;
 #ifdef SF_DEBUG
-    VkDebugUtilsMessengerEXT    debug_messenger;
+    VkDebugUtilsMessengerEXT            debug_messenger;
 #endif
-    VulkanSwapchain             swapchain;
-    VulkanPipeline              pipeline;
-    u32                         image_index;
-    u32                         curr_frame;
-    u32                         framebuffer_width;
-    u32                         framebuffer_height;
-    bool                        recreating_swapchain;
+    VulkanSwapchain                     swapchain;
+    VulkanPipeline                      pipeline;
+    VulkanCommandPool                   graphics_command_pool;
+    DynamicArray<VulkanCommandBuffer>   graphics_command_buffers;
+    // synch primitives
+    VulkanSemaphore                     image_available_semaphore;
+    VulkanSemaphore                     render_finished_semaphore;
+    VulkanFence                         draw_fence;
+    u32                                 image_index;
+    u32                                 curr_frame;
+    u32                                 framebuffer_width;
+    u32                                 framebuffer_height;
+    bool                                recreating_swapchain;
 public:
     ~VulkanContext();
+
+    VkViewport get_viewport() const;
+    VkRect2D get_scissors() const;
 };
 
 // renderer
