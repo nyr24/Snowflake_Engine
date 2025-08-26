@@ -50,7 +50,7 @@ void VulkanSwapchain::present(
     VulkanContext& context,
     VkQueue present_queue,
     VkSemaphore render_complete_semaphore,
-    u32 present_image_index
+    u32& present_image_index
 ) {
     VkPresentInfoKHR present_info{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -176,9 +176,6 @@ bool VulkanSwapchain::create_inner(
     if (swapchain.views.is_empty()) {
         swapchain.views.resize(swapchain_image_count);
     }
-
-    // resize command buffers by image count amount
-    context.graphics_command_buffers.resize(image_count);
 
     sf_vk_check(vkGetSwapchainImagesKHR(
         context.device.logical_device,

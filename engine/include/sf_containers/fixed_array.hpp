@@ -123,6 +123,12 @@ public:
         --_count;
     }
 
+    constexpr void resize(u32 count) noexcept {
+        if (count <= Capacity) {
+            _count = count;
+        }
+    }
+
     constexpr void pop() noexcept {
         deallocate(1);
     }

@@ -1,9 +1,11 @@
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_containers/dynamic_array.hpp"
+#include "sf_containers/fixed_array.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_vulkan/synch.hpp"
 #include "sf_vulkan/types.hpp"
 #include <vulkan/vulkan_core.h>
+#include "sf_vulkan/swapchain.hpp"
 
 namespace sf {
 
@@ -32,19 +34,19 @@ VulkanCommandBuffer::VulkanCommandBuffer()
 {
 }
 
-void VulkanCommandBuffer::allocate(VulkanContext& context, VkCommandPool command_pool,  DynamicArray<VulkanCommandBuffer>& out_buffers, bool is_primary) {
-    DynamicArray<VkCommandBuffer> handles(out_buffers.count(), out_buffers.count());
+void VulkanCommandBuffer::allocate(VulkanContext& context, VkCommandPool command_pool, FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>& out_buffers, bool is_primary) {
+    FixedArray<VkCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> handles(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
 
     VkCommandBufferAllocateInfo alloc_info{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = command_pool,
         .level = is_primary ? VK_COMMAND_BUFFER_LEVEL_PRIMARY : VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-        .commandBufferCount = out_buffers.count()
+        .commandBufferCount = VulkanSwapchain::MAX_FRAMES_IN_FLIGHT
     };
 
     sf_vk_check(vkAllocateCommandBuffers(context.device.logical_device, &alloc_info, handles.data()));
 
-    for (u32 i{0}; i < out_buffers.count(); ++i) {
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
         out_buffers[i].handle = handles[i];
         out_buffers[i].state = VulkanCommandBufferState::READY;
     }
@@ -113,11 +115,6 @@ void VulkanCommandBuffer::begin_rendering(VulkanContext& context, u32 image_inde
 
     end(context);
 }
-
-// TODO:
-// VulkanCommandBuffer command_buffer_begin_single_use(VulkanContext& context, bool is_primary) {
-    // VulkanCommandBuffer b = command_buffer_allocate(context, is_primary);
-// }
 
 void VulkanCommandBuffer::end(VulkanContext& context) {
     if (state != VulkanCommandBufferState::RECORDING_BEGIN) {

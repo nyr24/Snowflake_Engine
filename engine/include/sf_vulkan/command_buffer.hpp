@@ -1,6 +1,7 @@
 #pragma once
 
-#include "sf_containers/dynamic_array.hpp"
+#include "sf_containers/fixed_array.hpp"
+#include "sf_vulkan/swapchain.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_vulkan/synch.hpp"
 #include <vulkan/vulkan_core.h>
@@ -24,7 +25,7 @@ public:
 public:
     VulkanCommandBuffer();
 
-    static void allocate(VulkanContext& context, VkCommandPool command_pool,  DynamicArray<VulkanCommandBuffer>& out_buffers, bool is_primary);
+    static void allocate(VulkanContext& context, VkCommandPool command_pool,  FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>& out_buffers, bool is_primary);
     // static VulkanCommandBuffer begin_single_use(VulkanContext& context, VkCommandPool command_pool, bool is_primary);
     void begin_recording(VulkanContext& context, VkCommandBufferUsageFlags begin_flags, u32 image_index);
     void end(VulkanContext& context);

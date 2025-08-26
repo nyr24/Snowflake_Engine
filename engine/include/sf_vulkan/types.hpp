@@ -2,6 +2,7 @@
 
 // Shared types between vulkan subsystem
 
+#include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_vulkan/command_buffer.hpp"
@@ -71,17 +72,18 @@ struct VulkanContext {
     VulkanSwapchain                     swapchain;
     VulkanPipeline                      pipeline;
     VulkanCommandPool                   graphics_command_pool;
-    DynamicArray<VulkanCommandBuffer>   graphics_command_buffers;
+    FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>  graphics_command_buffers;
     // synch primitives
-    VulkanSemaphore                     image_available_semaphore;
-    VulkanSemaphore                     render_finished_semaphore;
-    VulkanFence                         draw_fence;
+    FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>      image_available_semaphores;
+    FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>      render_finished_semaphores;
+    FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>          draw_fences;
     u32                                 image_index;
     u32                                 curr_frame;
     u32                                 framebuffer_width;
     u32                                 framebuffer_height;
     bool                                recreating_swapchain;
 public:
+    VulkanContext();
     ~VulkanContext();
 
     VkViewport get_viewport() const;

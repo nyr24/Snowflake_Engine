@@ -65,11 +65,9 @@ void renderer_resize(i16 width, i16 height) {
 }
 
 bool renderer_begin_frame(f64 delta_time) {
-    // TODO: make a fence for synchronization here
     vkQueueWaitIdle(vk_context.device.present_queue);
-    vk_context.draw_fence.reset(vk_context);
 
-    if (!vk_context.swapchain.acquire_next_image_index(vk_context, UINT64_MAX, vk_context.image_available_semaphore.handle, nullptr, vk_context.image_index)) {
+    if (!vk_context.swapchain.acquire_next_image_index(vk_context, UINT64_MAX, vk_context.image_available_semaphores[vk_context.curr_frame].handle, nullptr, vk_context.image_index)) {
         return false;
     }
     
@@ -77,7 +75,11 @@ bool renderer_begin_frame(f64 delta_time) {
 }
 
 bool renderer_draw_frame(const RenderPacket& packet) {
-    VulkanCommandBuffer& curr_buffer = vk_context.graphics_command_buffers[vk_context.image_index];
+    VulkanCommandBuffer& curr_buffer = vk_context.graphics_command_buffers[vk_context.curr_frame];
+    VulkanSemaphore& curr_image_available_semaphore = vk_context.image_available_semaphores[vk_context.curr_frame];
+    VulkanSemaphore& curr_render_finished_semaphore = vk_context.render_finished_semaphores[vk_context.curr_frame];
+    VulkanFence& curr_draw_fence = vk_context.draw_fences[vk_context.curr_frame];
+
     curr_buffer.begin_recording(vk_context, 0, vk_context.image_index);
     
     VkPipelineStageFlags wait_dest_mask{ VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -85,28 +87,31 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     VkSubmitInfo submit_info{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &vk_context.image_available_semaphore.handle,
+        .pWaitSemaphores = &curr_image_available_semaphore.handle,
         .pWaitDstStageMask = &wait_dest_mask,
         .commandBufferCount = 1,
         .pCommandBuffers = &curr_buffer.handle,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &vk_context.render_finished_semaphore.handle,
+        .pSignalSemaphores = &curr_render_finished_semaphore.handle,
     };
 
-    curr_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, vk_context.draw_fence);
+    curr_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, curr_draw_fence);
 
-    if (!vk_context.draw_fence.wait(vk_context)) {
+    if (!curr_draw_fence.wait(vk_context)) {
         return false;
     }
 
     curr_buffer.reset(vk_context);
 
-    vk_context.swapchain.present(vk_context, vk_context.device.present_queue, vk_context.render_finished_semaphore.handle, vk_context.image_index);
+    vk_context.swapchain.present(vk_context, vk_context.device.present_queue, curr_render_finished_semaphore.handle, vk_context.image_index);
     return true;
 }
 
 bool renderer_end_frame(f64 delta_time) {
+    vk_context.draw_fences[vk_context.curr_frame].reset(vk_context);
+
     ++vk_renderer.frame_count;
+    vk_context.curr_frame = (vk_context.curr_frame + 1) % VulkanSwapchain::MAX_FRAMES_IN_FLIGHT;
     return true;
 }
 
@@ -140,7 +145,17 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
     return VK_FALSE;
 }
 
+VulkanContext::VulkanContext()
+{
+    graphics_command_buffers.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    image_available_semaphores.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    render_finished_semaphores.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    draw_fences.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+}
+
 VulkanContext::~VulkanContext() {
+    vkDeviceWaitIdle(vk_context.device.logical_device);
+
     destroy_synch_primitives(*this);
     
     if (graphics_command_pool.handle) {
@@ -304,15 +319,19 @@ bool init_validation_layers(VkInstanceCreateInfo& create_info, FixedArray<const 
 }
 
 void init_synch_primitives(VulkanContext& context) {
-    context.image_available_semaphore = VulkanSemaphore::create(context);
-    context.render_finished_semaphore = VulkanSemaphore::create(context);
-    context.draw_fence = VulkanFence::create(context);
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        context.image_available_semaphores[i] = VulkanSemaphore::create(context);
+        context.render_finished_semaphores[i] = VulkanSemaphore::create(context);
+        context.draw_fences[i] = VulkanFence::create(context, false);
+    }
 }
 
 void destroy_synch_primitives(VulkanContext& context) {
-    context.image_available_semaphore.destroy(context);
-    context.render_finished_semaphore.destroy(context);
-    context.draw_fence.destroy(context);
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        context.image_available_semaphores[i].destroy(context);
+        context.render_finished_semaphores[i].destroy(context);
+        context.draw_fences[i].destroy(context);
+    }
 }
 
 VkViewport VulkanContext::get_viewport() const {

@@ -48,7 +48,7 @@ public:
         VulkanContext& context,
         VkQueue present_queue,
         VkSemaphore render_complete_semaphore,
-        u32 present_image_index
+        u32& present_image_index
     );
 
 private:

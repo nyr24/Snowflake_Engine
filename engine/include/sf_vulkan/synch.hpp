@@ -16,7 +16,7 @@ struct VulkanFence {
     VkFence handle;
     bool is_signaled;
 
-    static VulkanFence create(const VulkanContext& context);
+    static VulkanFence create(const VulkanContext& context, bool create_singaled);
     bool wait(const VulkanContext& context);
     void reset(const VulkanContext& context);
     void destroy(const VulkanContext& context);

@@ -27,13 +27,14 @@ void VulkanSemaphore::destroy(const VulkanContext& context) {
     }
 }
 
-VulkanFence VulkanFence::create(const VulkanContext& context) {
-    VulkanFence fence{ .handle = VK_NULL_HANDLE, .is_signaled = true };
+VulkanFence VulkanFence::create(const VulkanContext& context, bool create_singaled) {
+    VulkanFence fence{ .handle = VK_NULL_HANDLE, .is_signaled = create_singaled };
 
-    VkFenceCreateInfo create_info{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT
-    };
+    VkFenceCreateInfo create_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+
+    if (create_singaled) {
+        create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    }
 
     // TODO: custom allocator
     sf_vk_check(vkCreateFence(context.device.logical_device, &create_info, nullptr, &fence.handle));
