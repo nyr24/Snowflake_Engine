@@ -10,20 +10,22 @@ namespace sf {
 
 bool VulkanSwapchain::create(
     VulkanContext& context,
-    u32 width,
-    u32 height,
+    u16 width,
+    u16 height,
     VulkanSwapchain& out_swapchain
 ) {
     return create_inner(context, width, height, out_swapchain);
 }
 
-void VulkanSwapchain::recreate(
+bool VulkanSwapchain::recreate(
     VulkanContext& context,
-    u32 width,
-    u32 height
+    u16 width,
+    u16 height
 ) {
+    vkDeviceWaitIdle(context.device.logical_device);
+    
     destroy(context);
-    create(context, width, height, *this);
+    return create_inner(context, width, height, *this);
 }
 
 bool VulkanSwapchain::acquire_next_image_index(
@@ -72,8 +74,8 @@ void VulkanSwapchain::present(
 
 bool VulkanSwapchain::create_inner(
     VulkanContext& context,
-    u32 width,
-    u32 height,
+    u16 width,
+    u16 height,
     VulkanSwapchain& swapchain
 ) {
     VkExtent2D swapchain_extent{width, height};
@@ -163,9 +165,6 @@ bool VulkanSwapchain::create_inner(
     // TODO: custom allocator
     // sf_vk_check(vkCreateSwapchainKHR(context.device.logical_device, &swapchain_create_info, &context.allocator, &swapchain.handle));
     sf_vk_check(vkCreateSwapchainKHR(context.device.logical_device, &swapchain_create_info, nullptr, &swapchain.handle));
-
-    // Start with a zero frame index.
-    context.curr_frame = 0;
 
     // Images
     u32 swapchain_image_count = 0;

@@ -21,10 +21,10 @@ public:
 
     bool startup(
         const char* app_name,
-        u32 x,
-        u32 y,
-        u32 width,
-        u32 height
+        u16 x,
+        u16 y,
+        u16 width,
+        u16 height
     );
 
     bool start_event_loop(ApplicationState& app_state);

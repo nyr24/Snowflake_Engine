@@ -61,12 +61,28 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     return true;
 }
 
-void renderer_resize(i16 width, i16 height) {
+void renderer_resize(u16 width, u16 height) {
+    vk_context.framebuffer_width = width;
+    vk_context.framebuffer_height = height;
+    vk_context.framebuffer_size_generation++;
 }
 
 bool renderer_begin_frame(f64 delta_time) {
     vkQueueWaitIdle(vk_context.device.present_queue);
 
+    if (vk_context.recreating_swapchain) {
+        vkDeviceWaitIdle(vk_context.device.logical_device);
+        return false;
+    }
+
+    if (vk_context.framebuffer_last_size_generation != vk_context.framebuffer_size_generation) {
+        vk_context.recreating_swapchain = true;
+        vk_context.swapchain.recreate(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height);
+        vk_context.recreating_swapchain = false;
+        vk_context.framebuffer_last_size_generation = vk_context.framebuffer_size_generation;
+        return false;
+    }
+    
     if (!vk_context.swapchain.acquire_next_image_index(vk_context, UINT64_MAX, vk_context.image_available_semaphores[vk_context.curr_frame].handle, nullptr, vk_context.image_index)) {
         return false;
     }
@@ -107,12 +123,10 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     return true;
 }
 
-bool renderer_end_frame(f64 delta_time) {
+void renderer_end_frame(f64 delta_time) {
     vk_context.draw_fences[vk_context.curr_frame].reset(vk_context);
-
     ++vk_renderer.frame_count;
     vk_context.curr_frame = (vk_context.curr_frame + 1) % VulkanSwapchain::MAX_FRAMES_IN_FLIGHT;
-    return true;
 }
 
 void sf_vk_check(VkResult vk_result) {
@@ -146,6 +160,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
 }
 
 VulkanContext::VulkanContext()
+    : curr_frame{0}
 {
     graphics_command_buffers.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
     image_available_semaphores.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);

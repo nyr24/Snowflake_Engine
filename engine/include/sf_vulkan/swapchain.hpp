@@ -21,15 +21,15 @@ public:
 public:
     static bool create(
         VulkanContext& context,
-        u32 width,
-        u32 height,
+        u16 width,
+        u16 height,
         VulkanSwapchain& out_swapchain
     );
 
-    void recreate(
+    bool recreate(
         VulkanContext& context,
-        u32 width,
-        u32 height
+        u16 width,
+        u16 height
     );
 
     void destroy(
@@ -54,8 +54,8 @@ public:
 private:
     static bool create_inner(
         VulkanContext& context,
-        u32 width,
-        u32 height,
+        u16 width,
+        u16 height,
         VulkanSwapchain& out_swapchain
     );
 };

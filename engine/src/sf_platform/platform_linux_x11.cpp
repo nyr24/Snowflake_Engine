@@ -45,10 +45,10 @@ static Key translate_keycode(u32 x_keycode);
 
 bool PlatformState::startup(
     const char* app_name,
-    u32 x,
-    u32 y,
-    u32 width,
-    u32 height
+    u16 x,
+    u16 y,
+    u16 width,
+    u16 height
 )
 {
     X11InternState* state = static_cast<X11InternState*>(this->internal_state);

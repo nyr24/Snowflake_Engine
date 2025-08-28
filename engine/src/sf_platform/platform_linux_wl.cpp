@@ -621,10 +621,10 @@ PlatformState& PlatformState::operator=(PlatformState&& rhs) noexcept
 
 bool PlatformState::startup(
     const char* app_name,
-    u32 x,
-    u32 y,
-    u32 width,
-    u32 height
+    u16 x,
+    u16 y,
+    u16 width,
+    u16 height
 ) {
     WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
 
@@ -733,8 +733,9 @@ bool PlatformState::start_event_loop(ApplicationState& application_state) {
             f64 delta_time = application_state.clock.update_and_get_delta();
             f64 frame_start_time = platform_get_abs_time();
 
-            // TODO: check for success
-            renderer_begin_frame(delta_time);
+            if (!renderer_begin_frame(delta_time)) {
+                return false;
+            }
 
             if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
                 LOG_FATAL("Game update failed, shutting down");
@@ -751,7 +752,10 @@ bool PlatformState::start_event_loop(ApplicationState& application_state) {
             // TODO: refactor packet creation
             RenderPacket packet;
             packet.delta_time = 0;
-            renderer_draw_frame(packet);
+
+            if (!renderer_draw_frame(packet)) {
+                return false;
+            }
 
             f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
             running_time += frame_elapsed_time;

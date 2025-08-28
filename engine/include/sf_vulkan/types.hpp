@@ -79,8 +79,10 @@ struct VulkanContext {
     FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>          draw_fences;
     u32                                 image_index;
     u32                                 curr_frame;
-    u32                                 framebuffer_width;
-    u32                                 framebuffer_height;
+    u32                                 framebuffer_size_generation;
+    u32                                 framebuffer_last_size_generation;
+    u16                                 framebuffer_width;
+    u16                                 framebuffer_height;
     bool                                recreating_swapchain;
 public:
     VulkanContext();

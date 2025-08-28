@@ -48,10 +48,10 @@ PlatformState::PlatformState()
 
 bool PlatformState::startup(
     const char* app_name,
-    i32 x,
-    i32 y,
-    i32 width,
-    i32 height
+    u16 x,
+    u16 y,
+    u16 width,
+    u16 height
 ) {
     WindowsInternState* state = static_cast<WindowsInternState*>(this->internal_state);
     state->h_instance = GetModuleHandleA(nullptr);

@@ -8,10 +8,10 @@
 namespace sf {
 struct ApplicationConfig {
     const i8*   name;
-    i16         start_pos_x;
-    i16         start_pos_y;
-    i16         width;
-    i16         height;
+    u16         start_pos_x;
+    u16         start_pos_y;
+    u16         width;
+    u16         height;
 };
 
 struct GameInstance;
@@ -19,8 +19,8 @@ struct ApplicationState {
     sf::PlatformState           platform_state;
     GameInstance*               game_inst;
     Clock                       clock;
-    u32                         width;
-    u32                         height;
+    u16                         width;
+    u16                         height;
     bool                        is_running;
     bool                        is_suspended;
 };
