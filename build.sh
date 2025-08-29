@@ -7,9 +7,9 @@ BUILD_RELEASE=0
 X11_BUILD_FLAG_SPECIFIED=0;
 WAYLAND_BUILD_FLAG_SPECIFIED=0;
 
-CMAKE_OPTS="-DCMAKE_BUILD_TYPE=DEBUG -DCMAKE_CXX_COMPILER=clang++"
+CMAKE_OPTS="-DCMAKE_BUILD_TYPE=DEBUG"
 CMAKE_BUILD_OPTS="-j"
-CMAKE_CXX_COMPILER="/usr/bin/clang++"
+CMAKE_CXX_COMPILER="clang++"
 
 for arg in "$@"; do
   case "$arg" in
@@ -48,9 +48,9 @@ for arg in "$@"; do
     echo "Building tests..."
     CMAKE_OPTS+=" -DSF_TESTS=1"
     ;;
-  --g++)
+  --gcc)
     echo "Using gcc compiler"
-    CMAKE_CXX_COMPILER="/usr/bin/g++"
+    CMAKE_CXX_COMPILER="g++"
     ;;
   *)
     echo "Unknown argument: $arg"
