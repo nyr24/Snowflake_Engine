@@ -112,11 +112,9 @@ void VulkanCommandBuffer::begin_rendering(VulkanContext& context, u32 image_inde
     vkCmdSetScissor(handle, 0, 1, &scissors);
     vkCmdDraw(handle, 3, 1, 0, 0);
     vkCmdEndRendering(handle);
-
-    end(context);
 }
 
-void VulkanCommandBuffer::end(VulkanContext& context) {
+void VulkanCommandBuffer::end_recording(VulkanContext& context) {
     if (state != VulkanCommandBufferState::RECORDING_BEGIN) {
         LOG_WARN("Trying to end command_buffer which is not in RECORDING_END state");
         return;

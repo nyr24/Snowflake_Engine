@@ -10,10 +10,10 @@
 
 namespace sf {
 
-bool device_create(VulkanContext& context) {
+bool VulkanDevice::create(VulkanContext& context) {
     FixedArray<const char*, DEVICE_EXTENSION_CAPACITY> extension_names{ VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME };
 
-    if (!device_select(context, extension_names)) {
+    if (!VulkanDevice::select(context, extension_names)) {
         return false;
     }
 
@@ -116,7 +116,7 @@ bool device_create(VulkanContext& context) {
     return true;
 }
 
-bool device_select(VulkanContext& context, FixedArray<const char*, DEVICE_EXTENSION_CAPACITY>& required_extensions) {
+bool VulkanDevice::select(VulkanContext& context, FixedArray<const char*, DEVICE_EXTENSION_CAPACITY>& required_extensions) {
     u32 physical_device_count{0};
     sf_vk_check(vkEnumeratePhysicalDevices(context.instance, &physical_device_count, nullptr));
 
@@ -147,7 +147,7 @@ bool device_select(VulkanContext& context, FixedArray<const char*, DEVICE_EXTENS
 
         VulkanDeviceQueueFamilyInfo queue_family_info;
         VulkanSwapchainSupportInfo swapchain_support_info;
-        bool meets_requirements = device_meet_requirements(physical_devices[i], context.surface, physical_device_properties, physical_device_features, physical_device_requirements, queue_family_info, swapchain_support_info);
+        bool meets_requirements = VulkanDevice::meet_requirements(physical_devices[i], context.surface, physical_device_properties, physical_device_features, physical_device_requirements, queue_family_info, swapchain_support_info);
 
         if (meets_requirements) {
         #ifdef SF_DEBUG
@@ -216,7 +216,7 @@ bool device_select(VulkanContext& context, FixedArray<const char*, DEVICE_EXTENS
     return false;
 }
 
-void device_query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface, VulkanSwapchainSupportInfo& out_support_info) {
+void VulkanDevice::query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface, VulkanSwapchainSupportInfo& out_support_info) {
     sf_vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &out_support_info.capabilities));
     sf_vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &out_support_info.format_count, nullptr));
 
@@ -239,7 +239,7 @@ void device_query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surfac
     }
 }
 
-bool device_meet_requirements(
+bool VulkanDevice::meet_requirements(
     VkPhysicalDevice device,
     VkSurfaceKHR surface,
     const VkPhysicalDeviceProperties& properties,
@@ -318,7 +318,7 @@ bool device_meet_requirements(
         return false;
     }
 
-    device_query_swapchain_support(device, surface, out_swapchain_support_info);
+    VulkanDevice::query_swapchain_support(device, surface, out_swapchain_support_info);
 
     if (!out_swapchain_support_info.present_mode_count) {
         return false;
@@ -359,7 +359,7 @@ bool device_meet_requirements(
     return true;
 }
 
-bool device_detect_depth_format(VulkanDevice& device) {
+bool VulkanDevice::detect_depth_format() {
     constexpr u8 CANDIDATES_COUNT{3};
     VkFormat candidates[CANDIDATES_COUNT] = {
         VK_FORMAT_D32_SFLOAT,
@@ -370,12 +370,12 @@ bool device_detect_depth_format(VulkanDevice& device) {
     u32 flags = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
     for (u32 i{0}; i < CANDIDATES_COUNT; ++i) {
         VkFormatProperties properties;
-        vkGetPhysicalDeviceFormatProperties(device.physical_device, candidates[i], &properties);
+        vkGetPhysicalDeviceFormatProperties(physical_device, candidates[i], &properties);
         if ((properties.linearTilingFeatures & flags) == flags) {
-            device.depth_format = candidates[i];
+            depth_format = candidates[i];
             return true;
         } else if ((properties.optimalTilingFeatures & flags) == flags) {
-            device.depth_format = candidates[i];
+            depth_format = candidates[i];
             return true;
         }
     }
@@ -384,29 +384,29 @@ bool device_detect_depth_format(VulkanDevice& device) {
 }
 
 // called from VulkanContext destructor
-void device_destroy(VulkanContext& context) {
-    context.device.graphics_queue = nullptr;
-    context.device.present_queue = nullptr;
-    context.device.transfer_queue = nullptr;
+void VulkanDevice::destroy(VulkanContext& context) {
+    graphics_queue = nullptr;
+    present_queue = nullptr;
+    transfer_queue = nullptr;
 
-    if (context.device.logical_device) {
+    if (logical_device) {
         // TODO: custom allocator
-        // vkDestroyDevice(context.device.logical_device, &context.allocator);
-        vkDestroyDevice(context.device.logical_device, nullptr);
-        context.device.logical_device = nullptr;
+        // vkDestroyDevice(logical_device, &context.allocator);
+        vkDestroyDevice(logical_device, nullptr);
+        logical_device = nullptr;
     }
 
-    context.device.physical_device = nullptr;
+    physical_device = nullptr;
 
-    context.device.queue_family_info.graphics_family_index = 255;
-    context.device.queue_family_info.present_family_index = 255;
-    context.device.queue_family_info.transfer_family_index = 255;
-    context.device.queue_family_info.compute_family_index = 255;
+    queue_family_info.graphics_family_index = 255;
+    queue_family_info.present_family_index = 255;
+    queue_family_info.transfer_family_index = 255;
+    queue_family_info.compute_family_index = 255;
 }
 
-Option<u32> find_memory_index(const VulkanContext& context, u32 type_filter, u32 property_flags) {
+Option<u32> VulkanDevice::find_memory_index(u32 type_filter, u32 property_flags) const {
     VkPhysicalDeviceMemoryProperties memory_properties;
-    vkGetPhysicalDeviceMemoryProperties(context.device.physical_device, &memory_properties);
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
 
     for (u32 i{0}; i < memory_properties.memoryTypeCount; ++i) {
         if ((type_filter & (1 << i)) && ((memory_properties.memoryTypes[i].propertyFlags & property_flags) == property_flags)) {

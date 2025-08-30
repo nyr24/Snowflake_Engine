@@ -139,8 +139,8 @@ enum struct Key : u8 {
     RSHIFT = 0xA1,
     LCONTROL = 0xA2,
     RCONTROL = 0xA3,
-    LMENU = 0xA4,
-    RMENU = 0xA5,
+    LALT = 0xA4,
+    RALT = 0xA5,
 
     SEMICOLON = 0xBA,
     PLUS = 0xBB,

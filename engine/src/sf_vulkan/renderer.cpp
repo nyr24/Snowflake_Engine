@@ -1,4 +1,5 @@
 #include "sf_core/application.hpp"
+#include "sf_core/event.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/pipeline.hpp"
@@ -41,7 +42,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     platform_create_vk_surface(platform_state, vk_context);
 
     // TODO: static functions
-    if (!device_create(vk_context)) {
+    if (!VulkanDevice::create(vk_context)) {
         return false;
     }
 
@@ -49,7 +50,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
         return false;
     }
 
-    if (!pipeline_create(vk_context)) {
+    if (!VulkanPipeline::create(vk_context)) {
         return false;
     }
 
@@ -58,25 +59,34 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
 
     init_synch_primitives(vk_context);
 
+    // set events
+    event_set_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
+
     return true;
 }
 
-void renderer_resize(u16 width, u16 height) {
-    vk_context.framebuffer_width = width;
-    vk_context.framebuffer_height = height;
+bool renderer_on_resize(u8 code, void* sender, void* listener_inst, EventContext* context) {
+    if (code != SystemEventCode::RESIZED || !context) {
+        return false;
+    }
+
+    vk_context.framebuffer_width = static_cast<u16>(context->data.u16[0]);
+    vk_context.framebuffer_height = static_cast<u16>(context->data.u16[1]);
     vk_context.framebuffer_size_generation++;
+
+    return true;
 }
 
 bool renderer_begin_frame(f64 delta_time) {
     vkQueueWaitIdle(vk_context.device.present_queue);
 
     if (vk_context.recreating_swapchain) {
-        vkDeviceWaitIdle(vk_context.device.logical_device);
         return false;
     }
 
     if (vk_context.framebuffer_last_size_generation != vk_context.framebuffer_size_generation) {
         vk_context.recreating_swapchain = true;
+        vkDeviceWaitIdle(vk_context.device.logical_device);
         vk_context.swapchain.recreate(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height);
         vk_context.recreating_swapchain = false;
         vk_context.framebuffer_last_size_generation = vk_context.framebuffer_size_generation;
@@ -97,6 +107,7 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     VulkanFence& curr_draw_fence = vk_context.draw_fences[vk_context.curr_frame];
 
     curr_buffer.begin_recording(vk_context, 0, vk_context.image_index);
+    curr_buffer.end_recording(vk_context);
     
     VkPipelineStageFlags wait_dest_mask{ VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
 
@@ -183,7 +194,7 @@ VulkanContext::~VulkanContext() {
 
     swapchain.destroy(*this);
 
-    device_destroy(*this);
+    vk_context.device.destroy(*this);
 
     if (surface) {
         vkDestroySurfaceKHR(instance, surface, &allocator);

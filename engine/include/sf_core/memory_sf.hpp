@@ -24,27 +24,27 @@ u32 turn_ptr_into_handle(void* ptr, void* start);
 u32 calc_padding_with_header(void* ptr, u16 alignment, u16 header_size);
 
 template<typename ReturnPtr = void*>
-ReturnPtr turn_handle_into_ptr(u32 handle, void* start) {
+constexpr ReturnPtr turn_handle_into_ptr(u32 handle, void* start) noexcept {
     return reinterpret_cast<ReturnPtr>(reinterpret_cast<u8*>(start) + handle);
 }
 
 template<typename ReturnPtr = void*>
-ReturnPtr rebase_ptr(void* old_ptr, void* old_base, void* new_base) {
+constexpr ReturnPtr rebase_ptr(void* old_ptr, void* old_base, void* new_base) noexcept {
     return reinterpret_cast<ReturnPtr>(turn_handle_into_ptr(turn_ptr_into_handle(old_ptr, old_base), new_base));
 }
 
 template<typename T>
-T* ptr_step_bytes_forward(T* ptr, u32 byte_count) {
+constexpr T* ptr_step_bytes_forward(T* ptr, u32 byte_count) noexcept {
     return reinterpret_cast<T*>(reinterpret_cast<u8*>(ptr) + byte_count);
 }
 
 template<typename T>
-T* ptr_step_bytes_backward(T* ptr, u32 byte_count) {
+constexpr T* ptr_step_bytes_backward(T* ptr, u32 byte_count) noexcept {
     return reinterpret_cast<T*>(reinterpret_cast<u8*>(ptr) - byte_count);
 }
 
 template<typename T>
-T* sf_align_forward(T* address, u16 alignment) {
+constexpr T* sf_align_forward(T* address, u16 alignment) noexcept {
     usize addr = reinterpret_cast<usize>(address);
     return reinterpret_cast<T*>((addr + (alignment - 1)) & ~(alignment - 1));
 }

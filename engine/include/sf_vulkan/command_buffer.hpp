@@ -28,7 +28,7 @@ public:
     static void allocate(VulkanContext& context, VkCommandPool command_pool,  FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>& out_buffers, bool is_primary);
     // static VulkanCommandBuffer begin_single_use(VulkanContext& context, VkCommandPool command_pool, bool is_primary);
     void begin_recording(VulkanContext& context, VkCommandBufferUsageFlags begin_flags, u32 image_index);
-    void end(VulkanContext& context);
+    void end_recording(VulkanContext& context);
     void reset(VulkanContext& context);
     void submit(VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, VulkanFence& fence);
     void free(VulkanContext& context, VkCommandPool command_pool);

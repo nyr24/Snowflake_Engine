@@ -1,3 +1,4 @@
+#include "sf_core/event.hpp"
 #include "sf_platform/defines.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
@@ -199,7 +200,6 @@ static void xdg_surface_handle_configure(void *data,
 {
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     xdg_surface_ack_configure(xdg_surface, serial);
-    // draw_frame(state);
 }
 
 static void xdg_toplevel_handle_close(void* data, xdg_toplevel* xdg_toplevel) {
@@ -211,8 +211,12 @@ static void xdg_toplevel_handle_configure(void* data, xdg_toplevel* xdg_toplevel
     if (width == 0 || height == 0) {
         return;
     }
-    state->window_props.width = width;
-    state->window_props.height = height;
+    // state->window_props.width = width;
+    // state->window_props.height = height;
+    EventContext context;
+    context.data.u16[0] = static_cast<u16>(width);
+    context.data.u16[1] = static_cast<u16>(height);
+    event_execute_callback(SystemEventCode::RESIZED, nullptr, &context);
 }
 
 static void xdg_toplevel_handle_configure_bounds(void* data, xdg_toplevel* xdg_toplevel, i32 width, i32 height) {
@@ -526,6 +530,9 @@ static void keyboard_handle_key(
     xkb_keysym_get_name(sym, buf, sizeof(buf));
 
     Key translated_key = translate_keycode(sym);
+    if (translated_key == Key::LALT) {
+        
+    }
 
     if (translated_key != Key::COUNT) {
         input_process_key(translated_key, key_state == WL_KEYBOARD_KEY_STATE_PRESSED);
@@ -1013,9 +1020,10 @@ Key translate_keycode(u32 x_keycode) {
             return Key::LCONTROL;
         case XKB_KEY_Control_R:
             return Key::RCONTROL;
-        // case XKB_KEY_Menu: return Key::LMENU;
         case XKB_KEY_Menu:
-            return Key::RMENU;
+            return Key::LALT;
+        // case XKB_KEY_Menu:
+        //     return Key::RALT;
 
         case XKB_KEY_semicolon:
             return Key::SEMICOLON;

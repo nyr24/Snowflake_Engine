@@ -5,7 +5,7 @@
 #ifdef SF_ASSERTS_ENABLED
 #if _MSC_VER
 #include <intrin.h>
-#define DEBUG_BREAK() __debug_break()
+#define DEBUG_BREAK() __debugbreak()
 #else
 #define DEBUG_BREAK() __builtin_trap()
 #endif

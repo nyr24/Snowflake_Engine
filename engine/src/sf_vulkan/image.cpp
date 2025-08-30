@@ -48,7 +48,7 @@ bool VulkanImage::create(
     VkMemoryRequirements memory_requirements;
     vkGetImageMemoryRequirements(context.device.logical_device, out_image.handle, &memory_requirements);
 
-    Option<u32> memory_type = find_memory_index(context, memory_requirements.memoryTypeBits, memory_flags);
+    Option<u32> memory_type = context.device.find_memory_index(memory_requirements.memoryTypeBits, memory_flags);
     if (memory_type.is_none()) {
         LOG_ERROR("Required memory type not found. Image not valid.");
         return false;

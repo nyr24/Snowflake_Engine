@@ -32,7 +32,7 @@ public:
         SF_ASSERT_MSG(count <= Capacity, "Provided count should fit specified capacity");
     }
 
-    FixedArray(std::initializer_list<T> init_list) noexcept
+    constexpr FixedArray(std::initializer_list<T> init_list) noexcept
         : _count{ 0 }
     {
         SF_ASSERT_MSG(init_list.size() <= Capacity, "Initializer list size don't fit for specified capacity");
@@ -44,24 +44,24 @@ public:
         }
     }
 
-    FixedArray(const FixedArray<T, Capacity>& rhs) noexcept
+    constexpr FixedArray(const FixedArray<T, Capacity>& rhs) noexcept
         : _count{ rhs._count }
     {
         sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
     }
 
-    FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
+    constexpr FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
         sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
         return *this;
     }
 
-    FixedArray(FixedArray<T, Capacity>&& rhs) noexcept
+    constexpr FixedArray(FixedArray<T, Capacity>&& rhs) noexcept
         : _count{ rhs._count }
     {
         sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
     }
 
-    FixedArray<T, Capacity>& operator=(FixedArray<T, Capacity>&& rhs) noexcept {
+    constexpr FixedArray<T, Capacity>& operator=(FixedArray<T, Capacity>&& rhs) noexcept {
         sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
         return *this;
 
@@ -72,19 +72,19 @@ public:
     }
 
     template<typename ...Args>
-    void append_emplace(Args&&... args) noexcept {
+    constexpr void append_emplace(Args&&... args) noexcept {
         allocate_and_construct(std::forward<Args>(args)...);
     }
 
-    void append(ConstLRefOrVal<T> item) noexcept {
+    constexpr void append(ConstLRefOrVal<T> item) noexcept {
         allocate_and_construct(item);
     }
 
-    void append(T&& item) noexcept {
+    constexpr void append(T&& item) noexcept {
         allocate_and_construct(std::move(item));
     }
 
-    void remove_at(u32 index) noexcept {
+    constexpr void remove_at(u32 index) noexcept {
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         if (index == _count - 1) {
@@ -104,7 +104,7 @@ public:
     }
 
     // swaps element to the end and always removes it from the end, escaping memmove call
-    void remove_unordered_at(u32 index) noexcept {
+    constexpr void remove_unordered_at(u32 index) noexcept {
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         if (index == _count - 1) {
@@ -181,7 +181,7 @@ public:
     }
 
 private:
-    T* allocate(u32 alloc_count) noexcept
+    constexpr T* allocate(u32 alloc_count) noexcept
     {
         u32 free_capacity = Capacity - _count;
 
@@ -196,32 +196,32 @@ private:
     }
 
     template<typename ...Args>
-    void construct_at(T* ptr, Args&&... args) noexcept
+    constexpr void construct_at(T* ptr, Args&&... args) noexcept
     {
         sf_mem_place(ptr, args...);
     }
 
-    void default_construct_at(T* ptr) noexcept
+    constexpr void default_construct_at(T* ptr) noexcept
     {
         sf_mem_place(ptr);
     }
 
     template<typename ...Args>
-    T* allocate_and_construct(Args&&... args) noexcept
+    constexpr T* allocate_and_construct(Args&&... args) noexcept
     {
         T* place_ptr = allocate(1);
         construct_at(place_ptr, std::forward<Args>(args)...);
         return place_ptr;
     }
 
-    T* allocate_and_default_construct(u32 count) noexcept
+    constexpr T* allocate_and_default_construct(u32 count) noexcept
     {
         T* place_ptr = allocate(count);
         default_construct_at(place_ptr);
         return place_ptr;
     }
 
-    void deallocate(u32 dealloc_count) noexcept
+    constexpr void deallocate(u32 dealloc_count) noexcept
     {
         SF_ASSERT_MSG((dealloc_count) <= _count, "Can't deallocate more than all current elements");
 

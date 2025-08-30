@@ -19,7 +19,7 @@ static EventSystemState state{};
 SF_EXPORT bool event_set_listener(u8 code, void* listener, OnEventFn on_event_callback) {
     for (u32 i{0}; i < state.event_lists[code].count(); ++i) {
         const Event& event = state.event_lists[code][i];
-        if (event.listener == listener) {
+        if (event.callback == on_event_callback) {
             return false;
         }
     }
@@ -31,7 +31,7 @@ SF_EXPORT bool event_set_listener(u8 code, void* listener, OnEventFn on_event_ca
 SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event_callback) {
     for (u32 i{0}; i < state.event_lists[code].count(); ++i) {
         const Event& event = state.event_lists[code][i];
-        if (event.listener == listener && event.callback == on_event_callback) {
+        if (event.callback == on_event_callback) {
             state.event_lists[code].remove_unordered_at(i);
             return true;
         }

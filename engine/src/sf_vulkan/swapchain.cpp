@@ -1,3 +1,4 @@
+#include "sf_vulkan/types.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_core/logger.hpp"
@@ -107,7 +108,7 @@ bool VulkanSwapchain::create_inner(
     }
 
      // Requery swapchain support.
-    device_query_swapchain_support(
+    VulkanDevice::query_swapchain_support(
         context.device.physical_device,
         context.surface,
         context.device.swapchain_support_info
@@ -200,7 +201,7 @@ bool VulkanSwapchain::create_inner(
         sf_vk_check(vkCreateImageView(context.device.logical_device, &view_info, nullptr, &swapchain.views[i]));
     }
 
-    if (!device_detect_depth_format(context.device)) {
+    if (!context.device.detect_depth_format()) {
         context.device.depth_format = VK_FORMAT_UNDEFINED;
         LOG_FATAL("Failed to find a supported format");
     }

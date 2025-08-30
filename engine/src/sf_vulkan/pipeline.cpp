@@ -11,7 +11,17 @@ namespace fs = std::filesystem;
 
 namespace sf {
 
- bool pipeline_create(VulkanContext& context) {
+VkVertexInputBindingDescription Vertex::get_binding_descr() {
+    VkVertexInputBindingDescription binding_descr{
+        .binding = 0,
+        .stride = sizeof(Vertex),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+    };
+
+    return binding_descr;
+}
+
+bool VulkanPipeline::create(VulkanContext& context) {
     #ifdef SF_DEBUG
     fs::path shader_path = fs::current_path() / "build/debug/engine/shaders/shader.spv";
     #else
@@ -46,6 +56,13 @@ namespace sf {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount = dynamic_state.count(),
         .pDynamicStates = dynamic_state.data()
+    };
+
+    // Geometry
+    FixedArray<Vertex, 3> vertices{
+        Vertex{ { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
+        Vertex{ { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
+        Vertex{ { 0.0f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } }
     };
 
     VkPipelineVertexInputStateCreateInfo vertex_input_info{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
