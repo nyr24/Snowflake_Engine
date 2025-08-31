@@ -84,11 +84,9 @@ target_compile_options(
   $<$<CONFIG:Debug>:
     -g
     -O0
-    -Wno-changes-meaning
   >
   $<$<CONFIG:Release>:
     -O3
-    -Wno-changes-meaning
   >
 )
 

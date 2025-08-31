@@ -7,37 +7,42 @@ BUILD_RELEASE=0
 X11_BUILD_FLAG_SPECIFIED=0;
 WAYLAND_BUILD_FLAG_SPECIFIED=0;
 
-CMAKE_OPTS="-DCMAKE_BUILD_TYPE=DEBUG"
-CMAKE_BUILD_OPTS="-j"
-CMAKE_CXX_COMPILER="clang++"
+CMAKE_OPTS=""
+CMAKE_BUILD_OPTS="-j$(nproc)"
+BUILD_TYPE="debug"
+# win32 | wl | x11
+PLATFORM="win32"
+COMPILER="clang++"
+CMAKE_GENERATOR="MinGW Makefiles"
 
 for arg in "$@"; do
   case "$arg" in
   -r | --release)
-    BUILD_RELEASE=1
-    CMAKE_OPTS="-DCMAKE_BUILD_TYPE=RELEASE"
+    BUILD_TYPE="release"
     ;;
   -c | --clean)
     echo "Performing cleanup..."
     CMAKE_BUILD_OPTS+=" --clean-first"
     ;;
-  -wl | --wayaland)
-    echo "Building for wayland..."
+  -wl | --wayland)
     if [ $X11_BUILD_FLAG_SPECIFIED -eq 1 ]; then
-      echo "[Error]: can't build for x11 and build simultaneously, exiting"
+      echo "[Error]: can't build for x11 and wayland build simultaneously, exiting"
       exit
     fi
-    CMAKE_OPTS+=" -DSF_BUILD_WAYLAND=1"
+    PLATFORM="wl"
     WAYLAND_BUILD_FLAG_SPECIFIED=1
     ;;
   -x11 | --x11)
-    echo "Building for X11..."
     if [ $WAYLAND_BUILD_FLAG_SPECIFIED -eq 1 ]; then
-      echo "[Error]: can't build for x11 and build simultaneously, exiting"
+      echo "[Error]: can't build for x11 and wayland build simultaneously, exiting"
       exit
     fi
-    CMAKE_OPTS+=" -DSF_BUILD_X11=1"
+    PLATFORM="x11"
     X11_BUILD_FLAG_SPECIFIED=1
+    ;;
+  -win32 | --windows)
+    echo "Windows is bad, consider switching to Linux"
+    PLATFORM="win32"
     ;;
   --limit_fps)
     echo "FPS limit option enabled"
@@ -50,7 +55,7 @@ for arg in "$@"; do
     ;;
   --gcc)
     echo "Using gcc compiler"
-    CMAKE_CXX_COMPILER="g++"
+    COMPILER="g++"
     ;;
   *)
     echo "Unknown argument: $arg"
@@ -58,18 +63,35 @@ for arg in "$@"; do
   esac
 done
 
-CMAKE_OPTS+=CMAKE_CXX_COMPILER
+if [ $PLATFORM == "win32" ]; then
+    CMAKE_OPTS+=" -DSF_BUILD_WINDOWS=1"
+    CMAKE_GENERATOR="MinGW Makefiles"
+    echo "Building for windows..."
+elif [ $PLATFORM == "wl" ]; then
+    CMAKE_OPTS+=" -DSF_BUILD_WAYLAND=1"
+    WAYLAND_BUILD_FLAG_SPECIFIED=1
+    CMAKE_GENERATOR="Unix Makefiles"
+    echo "Building for linux (wayland)..."
+else
+    CMAKE_OPTS+=" -DSF_BUILD_X11=1"
+    X11_BUILD_FLAG_SPECIFIED=1
+    CMAKE_GENERATOR="Unix Makefiles"
+    echo "Building for linux (x11)..."
+fi
+
+CMAKE_OPTS+=" -DCMAKE_CXX_COMPILER=$COMPILER"
+CMAKE_OPTS+=" -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
 
 [ -d "build" ] || mkdir "build"
 
-if [ $BUILD_RELEASE -eq 0 ]; then
+if [ $BUILD_TYPE == "debug" ]; then
   echo "Building in debug mode"
   [ -d "$DEBUG_BUILD_DIR" ] || mkdir "$DEBUG_BUILD_DIR"
   cd "$DEBUG_BUILD_DIR"
-  cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
+  cmake -G "$CMAKE_GENERATOR" $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
 else
   echo "Building in release mode"
   [ -d "$RELEASE_BUILD_DIR" ] || mkdir "$RELEASE_BUILD_DIR"
   cd "$RELEASE_BUILD_DIR"
-  cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
+  cmake -G "$CMAKE_GENERATOR" $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
 fi
