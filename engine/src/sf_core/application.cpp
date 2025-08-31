@@ -71,7 +71,7 @@ void application_run() {
     constexpr f64 target_frame_seconds = 1.0 / 60.0;
 
     while (application_state.is_running) {
-        if (!application_state.platform_state.start_event_loop(application_state)) {
+        if (!application_state.platform_state.start_event_loop()) {
             application_state.is_running = false;
         }
 

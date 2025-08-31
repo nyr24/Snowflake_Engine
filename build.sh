@@ -2,95 +2,72 @@
 
 DEBUG_BUILD_DIR="build/debug/"
 RELEASE_BUILD_DIR="build/release/"
-MAKE_OPST=""
-ENGINE_MAKE_OPTS=""
 
-BUILD_MODE="debug"
-# can be: win32 | wl | x11
-PLATFORM="win32"
-CLEANUP=0
-ENGINE_LIMIT_FPS=0
-ENGINE_BUILD_TESTS=0
-
+BUILD_RELEASE=0
 X11_BUILD_FLAG_SPECIFIED=0;
 WAYLAND_BUILD_FLAG_SPECIFIED=0;
 
+CMAKE_OPTS="-DCMAKE_BUILD_TYPE=DEBUG"
+CMAKE_BUILD_OPTS="-j"
+CMAKE_CXX_COMPILER="clang++"
+
 for arg in "$@"; do
   case "$arg" in
-    -r | --release)
-      BUILD_MODE="release"
-      ;;
-    -c | --clean)
-      CLEANUP=1
-      ;;
-    -wl | --wayland)
-      if [ $X11_BUILD_FLAG_SPECIFIED -eq 1 ]; then
-        echo "[Error]: can't build for x11 and build simultaneously, exiting"
-        exit
-      fi
-      PLATFORM="wl"
-      WAYLAND_BUILD_FLAG_SPECIFIED=1
-      ;;
-    -x11 | --x11)
-      if [ $WAYLAND_BUILD_FLAG_SPECIFIED -eq 1 ]; then
-        echo "[Error]: can't build for x11 and build simultaneously, exiting"
-        exit
-      fi
-      PLATFORM="x11"
-      X11_BUILD_FLAG_SPECIFIED=1
-      ;;
-    --limit_fps)
-      ENGINE_LIMIT_FPS=1
-      ;;
-    --test | -t)
-      BUILD_TESTS=1
-      ;;
-    *)
-      echo "Unknown argument: $arg"
-      ;;
+  -r | --release)
+    BUILD_RELEASE=1
+    CMAKE_OPTS="-DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_CXX_COMPILER=clang++"
+    ;;
+  -c | --clean)
+    echo "Performing cleanup..."
+    CMAKE_BUILD_OPTS+=" --clean-first"
+    ;;
+  -wl | --wayaland)
+    echo "Building for wayland..."
+    if [ $X11_BUILD_FLAG_SPECIFIED -eq 1 ]; then
+      echo "[Error]: can't build for x11 and build simultaneously, exiting"
+      exit
+    fi
+    CMAKE_OPTS+=" -DSF_BUILD_WAYLAND=1"
+    WAYLAND_BUILD_FLAG_SPECIFIED=1
+    ;;
+  -x11 | --x11)
+    echo "Building for X11..."
+    if [ $WAYLAND_BUILD_FLAG_SPECIFIED -eq 1 ]; then
+      echo "[Error]: can't build for x11 and build simultaneously, exiting"
+      exit
+    fi
+    CMAKE_OPTS+=" -DSF_BUILD_X11=1"
+    X11_BUILD_FLAG_SPECIFIED=1
+    ;;
+  --limit_fps)
+    echo "FPS limit option enabled"
+    CMAKE_OPTS+=" -DSF_LIMIT_FRAME_COUNT=1"
+    X11_BUILD_FLAG_SPECIFIED=1
+    ;;
+  --test | -t)
+    echo "Building tests..."
+    CMAKE_OPTS+=" -DSF_TESTS=1"
+    ;;
+  --gcc)
+    echo "Using gcc compiler"
+    CMAKE_CXX_COMPILER="g++"
+    ;;
+  *)
+    echo "Unknown argument: $arg"
+    ;;
   esac
 done
 
-MAKE_OPTS+="BUILD_MODE=$BUILD_MODE "
+CMAKE_OPTS+=CMAKE_CXX_COMPILER
 
-case $PLATFORM in
-  "win32")
-    echo "Building for windows"
-    MAKE_OPTS+="PLATFORM=win32 "
-    ;;
-  "wl")
-    echo "Building for linux (wayland)"
-    MAKE_OPTS+="PLATFORM=wl "
-    ;;
-  "x11")
-    echo "Building for linux (x11)"
-    MAKE_OPTS+="PLATFORM=x11 "
-    ;;
-esac
-
-if [[ $ENGINE_LIMIT_FPS -eq 1 ]] then
-  echo "FPS-limit enabled"
-  ENGINE_MAKE_OPTS+="LIMIT_FPS=1"
+if [ $BUILD_RELEASE -eq 0 ]; then
+  echo "Building in debug mode"
+  [ -d "$DEBUG_BUILD_DIR" ] || mkdir "$DEBUG_BUILD_DIR"
+  cd "$DEBUG_BUILD_DIR"
+  cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
+else
+  echo "Building in release mode"
+  [ -d "$RELEASE_BUILD_DIR" ] || mkdir "$RELEASE_BUILD_DIR"
+  cd "$RELEASE_BUILD_DIR"
+  cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
 fi
-
-if [[ $BUILD_TESTS -eq 1 ]] then
-  echo "Building tests"
-  ENGINE_MAKE_OPTS+="BUILD_TESTS=1"
-fi
-
-# build engine
-cd engine
-if [[ $CLEANUP -eq 1 ]] then
-  make clean
-fi
-make $MAKE_OPTS $ENGINE_MAKE_OPTS -j$(nproc)
-
-cd ..
-
-# build testbed
-cd testbed
-if [[ $CLEANUP -eq 1 ]] then
-  make clean
-fi
-make $MAKE_OPTS -j$(nproc)
-cd ..
