@@ -15,7 +15,7 @@ for arg in "$@"; do
   case "$arg" in
   -r | --release)
     BUILD_RELEASE=1
-    CMAKE_OPTS="-DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_CXX_COMPILER=clang++"
+    CMAKE_OPTS="-DCMAKE_BUILD_TYPE=RELEASE"
     ;;
   -c | --clean)
     echo "Performing cleanup..."
@@ -59,6 +59,8 @@ for arg in "$@"; do
 done
 
 CMAKE_OPTS+=CMAKE_CXX_COMPILER
+
+[ -d "build" ] || mkdir "build"
 
 if [ $BUILD_RELEASE -eq 0 ]; then
   echo "Building in debug mode"
