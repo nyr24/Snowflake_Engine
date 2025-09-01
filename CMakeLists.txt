@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
+set(CMAKE_C_COMPILER_WORKS "true")
+set(CMAKE_CXX_COMPILER_WORKS "true")
 project(all)
 
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})

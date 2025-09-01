@@ -8,12 +8,11 @@ X11_BUILD_FLAG_SPECIFIED=0;
 WAYLAND_BUILD_FLAG_SPECIFIED=0;
 
 CMAKE_OPTS=""
-CMAKE_BUILD_OPTS="-j$(nproc)"
+CMAKE_BUILD_OPTS="-j"
 BUILD_TYPE="debug"
 # win32 | wl | x11
 PLATFORM="win32"
 COMPILER="clang++"
-CMAKE_GENERATOR="MinGW Makefiles"
 
 for arg in "$@"; do
   case "$arg" in
@@ -65,17 +64,14 @@ done
 
 if [ $PLATFORM == "win32" ]; then
     CMAKE_OPTS+=" -DSF_BUILD_WINDOWS=1"
-    CMAKE_GENERATOR="MinGW Makefiles"
     echo "Building for windows..."
 elif [ $PLATFORM == "wl" ]; then
     CMAKE_OPTS+=" -DSF_BUILD_WAYLAND=1"
     WAYLAND_BUILD_FLAG_SPECIFIED=1
-    CMAKE_GENERATOR="Unix Makefiles"
     echo "Building for linux (wayland)..."
 else
     CMAKE_OPTS+=" -DSF_BUILD_X11=1"
     X11_BUILD_FLAG_SPECIFIED=1
-    CMAKE_GENERATOR="Unix Makefiles"
     echo "Building for linux (x11)..."
 fi
 
@@ -88,10 +84,10 @@ if [ $BUILD_TYPE == "debug" ]; then
   echo "Building in debug mode"
   [ -d "$DEBUG_BUILD_DIR" ] || mkdir "$DEBUG_BUILD_DIR"
   cd "$DEBUG_BUILD_DIR"
-  cmake -G "$CMAKE_GENERATOR" $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
+  cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
 else
   echo "Building in release mode"
   [ -d "$RELEASE_BUILD_DIR" ] || mkdir "$RELEASE_BUILD_DIR"
   cd "$RELEASE_BUILD_DIR"
-  cmake -G "$CMAKE_GENERATOR" $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
+  cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
 fi

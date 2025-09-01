@@ -1,6 +1,7 @@
 #pragma once
 
 #include <format>
+#include <array>
 #include "sf_core/defines.hpp"
 
 #define LOG_WARN_ENABLED 1
