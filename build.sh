@@ -75,6 +75,10 @@ else
     echo "Building for linux (x11)..."
 fi
 
+if [ $WAYLAND_BUILD_FLAG_SPECIFIED -eq 1 && $X11_BUILD_FLAG_SPECIFIED -eq 1 ]; then
+  echo "[Error]: Can't build for wayland and x11 simultaneously on linux"
+fi
+
 CMAKE_OPTS+=" -DCMAKE_CXX_COMPILER=$COMPILER"
 CMAKE_OPTS+=" -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
 
