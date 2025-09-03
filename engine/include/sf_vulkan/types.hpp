@@ -4,10 +4,10 @@
 
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
+#include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/device.hpp"
-#include "sf_vulkan/image.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
 #include <vulkan/vulkan_core.h>
@@ -35,8 +35,8 @@ struct VulkanContext {
     VulkanSwapchain                     swapchain;
     VulkanPipeline                      pipeline;
     VulkanCommandPool                   graphics_command_pool;
+    VulkanBuffer                        vertex_buffer;
     FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>  graphics_command_buffers;
-    // synch primitives
     FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>      image_available_semaphores;
     FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>      render_finished_semaphores;
     FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>          draw_fences;

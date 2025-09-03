@@ -1,6 +1,7 @@
 #include "sf_core/application.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/memory_sf.hpp"
+#include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/swapchain.hpp"
@@ -17,6 +18,7 @@
 // #include "sf_allocators/free_list_allocator.hpp"
 // #include <list>
 #include <cstdint>
+#include <sys/types.h>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
@@ -55,6 +57,11 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     }
 
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::GRAPHICS, vk_context.device.queue_family_info.graphics_family_index, vk_context.graphics_command_pool);
+
+    if (!VulkanBuffer::create(vk_context.device, VulkanPipeline::define_geometry(), VulkanBuffer::Type::VERTEX, vk_context.vertex_buffer)) {
+        return false;
+    }
+
     VulkanCommandBuffer::allocate(vk_context, vk_context.graphics_command_pool.handle, vk_context.graphics_command_buffers, true);
 
     init_synch_primitives(vk_context);

@@ -230,6 +230,7 @@ public:
     constexpr T* first_ptr() noexcept { return _buffer; }
     constexpr T* last_ptr() noexcept { return _buffer + _count - 1; }
     constexpr u32 count() const noexcept { return _count; }
+    constexpr u32 size_in_bytes() const noexcept { return sizeof(T) * _count; }
     constexpr u32 capacity() const noexcept { return _capacity; }
     constexpr u32 capacity_remain() const noexcept { return _capacity - _count; }
     // const counterparts

@@ -26,7 +26,7 @@ public:
         : _count{ 0 }
     {}
 
-    explicit FixedArray(u32 count) noexcept
+    constexpr explicit FixedArray(u32 count) noexcept
         : _count{ count }
     {
         SF_ASSERT_MSG(count <= Capacity, "Provided count should fit specified capacity");
@@ -145,6 +145,7 @@ public:
     constexpr T* first_ptr() noexcept { return _buffer; }
     constexpr T* last_ptr() noexcept { return _buffer + _count - 1; }
     constexpr u32 count() const noexcept { return _count; }
+    constexpr u32 size_in_bytes() const noexcept { return sizeof(T) * Capacity; }
     constexpr u32 capacity() const noexcept { return Capacity; }
     constexpr u32 capacity_remain() const noexcept { return Capacity - _count; }
     // const counterparts

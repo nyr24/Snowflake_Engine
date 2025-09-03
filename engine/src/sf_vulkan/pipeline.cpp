@@ -1,4 +1,5 @@
 #include "sf_vulkan/pipeline.hpp"
+#include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/logger.hpp"
@@ -12,13 +13,26 @@ namespace fs = std::filesystem;
 namespace sf {
 
 VkVertexInputBindingDescription Vertex::get_binding_descr() {
-    VkVertexInputBindingDescription binding_descr{
+    return {
         .binding = 0,
         .stride = sizeof(Vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
     };
+}
 
-    return binding_descr;
+DynamicArray<Vertex> VulkanPipeline::define_geometry() {
+    return {
+        {{ -0.5f, -0.5f, 0.0f}, { 1.0f, 0.0f, 0.0f }},
+        {{ 0.5f, -0.5f, 0.0f}, { 0.0f, 1.0f, 0.0f }},
+        {{ 0.0f, 0.5f, 0.0f}, { 1.0f, 0.0f, 1.0f }},
+    };
+}
+
+FixedArray<VkVertexInputAttributeDescription, VulkanPipeline::ATTRIBUTE_COUNT> VulkanPipeline::get_attr_description() {
+    return {
+        VkVertexInputAttributeDescription{ .location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0 },
+        VkVertexInputAttributeDescription{ .location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = sizeof(glm::vec3) },
+    };
 }
 
 bool VulkanPipeline::create(VulkanContext& context) {
@@ -58,14 +72,16 @@ bool VulkanPipeline::create(VulkanContext& context) {
         .pDynamicStates = dynamic_state.data()
     };
 
-    // Geometry
-    FixedArray<Vertex, 3> vertices{
-        Vertex{ { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
-        Vertex{ { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-        Vertex{ { 0.0f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } }
-    };
+    auto binding_descr{ Vertex::get_binding_descr() };
+    auto attribute_descr{ VulkanPipeline::get_attr_description() };
 
-    VkPipelineVertexInputStateCreateInfo vertex_input_info{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineVertexInputStateCreateInfo vertex_input_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &binding_descr,
+        .vertexAttributeDescriptionCount = attribute_descr.count(),
+        .pVertexAttributeDescriptions = attribute_descr.data(),
+    };
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,

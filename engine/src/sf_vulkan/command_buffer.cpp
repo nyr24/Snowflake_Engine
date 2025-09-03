@@ -105,12 +105,15 @@ void VulkanCommandBuffer::begin_rendering(VulkanContext& context, u32 image_inde
     vkCmdBeginRendering(handle, &rendering_info);
     vkCmdBindPipeline(handle, VK_PIPELINE_BIND_POINT_GRAPHICS, context.pipeline.handle);
 
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(handle, 0, 1, &context.vertex_buffer.handle, offsets);
+
     VkViewport viewport{ context.get_viewport() };
     VkRect2D scissors{ context.get_scissors() };
 
     vkCmdSetViewport(handle, 0, 1, &viewport);
     vkCmdSetScissor(handle, 0, 1, &scissors);
-    vkCmdDraw(handle, 3, 1, 0, 0);
+    vkCmdDraw(handle, context.vertex_buffer.geometry.count(), 1, 0, 0);
     vkCmdEndRendering(handle);
 }
 

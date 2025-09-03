@@ -102,9 +102,9 @@ public:
         _storage.some = std::move(some_val);
     }
 
-    operator bool() const noexcept {
-        return this->is_some();
-    }
+    // operator bool() const noexcept {
+    //     return this->is_some();
+    // }
 };
 
 } // sf

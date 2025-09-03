@@ -96,10 +96,6 @@ public:
         _tag = Tag::OK;
         _storage.some = std::move(ok_val);
     }
-
-    operator bool() const noexcept {
-        return this->is_ok();
-    }
 };
 
 enum struct ResultError {
