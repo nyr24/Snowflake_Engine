@@ -55,11 +55,11 @@ void VulkanBuffer::destroy(const VulkanDevice& device) {
 }
 
 bool VulkanCoherentBuffer::create(const VulkanDevice& device, DynamicArray<Vertex>&& vertices, DynamicArray<u16>&& indices, VulkanCoherentBuffer& out_buffer) {
-    out_buffer.data.resize(vertices.count() + (indices.count() % sizeof(Vertex)));
+    out_buffer.data.resize(vertices.size_in_bytes() + indices.size_in_bytes());
     out_buffer.indeces_count = indices.count();
-    out_buffer.indeces_offset = vertices.count(); 
+    out_buffer.indeces_offset = vertices.size_in_bytes(); 
     sf_mem_copy(out_buffer.data.data(), vertices.data(), vertices.size_in_bytes());
-    sf_mem_copy(out_buffer.data.data() + vertices.count(), indices.data(), indices.size_in_bytes());
+    sf_mem_copy(out_buffer.data.data() + out_buffer.indeces_offset, indices.data(), indices.size_in_bytes());
 
     VulkanBuffer::create(
         device, out_buffer.data.size_in_bytes(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -91,75 +91,6 @@ void VulkanCoherentBuffer::destroy(const VulkanDevice& device) {
     staging_buffer.destroy(device);
     main_buffer.destroy(device);
 }
-
-// TODO: remove when sure that we don't need this
-// bool VulkanVertexBuffer::create(const VulkanDevice& device, DynamicArray<Vertex>&& vertices, VulkanVertexBuffer& out_buffer) {
-//     out_buffer.vertices = std::move(vertices);
-
-//     VulkanBuffer::create(
-//         device, out_buffer.vertices.size_in_bytes(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-//         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-//         out_buffer.staging_buffer
-//     );
-
-//     VulkanBuffer::create(
-//         device, out_buffer.vertices.size_in_bytes(), static_cast<VkBufferUsageFlagBits>(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
-//         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-//         out_buffer.vertex_buffer
-//     );
-
-//     return out_buffer.copy_vertices_to_gpu(device);
-// }
-
-// bool VulkanVertexBuffer::copy_vertices_to_gpu(const VulkanDevice& device) {
-//     void* mapped_gpu_data;
-//     if (vkMapMemory(device.logical_device, staging_buffer.memory.handle, 0, vertices.size_in_bytes(), 0, &mapped_gpu_data) != VK_SUCCESS) {
-//         return false;
-//     }
-
-//     sf_mem_copy(mapped_gpu_data, vertices.data(), vertices.size_in_bytes());
-//     vkUnmapMemory(device.logical_device, staging_buffer.memory.handle);
-//     return true;
-// }
-
-// void VulkanVertexBuffer::destroy(const VulkanDevice& device) {
-//     staging_buffer.destroy(device);
-//     vertex_buffer.destroy(device);
-// }
-
-// bool VulkanIndexBuffer::create(const VulkanDevice& device, DynamicArray<u16>&& indices, VulkanIndexBuffer& out_buffer) {
-//     out_buffer.indices = std::move(indices);
-
-//     VulkanBuffer::create(
-//         device, out_buffer.indices.size_in_bytes(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-//         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-//         out_buffer.staging_buffer
-//     );
-
-//     VulkanBuffer::create(
-//         device, out_buffer.indices.size_in_bytes(), static_cast<VkBufferUsageFlagBits>(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
-//         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-//         out_buffer.index_buffer
-//     );
-
-//     return out_buffer.copy_indices_to_gpu(device);
-// }
-
-// bool VulkanIndexBuffer::copy_indices_to_gpu(const VulkanDevice& device) {
-//     void* mapped_gpu_data;
-//     if (vkMapMemory(device.logical_device, staging_buffer.memory.handle, 0, indices.size_in_bytes(), 0, &mapped_gpu_data) != VK_SUCCESS) {
-//         return false;
-//     }
-
-//     sf_mem_copy(mapped_gpu_data, indices.data(), indices.size_in_bytes());
-//     vkUnmapMemory(device.logical_device, staging_buffer.memory.handle);
-//     return true;
-// }
-
-// void VulkanIndexBuffer::destroy(const VulkanDevice& device) {
-//     staging_buffer.destroy(device);
-//     index_buffer.destroy(device);
-// }
 
 } // sf
 

@@ -119,17 +119,16 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     // THINK: we maybe need semaphore to synch copy and draw commands
     curr_transfer_buffer.begin_recording(vk_context, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-    u32 indices_byte_offset{ static_cast<u32>(vk_context.coherent_buffer.indeces_offset * sizeof(Vertex)) };
 
     VkBufferCopy vertex_copy_region{
         .srcOffset = 0,
         .dstOffset = 0,
-        .size = indices_byte_offset 
+        .size = vk_context.coherent_buffer.indeces_offset 
     };
 
     VkBufferCopy index_copy_region{
-        .srcOffset = indices_byte_offset,
-        .dstOffset = indices_byte_offset,
+        .srcOffset = vk_context.coherent_buffer.indeces_offset,
+        .dstOffset = vk_context.coherent_buffer.indeces_offset,
         .size = vk_context.coherent_buffer.indeces_count * sizeof(u16)
     };
     

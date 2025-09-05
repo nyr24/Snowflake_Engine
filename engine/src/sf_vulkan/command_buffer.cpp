@@ -107,7 +107,7 @@ void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, u32 image
  
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(handle, 0, 1, &context.coherent_buffer.main_buffer.handle, offsets);
-    vkCmdBindIndexBuffer(handle, context.coherent_buffer.main_buffer.handle, context.coherent_buffer.indeces_offset * sizeof(Vertex), VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(handle, context.coherent_buffer.main_buffer.handle, context.coherent_buffer.indeces_offset, VK_INDEX_TYPE_UINT16);
 
     VkViewport viewport{ context.get_viewport() };
     VkRect2D scissors{ context.get_scissors() };

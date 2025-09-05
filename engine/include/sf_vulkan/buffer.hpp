@@ -22,32 +22,9 @@ public:
     void destroy(const VulkanDevice& device);
 };
 
-// TODO: remove when sure that we don't need this
-// struct VulkanVertexBuffer {
-// public:
-//     DynamicArray<Vertex>    vertices;
-//     VulkanBuffer            staging_buffer;
-//     VulkanBuffer            vertex_buffer;
-// public:
-//     static bool create(const VulkanDevice& device, DynamicArray<Vertex>&& vertices, VulkanVertexBuffer& out_buffer);
-//     bool copy_vertices_to_gpu(const VulkanDevice& device);
-//     void destroy(const VulkanDevice& device);
-// };
-
-// struct VulkanIndexBuffer {
-// public:
-//     DynamicArray<u16>       indices;
-//     VulkanBuffer            staging_buffer;
-//     VulkanBuffer            index_buffer;
-// public:
-//     static bool create(const VulkanDevice& device, DynamicArray<u16>&& indices, VulkanIndexBuffer& out_buffer);
-//     bool copy_indices_to_gpu(const VulkanDevice& device);
-//     void destroy(const VulkanDevice& device);
-// };
-
 struct VulkanCoherentBuffer {
 public:
-    DynamicArray<VertexOrIndices>    data;
+    DynamicArray<u8>                 data;
     VulkanBuffer                     staging_buffer;
     VulkanBuffer                     main_buffer;
     u32                              indeces_offset;
