@@ -2,7 +2,7 @@
 
 #include <filesystem>
 #include "sf_containers/result.hpp"
-#include "sf_vulkan/types.hpp"
+#include "sf_vulkan/renderer.hpp"
 
 namespace sf {
 

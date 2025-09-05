@@ -1,9 +1,11 @@
 #pragma once
 
-#include "sf_containers/fixed_array.hpp"
+#include "sf_containers/optional.hpp"
+#include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_vulkan/synch.hpp"
+#include <span>
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -19,18 +21,18 @@ enum struct VulkanCommandBufferState {
 
 struct VulkanCommandBuffer {
 public:
+    static constexpr u32        MAX_BUFFER_ALLOC_COUNT{20};
     VkCommandBuffer             handle;
     VulkanCommandBufferState    state;
 
 public:
     VulkanCommandBuffer();
 
-    static void allocate(VulkanContext& context, VkCommandPool command_pool,  FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>& out_buffers, bool is_primary);
-    // static VulkanCommandBuffer begin_single_use(VulkanContext& context, VkCommandPool command_pool, bool is_primary);
-    void begin_recording(VulkanContext& context, VkCommandBufferUsageFlags begin_flags, u32 image_index);
+    static void allocate(VulkanContext& context, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary);
+    void begin_recording(VulkanContext& context, VkCommandBufferUsageFlags begin_flags);
     void end_recording(VulkanContext& context);
     void reset(VulkanContext& context);
-    void submit(VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, VulkanFence& fence);
+    void submit(VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, Option<VulkanFence> fence);
     void free(VulkanContext& context, VkCommandPool command_pool);
     void transition_image_layout(
         VulkanContext& context,
@@ -42,13 +44,13 @@ public:
         VkPipelineStageFlags2 dst_stage_mask,
         VkAccessFlags2 dst_access_mask
     );
-
-private:
-    void begin_rendering(VulkanContext& context, u32 image_index);
+    void copy_buffer_data(VkBuffer src, VkBuffer dst, VkBufferCopy* copy_region);
+    void record_draw_commands(VulkanContext& context, u32 image_index);
 };
 
 enum struct VulkanCommandPoolType {
-    GRAPHICS
+    GRAPHICS,
+    TRANSFER
 };
 
 struct VulkanCommandPool {
@@ -57,7 +59,7 @@ public:
     VulkanCommandPoolType   type;
 
 public:
-    static void create(VulkanContext& context, VulkanCommandPoolType type, u32 queue_family_index, VulkanCommandPool& out_pool);
+    static void create(VulkanContext& context, VulkanCommandPoolType type, u32 queue_family_index, VkCommandPoolCreateFlagBits create_flags, VulkanCommandPool& out_pool);
     void destroy(VulkanContext& context);
 };
 

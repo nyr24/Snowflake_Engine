@@ -1,7 +1,7 @@
 #include "sf_vulkan/synch.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_platform/platform.hpp"
-#include "sf_vulkan/types.hpp"
+#include "sf_vulkan/renderer.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {

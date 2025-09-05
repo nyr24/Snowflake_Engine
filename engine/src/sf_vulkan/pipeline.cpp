@@ -1,32 +1,15 @@
 #include "sf_vulkan/pipeline.hpp"
-#include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_vulkan/shaders.hpp"
-#include "sf_vulkan/types.hpp"
+#include "sf_vulkan/renderer.hpp"
 #include <filesystem>
 #include <vulkan/vulkan_core.h>
 
 namespace fs = std::filesystem;
 
 namespace sf {
-
-VkVertexInputBindingDescription Vertex::get_binding_descr() {
-    return {
-        .binding = 0,
-        .stride = sizeof(Vertex),
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-    };
-}
-
-DynamicArray<Vertex> VulkanPipeline::define_geometry() {
-    return {
-        {{ -0.5f, -0.5f, 0.0f}, { 1.0f, 0.0f, 0.0f }},
-        {{ 0.5f, -0.5f, 0.0f}, { 0.0f, 1.0f, 0.0f }},
-        {{ 0.0f, 0.5f, 0.0f}, { 1.0f, 0.0f, 1.0f }},
-    };
-}
 
 FixedArray<VkVertexInputAttributeDescription, VulkanPipeline::ATTRIBUTE_COUNT> VulkanPipeline::get_attr_description() {
     return {

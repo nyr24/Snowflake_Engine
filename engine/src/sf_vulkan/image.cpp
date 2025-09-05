@@ -2,7 +2,7 @@
 #include "sf_containers/optional.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_vulkan/device.hpp"
-#include "sf_vulkan/types.hpp"
+#include "sf_vulkan/renderer.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -48,7 +48,7 @@ bool VulkanImage::create(
     VkMemoryRequirements memory_requirements;
     vkGetImageMemoryRequirements(context.device.logical_device, out_image.handle, &memory_requirements);
 
-    Option<u32> memory_type = context.device.find_memory_index(memory_requirements.memoryTypeBits, memory_flags);
+    Option<u32> memory_type = context.device.find_memory_index(memory_requirements.memoryTypeBits, static_cast<VkMemoryPropertyFlagBits>(memory_flags));
     if (memory_type.is_none()) {
         LOG_ERROR("Required memory type not found. Image not valid.");
         return false;

@@ -84,7 +84,7 @@ public:
     static void query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface, VulkanSwapchainSupportInfo& out_support_info);
     void destroy(VulkanContext& context);
     bool detect_depth_format();
-    Option<u32> find_memory_index(u32 type_filter, u32 property_flags) const;
+    Option<u32> find_memory_index(u32 type_filter, VkMemoryPropertyFlagBits property_flags) const;
 };
 
 

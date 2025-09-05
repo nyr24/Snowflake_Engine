@@ -2,7 +2,7 @@
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/io.hpp"
-#include "sf_vulkan/types.hpp"
+#include "sf_vulkan/renderer.hpp"
 #include <filesystem>
 #include <vulkan/vulkan_core.h>
 

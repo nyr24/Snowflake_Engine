@@ -17,7 +17,7 @@
 #include "sf_core/logger.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_vulkan/renderer.hpp"
-#include "sf_vulkan/types.hpp"
+#include "sf_vulkan/renderer.hpp"
 #include <new>
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>

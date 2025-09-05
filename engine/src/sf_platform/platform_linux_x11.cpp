@@ -7,7 +7,7 @@
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
-#include "sf_vulkan/types.hpp"
+#include "sf_vulkan/renderer.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include <iostream>
 #include <xcb/xcb.h>
