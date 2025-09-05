@@ -38,8 +38,7 @@ public:
     VulkanPipeline                        pipeline;
     VulkanCommandPool                     graphics_command_pool;
     VulkanCommandPool                     transfer_command_pool;
-    VulkanVertexBuffer                    vertex_buffer;
-    VulkanIndexBuffer                     index_buffer;
+    VulkanCoherentBuffer                  coherent_buffer;
     FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>    graphics_command_buffers;
     FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>    transfer_command_buffers;
     FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        image_available_semaphores;

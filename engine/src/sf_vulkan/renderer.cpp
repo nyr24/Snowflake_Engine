@@ -59,11 +59,8 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::TRANSFER, vk_context.device.queue_family_info.transfer_family_index,
         static_cast<VkCommandPoolCreateFlagBits>(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT), vk_context.transfer_command_pool);
 
-    if (!VulkanVertexBuffer::create(vk_context.device, define_vertices(), vk_context.vertex_buffer)) {
-        return false;
-    }
-    if (!VulkanIndexBuffer::create(vk_context.device, define_indices(), vk_context.index_buffer)) {
-        return false;
+    if (!VulkanCoherentBuffer::create(vk_context.device, define_vertices(), define_indices(), vk_context.coherent_buffer)) {
+       return false; 
     }
 
     VulkanCommandBuffer::allocate(vk_context, vk_context.graphics_command_pool.handle, std::span{vk_context.graphics_command_buffers.data(), vk_context.graphics_command_buffers.capacity()}, true);
@@ -122,20 +119,22 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     // THINK: we maybe need semaphore to synch copy and draw commands
     curr_transfer_buffer.begin_recording(vk_context, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    u32 indices_byte_offset{ static_cast<u32>(vk_context.coherent_buffer.indeces_offset * sizeof(Vertex)) };
 
     VkBufferCopy vertex_copy_region{
         .srcOffset = 0,
         .dstOffset = 0,
-        .size = vk_context.vertex_buffer.vertices.size_in_bytes()
+        .size = indices_byte_offset 
     };
+
     VkBufferCopy index_copy_region{
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = vk_context.index_buffer.indices.size_in_bytes()
+        .srcOffset = indices_byte_offset,
+        .dstOffset = indices_byte_offset,
+        .size = vk_context.coherent_buffer.indeces_count * sizeof(u16)
     };
     
-    curr_transfer_buffer.copy_buffer_data(vk_context.vertex_buffer.staging_buffer.handle, vk_context.vertex_buffer.vertex_buffer.handle, &vertex_copy_region);
-    curr_transfer_buffer.copy_buffer_data(vk_context.index_buffer.staging_buffer.handle, vk_context.index_buffer.index_buffer.handle, &index_copy_region);
+    curr_transfer_buffer.copy_buffer_data(vk_context.coherent_buffer.staging_buffer.handle, vk_context.coherent_buffer.main_buffer.handle, &vertex_copy_region);
+    curr_transfer_buffer.copy_buffer_data(vk_context.coherent_buffer.staging_buffer.handle, vk_context.coherent_buffer.main_buffer.handle, &index_copy_region);
     curr_transfer_buffer.end_recording(vk_context);
 
     VkSubmitInfo transfer_submit_info{
@@ -243,8 +242,7 @@ VulkanContext::~VulkanContext() {
         }
     }
 
-    index_buffer.destroy(vk_context.device);
-    vertex_buffer.destroy(vk_context.device);
+    coherent_buffer.destroy(vk_context.device);
 
     transfer_command_pool.destroy(*this);
     graphics_command_pool.destroy(*this);

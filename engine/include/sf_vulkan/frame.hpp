@@ -16,4 +16,9 @@ struct Vertex {
 DynamicArray<Vertex>  define_vertices();
 DynamicArray<u16>     define_indices();
 
+union VertexOrIndices {
+    Vertex  vertex;
+    u16     indices[12];
+};
+
 } // sf
