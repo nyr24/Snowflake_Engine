@@ -13,12 +13,10 @@ struct Vertex {
     static VkVertexInputBindingDescription get_binding_descr();
 };
 
+struct VulkanUniformBufferObject;
+
 DynamicArray<Vertex>  define_vertices();
 DynamicArray<u16>     define_indices();
-
-union VertexOrIndices {
-    Vertex  vertex;
-    u16     indices[12];
-};
+void                  update_ubo(VulkanUniformBufferObject& ubo, void* ubo_mapped_mem, f64 elapsed_time, f32 aspect_ratio);
 
 } // sf

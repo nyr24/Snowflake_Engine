@@ -32,9 +32,7 @@ public:
         u16 height
     );
 
-    void destroy(
-        const VulkanContext& context
-    );
+    void destroy(const VulkanContext& context);
 
     bool acquire_next_image_index(
         VulkanContext& context,

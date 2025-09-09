@@ -4,15 +4,23 @@ struct VSInput {
 }
 
 struct VSOutput {
-    float3 color;
     float4 pos: SV_Position;
+    float3 color;
 };
+
+struct UniformBuffer {
+    float4x4    model;
+    float4x4    view;
+    float4x4    projection;
+};
+
+ConstantBuffer<UniformBuffer> ubo;
 
 [shader("vertex")]
 VSOutput vertMain(VSInput input) {
     VSOutput output;
     output.color = input.color;
-    output.pos = float4(input.pos, 1.0f);
+    output.pos = mul(ubo.projection, mul(ubo.view, mul(ubo.model, float4(input.pos, 1.0))));
     return output;
 }
 
@@ -20,5 +28,5 @@ VSOutput vertMain(VSInput input) {
 float4 fragMain(VSOutput input) : SV_Target
 {
     float3 color = input.color;
-    return float4(color, 1.0);
+    return float4(color, 1.0f);
 }

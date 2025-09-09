@@ -4,6 +4,7 @@
 #include "sf_core/utility.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/renderer.hpp"
+#include "sf_vulkan/swapchain.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -92,5 +93,31 @@ void VulkanCoherentBuffer::destroy(const VulkanDevice& device) {
     main_buffer.destroy(device);
 }
 
-} // sf
+VulkanUniformBuffersMapped::VulkanUniformBuffersMapped()
+{
+    ubos.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    buffers.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    mapped_memory.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+}
 
+bool VulkanUniformBuffersMapped::create(const VulkanDevice& device, VulkanUniformBuffersMapped& out_mapped_buffers) {
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        VulkanBuffer::create(device, sizeof(VulkanUniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+            out_mapped_buffers.buffers[i]
+        );  
+        if (vkMapMemory(device.logical_device, out_mapped_buffers.buffers[i].memory.handle, 0, sizeof(VulkanUniformBufferObject), 0, &out_mapped_buffers.mapped_memory[i]) != VK_SUCCESS) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void VulkanUniformBuffersMapped::destroy(const VulkanDevice& device) {
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        buffers[i].destroy(device);
+    }
+}
+
+} // sf

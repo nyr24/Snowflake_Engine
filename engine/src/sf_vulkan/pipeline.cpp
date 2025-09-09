@@ -2,8 +2,11 @@
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/logger.hpp"
+#include "sf_vulkan/descriptor.hpp"
+#include "sf_vulkan/device.hpp"
 #include "sf_vulkan/shaders.hpp"
 #include "sf_vulkan/renderer.hpp"
+#include "sf_vulkan/swapchain.hpp"
 #include <filesystem>
 #include <vulkan/vulkan_core.h>
 
@@ -89,7 +92,7 @@ bool VulkanPipeline::create(VulkanContext& context) {
         // use VK_POLYGON_MODE_WIREFRAME to only see edges of the polygons
         .polygonMode = VK_POLYGON_MODE_FILL,
         .cullMode = VK_CULL_MODE_BACK_BIT,
-        .frontFace = VK_FRONT_FACE_CLOCKWISE,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .depthBiasEnable = VK_FALSE,
         .depthBiasSlopeFactor = 1.0f,
         .lineWidth = 1.0f,
@@ -119,15 +122,14 @@ bool VulkanPipeline::create(VulkanContext& context) {
         .pAttachments = &color_blending_attachment,
     };
 
-    // TODO: modify, after we have uniform variables to pass for shaders
-    VkPipelineLayoutCreateInfo layout_create_info{
+    VkPipelineLayoutCreateInfo pipeline_layout_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
-        .pushConstantRangeCount = 0,
+        .setLayoutCount = VulkanSwapchain::MAX_FRAMES_IN_FLIGHT,
+        .pSetLayouts = reinterpret_cast<VkDescriptorSetLayout*>(context.descriptor_set_layouts.data()),
     };
 
     // TODO: custom allocator
-    sf_vk_check(vkCreatePipelineLayout(context.device.logical_device, &layout_create_info, nullptr, &context.pipeline.layout));
+    sf_vk_check(vkCreatePipelineLayout(context.device.logical_device, &pipeline_layout_create_info, nullptr, &context.pipeline.pipeline_layout));
 
     VkPipelineRenderingCreateInfo rendering_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
@@ -147,7 +149,7 @@ bool VulkanPipeline::create(VulkanContext& context) {
         .pMultisampleState = &multisample_create_info,
         .pColorBlendState = &color_blending_state,
         .pDynamicState = &dynamic_create_info,
-        .layout = context.pipeline.layout,
+        .layout = context.pipeline.pipeline_layout,
         .renderPass = nullptr,
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = -1
@@ -158,6 +160,11 @@ bool VulkanPipeline::create(VulkanContext& context) {
     LOG_INFO("Graphics pipeline was successfully created!");
 
     return true;
+}
+
+void VulkanPipeline::destroy(const VulkanDevice& device) {
+    // TODO: custom allocator
+    vkDestroyPipeline(device.logical_device, handle, nullptr);
 }
 
 } // sf

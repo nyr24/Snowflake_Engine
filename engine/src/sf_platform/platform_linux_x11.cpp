@@ -174,7 +174,7 @@ PlatformState::~PlatformState() {
     }
 }
 
-bool PlatformState::start_event_loop(ApplicationState& app_state) {
+bool PlatformState::poll_events(ApplicationState& app_state) {
     X11InternState* state = static_cast<X11InternState*>(this->internal_state);
 
     xcb_generic_event_t* event;

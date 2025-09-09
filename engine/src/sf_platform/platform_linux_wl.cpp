@@ -105,7 +105,7 @@ struct GlobalObjectsState {
     xdg_wm_base*            xdg_wm_base;
     wl_buffer*              buffer;
     u32*                    pool_data;
-    u32                     last_frame = 0;
+    // u32                     last_frame = 0;
     PointerEventState       pointer_state;
     KeyboardState           keyboard_state;
 };
@@ -137,10 +137,11 @@ struct WaylandInternState {
     Listeners               listeners;
     GlobalObjectsState      go_state;
     WindowProps             window_props;
+    ApplicationState*       app_state{nullptr};
 };
 
-// static void draw_frame(WaylandInternState* state);
 static Key translate_keycode(u32 x_keycode);
+static void surface_handle_frame_done(void* data, wl_callback* cb, u32 time);
 
 static void randname(i8 *buf) {
     struct timespec ts;
@@ -308,17 +309,6 @@ static void init_buffers(WaylandInternState* state) {
 
     wl_shm_pool_destroy(pool);
     close(fd);
-}
-
-static void surface_handle_frame_done(void* data, wl_callback* cb, u32 time) {
-    WaylandInternState* state = static_cast<WaylandInternState*>(data);
-    wl_callback_destroy(cb);
-    cb = wl_surface_frame(state->go_state.surface);
-    wl_callback_add_listener(cb, &state->listeners.callback_listener,  static_cast<void*>(state));
-    // draw_frame(state);
-    // wl_surface_damage(state->go_state.surface, 0, 0, state->window_props.width, state->window_props.height);
-    // wl_surface_commit(state->go_state.surface);
-    state->go_state.last_frame = time;
 }
 
 // Pointer events
@@ -588,24 +578,6 @@ static void seat_handle_capabilities(void* data, wl_seat* seat, u32 capabilities
     }
 }
 
-// static void draw_frame(WaylandInternState* state) {
-//     const i32 quot_height = state->window_props.height / 4;
-//     ColorXRGB colors[] = { ColorXRGB::PURPLE, ColorXRGB::GREEN, ColorXRGB::RED, ColorXRGB::YELLOW };
-//
-//     for (i32 height_offset = 0; height_offset < 4; ++height_offset) {
-//         for (i32 y = (height_offset * quot_height); y < ((height_offset + 1) * quot_height); ++y) {
-//             for (i32 x = 0; x < state->window_props.width; ++x) {
-//                 i32 px_curr = y * (state->window_props.width) + x;
-//                 state->go_state.pool_data[px_curr] = static_cast<u32>(colors[height_offset]);
-//             }
-//         }
-//     }
-//
-//     wl_surface_attach(state->go_state.surface, state->go_state.buffer, 0, 0);
-//     wl_surface_damage_buffer(state->go_state.surface, 0, 0, state->window_props.width, state->window_props.height);
-//     wl_surface_commit(state->go_state.surface);
-// }
-
 PlatformState::PlatformState()
     : internal_state{ sf_mem_alloc(sizeof(WaylandInternState), alignof(WaylandInternState)) }
 {
@@ -626,23 +598,19 @@ PlatformState& PlatformState::operator=(PlatformState&& rhs) noexcept
     return *this;
 }
 
-bool PlatformState::startup(
-    const char* app_name,
-    u16 x,
-    u16 y,
-    u16 width,
-    u16 height
-) {
+bool PlatformState::startup(ApplicationState& app_state) {
     WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
+    state->app_state = &app_state;
 
     constexpr i32 buff_count = 2;
-    const u32 stride = width * 4;
+    const u32 stride = app_state.config.width * 4;
+
     state->window_props = WindowProps{
-        .name = app_name,
-        .width = width,
-        .height = height,
+        .name = app_state.config.name,
+        .width = app_state.config.width,
+        .height = app_state.config.height,
         .stride = stride,
-        .shm_pool_size = height * stride * buff_count,
+        .shm_pool_size = app_state.config.height * stride * buff_count,
     };
 
     state->display = wl_display_connect(nullptr);
@@ -726,67 +694,15 @@ PlatformState::~PlatformState() {
     }
 }
 
-bool PlatformState::start_event_loop(ApplicationState& application_state) {
+bool PlatformState::poll_events(ApplicationState& application_state) {
     WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
-    Clock clock;
-    clock.start();
 
-    f64 running_time;
-    u8 frame_count;
-    constexpr f64 target_frame_seconds = 1.0 / 60.0;
+    // TODO: i dont know for now, wl_display_dispatch is blocking render loop until event occurs
+    // while (application_state.is_running) {
+        // draw_frame(state);
+    // }
 
-    while (wl_display_dispatch(state->display) != -1 && application_state.is_running) {
-        if (!application_state.is_suspended) {
-            f64 delta_time = application_state.clock.update_and_get_delta();
-            f64 frame_start_time = platform_get_abs_time();
-
-            if (!renderer_begin_frame(delta_time)) {
-                return false;
-            }
-
-            if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
-                LOG_FATAL("Game update failed, shutting down");
-                application_state.is_running = false;
-                break;
-            }
-
-            if (!application_state.game_inst->render(application_state.game_inst, delta_time)) {
-                LOG_FATAL("Game render failed, shutting down");
-                application_state.is_running = false;
-                break;
-            }
-
-            // TODO: refactor packet creation
-            RenderPacket packet;
-            packet.delta_time = 0;
-
-            if (!renderer_draw_frame(packet)) {
-                return false;
-            }
-
-            f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
-            running_time += frame_elapsed_time;
-
-        #ifdef SF_LIMIT_FRAME_COUNT
-            f64 frame_remain_seconds = target_frame_seconds - frame_elapsed_time;
-
-            if (frame_remain_seconds > 0.0) {
-                u64 remaining_ms = frame_remain_seconds * 1000.0;
-                platform_sleep(remaining_ms - 1);
-            }
-        #endif
-
-            ++frame_count;
-
-            // update input at the end of the frame
-            input_update(delta_time);
-            // TODO: check for success
-            renderer_end_frame(delta_time);
-        }
-    }
-
-    application_state.is_running = false;
-    return false;
+    return true;
 }
 
 void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {

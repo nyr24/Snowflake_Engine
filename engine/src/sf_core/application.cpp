@@ -3,7 +3,6 @@
 #include "sf_core/input.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
-#include "sf_platform/defines.hpp"
 #include "sf_vulkan/renderer.hpp"
 
 namespace sf {
@@ -19,8 +18,7 @@ bool application_create(sf::GameInstance* game_inst) {
 
     application_state.game_inst = game_inst;
 
-    application_state.width = game_inst->app_config.width;
-    application_state.height = game_inst->app_config.height;
+    application_state.config = game_inst->app_config;
     application_state.is_running = true;
     application_state.is_suspended = false;
     application_state.platform_state = sf::PlatformState{};
@@ -31,13 +29,7 @@ bool application_create(sf::GameInstance* game_inst) {
     event_set_listener(SystemEventCode::MOUSE_BUTTON_PRESSED, nullptr, application_on_mouse);
     event_set_listener(SystemEventCode::MOUSE_BUTTON_RELEASED, nullptr, application_on_mouse);
 
-    bool start_success = application_state.platform_state.startup(
-        game_inst->app_config.name,
-        game_inst->app_config.start_pos_x,
-        game_inst->app_config.start_pos_y,
-        game_inst->app_config.width,
-        game_inst->app_config.height
-    );
+    bool start_success = application_state.platform_state.startup(application_state);
 
     if (!start_success) {
         LOG_ERROR("Failed to startup the platform");
@@ -49,7 +41,7 @@ bool application_create(sf::GameInstance* game_inst) {
         return false;
     }
 
-    application_state.game_inst->resize(application_state.game_inst, application_state.width, application_state.height);
+    application_state.game_inst->resize(application_state.game_inst, application_state.config.width, application_state.config.height);
 
     if (!renderer_init(game_inst->app_config, application_state.platform_state)) {
         return false;
@@ -60,24 +52,22 @@ bool application_create(sf::GameInstance* game_inst) {
 }
 
 void application_run() {
-#ifdef SF_PLATFORM_WAYLAND
-    application_state.platform_state.start_event_loop(application_state);
-#else
-    Clock clock;
-    clock.start();
-
-    f64 running_time;
-    u8 frame_count;
-    constexpr f64 target_frame_seconds = 1.0 / 60.0;
+    application_state.clock.start();
 
     while (application_state.is_running) {
-        if (!application_state.platform_state.start_event_loop(application_state)) {
+        if (!application_state.platform_state.poll_events(application_state)) {
             application_state.is_running = false;
         }
 
         if (!application_state.is_suspended) {
             f64 delta_time = application_state.clock.update_and_get_delta();
             f64 frame_start_time = platform_get_abs_time();
+
+            if (!renderer_begin_frame(delta_time)) {
+                LOG_FATAL("Begin frame is failed, shutting down");
+                application_state.is_running = false;
+                break;  
+            }
 
             if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
                 LOG_FATAL("Game update failed, shutting down");
@@ -94,13 +84,13 @@ void application_run() {
             // TODO: refactor packet creation
             RenderPacket packet;
             packet.delta_time = 0;
+            packet.elapsed_time = application_state.clock.elapsed_time;
             renderer_draw_frame(packet);
 
             f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
-            running_time += frame_elapsed_time;
 
         #ifdef SF_LIMIT_FRAME_COUNT
-            f64 frame_remain_seconds = target_frame_seconds - frame_elapsed_time;
+            f64 frame_remain_seconds = application_state.TARGET_FRAME_SECONDS - frame_elapsed_time;
 
             if (frame_remain_seconds > 0.0) {
                 u64 remaining_ms = frame_remain_seconds * 1000.0;
@@ -108,15 +98,13 @@ void application_run() {
             }
         #endif
 
-            ++frame_count;
-
-            // update input at the end of the frame
+            application_state.frame_count++;
             input_update(delta_time);
+            renderer_end_frame(delta_time);
         }
     }
 
     application_state.is_running = false;
-#endif
 }
 
 bool application_on_event(u8 code, void* sender, void* listener_inst, EventContext* context) {

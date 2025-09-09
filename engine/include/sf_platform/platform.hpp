@@ -19,15 +19,8 @@ public:
     PlatformState& operator=(const PlatformState& rhs) = delete;
     ~PlatformState();
 
-    bool startup(
-        const char* app_name,
-        u16 x,
-        u16 y,
-        u16 width,
-        u16 height
-    );
-
-    bool start_event_loop(ApplicationState& app_state);
+    bool startup(ApplicationState& app_state);
+    bool poll_events(ApplicationState& app_state);
 };
 
 struct PlatformState;

@@ -4,6 +4,7 @@
 #include "sf_core/memory_sf.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
+#include "sf_vulkan/descriptor.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/synch.hpp"
@@ -14,6 +15,7 @@
 #include "sf_platform/platform.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_vulkan/frame.hpp"
+#include "sf_vulkan/buffer.hpp"
 // #include "sf_vulkan/allocator.hpp"
 // #include "sf_allocators/free_list_allocator.hpp"
 // #include <list>
@@ -33,6 +35,7 @@ void create_debugger();
 bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions);
 bool init_validation_layers(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_VALIDATION_LAYER_CAPACITY>& required_validation_layers);
 void init_synch_primitives(VulkanContext& context);
+void init_descriptor_set_layouts_and_sets(VulkanContext& context);
 void destroy_synch_primitives(VulkanContext& context);
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
@@ -49,6 +52,13 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     if (!VulkanSwapchain::create(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain)) {
         return false;
     }
+
+    if (!VulkanUniformBuffersMapped::create(vk_context.device, vk_context.uniform_buffers)) {
+        return false;
+    }
+
+    VulkanDescriptorPool::create(vk_context.device, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, vk_context.descriptor_pool);
+    init_descriptor_set_layouts_and_sets(vk_context);
 
     if (!VulkanPipeline::create(vk_context)) {
         return false;
@@ -110,6 +120,7 @@ bool renderer_begin_frame(f64 delta_time) {
 }
 
 bool renderer_draw_frame(const RenderPacket& packet) {
+    // THINK: can we do all stuff with copying buffer data on renderer_init()?
     VulkanCommandBuffer& curr_graphics_buffer = vk_context.graphics_command_buffers[vk_context.curr_frame];
     VulkanCommandBuffer& curr_transfer_buffer = vk_context.transfer_command_buffers[vk_context.curr_frame];
     VulkanSemaphore& curr_image_available_semaphore = vk_context.image_available_semaphores[vk_context.curr_frame];
@@ -162,6 +173,8 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     };
 
     curr_graphics_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, Option<VulkanFence>{curr_draw_fence});
+
+    update_ubo(vk_context.uniform_buffers.ubos[vk_context.curr_frame], vk_context.uniform_buffers.mapped_memory[vk_context.curr_frame], packet.elapsed_time, vk_context.get_aspect_ratio());
 
     if (!curr_transfer_fence.wait(vk_context)) {
         return false;
@@ -223,6 +236,8 @@ VulkanContext::VulkanContext()
     render_finished_semaphores.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
     draw_fences.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
     transfer_fences.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    descriptor_set_layouts.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    descriptor_sets.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
 }
 
 VulkanContext::~VulkanContext() {
@@ -241,10 +256,18 @@ VulkanContext::~VulkanContext() {
         }
     }
 
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        descriptor_set_layouts[i].destroy(vk_context.device);
+    }
+
     coherent_buffer.destroy(vk_context.device);
 
     transfer_command_pool.destroy(*this);
     graphics_command_pool.destroy(*this);
+
+    pipeline.destroy(device);
+    descriptor_pool.destroy(vk_context.device);
+    uniform_buffers.destroy(vk_context.device);
 
     swapchain.destroy(*this);
 
@@ -416,6 +439,44 @@ void destroy_synch_primitives(VulkanContext& context) {
     }
 }
 
+void init_descriptor_set_layouts_and_sets(VulkanContext& context) {
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        VkDescriptorSetLayoutBinding layout_binding;
+        VulkanDescriptorSetLayout::create_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, layout_binding);
+        VulkanDescriptorSetLayout::create(context.device, 1, &layout_binding, context.descriptor_set_layouts[i]);
+    }
+
+    context.descriptor_pool.allocate_sets(context.device, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT,
+        reinterpret_cast<VkDescriptorSetLayout*>(context.descriptor_set_layouts.data()),
+        reinterpret_cast<VkDescriptorSet*>(context.descriptor_sets.data())
+    );
+
+    // updating descriptors
+    VkWriteDescriptorSet descriptor_writes[VulkanSwapchain::MAX_FRAMES_IN_FLIGHT];
+
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        VkDescriptorBufferInfo buffer_info{
+            .buffer = context.uniform_buffers.buffers[i].handle,
+            .offset = 0,
+            .range = sizeof(context.uniform_buffers.ubos[i])
+        };
+
+        descriptor_writes[i] = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = context.descriptor_sets[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pImageInfo = nullptr,
+            .pBufferInfo = &buffer_info,
+            .pTexelBufferView = nullptr,
+        };
+    }
+
+    vkUpdateDescriptorSets(context.device.logical_device, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, descriptor_writes, 0, nullptr);
+}
+
 VkViewport VulkanContext::get_viewport() const {
     return {
         .x = 0.0f,
@@ -432,6 +493,10 @@ VkRect2D VulkanContext::get_scissors() const {
         .offset = { 0, 0 },
         .extent = { framebuffer_width, framebuffer_height }
     };
+}
+
+f32 VulkanContext::get_aspect_ratio() const {
+    return static_cast<f32>(framebuffer_width) / framebuffer_height;
 }
 
 } // sf

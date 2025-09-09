@@ -16,11 +16,13 @@ struct ApplicationConfig {
 
 struct GameInstance;
 struct ApplicationState {
+    static constexpr f64 TARGET_FRAME_SECONDS = 1.0 / 60.0;
+
     sf::PlatformState           platform_state;
     GameInstance*               game_inst;
     Clock                       clock;
-    u16                         width;
-    u16                         height;
+    u32                         frame_count;
+    ApplicationConfig           config;
     bool                        is_running;
     bool                        is_suspended;
 };

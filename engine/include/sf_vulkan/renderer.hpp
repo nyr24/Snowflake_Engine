@@ -6,6 +6,7 @@
 #include "sf_core/defines.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
+#include "sf_vulkan/descriptor.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/pipeline.hpp"
@@ -35,16 +36,20 @@ public:
     VkDebugUtilsMessengerEXT              debug_messenger;
 #endif
     VulkanSwapchain                       swapchain;
+    VulkanCoherentBuffer                  coherent_buffer;
     VulkanPipeline                        pipeline;
     VulkanCommandPool                     graphics_command_pool;
     VulkanCommandPool                     transfer_command_pool;
-    VulkanCoherentBuffer                  coherent_buffer;
-    FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>    graphics_command_buffers;
-    FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>    transfer_command_buffers;
-    FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        image_available_semaphores;
-    FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        render_finished_semaphores;
-    FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            draw_fences;
-    FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            transfer_fences;
+    VulkanDescriptorPool                  descriptor_pool;
+    VulkanUniformBuffersMapped            uniform_buffers;
+    FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        graphics_command_buffers;
+    FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        transfer_command_buffers;
+    FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            image_available_semaphores;
+    FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            render_finished_semaphores;
+    FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>                draw_fences;
+    FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>                transfer_fences;
+    FixedArray<VulkanDescriptorSetLayout, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>  descriptor_set_layouts;
+    FixedArray<VkDescriptorSet, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            descriptor_sets;
     u32                                   image_index;
     u32                                   curr_frame;
     u32                                   framebuffer_size_generation;
@@ -58,11 +63,13 @@ public:
 
     VkViewport get_viewport() const;
     VkRect2D get_scissors() const;
+    f32 get_aspect_ratio() const;
 };
 
 // renderer
 struct RenderPacket {
     f64 delta_time;
+    f64 elapsed_time;
 };
 
 struct VulkanRenderer {
