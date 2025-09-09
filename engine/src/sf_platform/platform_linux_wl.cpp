@@ -696,12 +696,7 @@ PlatformState::~PlatformState() {
 
 bool PlatformState::poll_events(ApplicationState& application_state) {
     WaylandInternState* state = static_cast<WaylandInternState*>(this->internal_state);
-
-    // TODO: i dont know for now, wl_display_dispatch is blocking render loop until event occurs
-    // while (application_state.is_running) {
-        // draw_frame(state);
-    // }
-
+    wl_display_roundtrip(state->display);
     return true;
 }
 
