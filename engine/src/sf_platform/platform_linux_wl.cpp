@@ -3,8 +3,6 @@
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
 #include "sf_platform/platform.hpp"
-#include "sf_core/clock.hpp"
-#include "sf_core/game_types.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/utility.hpp"

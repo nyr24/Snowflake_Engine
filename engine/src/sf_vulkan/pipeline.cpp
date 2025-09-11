@@ -2,53 +2,69 @@
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/logger.hpp"
-#include "sf_vulkan/descriptor.hpp"
+#include "sf_core/memory_sf.hpp"
+#include "sf_vulkan/buffer.hpp"
+#include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/shaders.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"
-#include <filesystem>
 #include <vulkan/vulkan_core.h>
+#include <filesystem>
+#include <span>
 
 namespace fs = std::filesystem;
 
 namespace sf {
 
-FixedArray<VkVertexInputAttributeDescription, VulkanPipeline::ATTRIBUTE_COUNT> VulkanPipeline::get_attr_description() {
-    return {
-        VkVertexInputAttributeDescription{ .location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = 0 },
-        VkVertexInputAttributeDescription{ .location = 1, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = sizeof(glm::vec3) },
-    };
+VulkanShaderPipeline::VulkanShaderPipeline()
+{
+    attrib_description.resize(VulkanShaderPipeline::MAX_ATTRIB_COUNT);
+    push_constant_block.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    descriptor_layouts.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    descriptor_sets.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
 }
-
-bool VulkanPipeline::create(VulkanContext& context) {
+    
+bool VulkanShaderPipeline::create(
+    const VulkanContext& context,
+    const char* shader_file_name,
+    VkPrimitiveTopology primitive_topology,
+    bool enable_color_blend,
+    std::span<VkVertexInputAttributeDescription> attrib_descriptions,
+    VulkanShaderPipeline& out_pipeline
+) {
     #ifdef SF_DEBUG
-    fs::path shader_path = fs::current_path() / "build/debug/engine/shaders/shader.spv";
+    fs::path shader_path = fs::current_path() / "build" / "debug/engine/shaders/" / shader_file_name;
     #else
-    fs::path shader_path = fs::current_path() / "/build/release/engine/shaders/shader.spv";
+    fs::path shader_path = fs::current_path() / "build" / "release/engine/shaders/" / shader_file_name;
     #endif
 
-    Result<VkShaderModule> maybe_shader_module = create_shader_module(context, shader_path);
+    Result<VkShaderModule> maybe_shader_module = create_shader_module(context.device, shader_path);
     if (maybe_shader_module.is_err()) {
         return false;
     }
 
-    VkShaderModule module = maybe_shader_module.unwrap();
+    out_pipeline.shader_handle = maybe_shader_module.unwrap();
 
     FixedArray<VkPipelineShaderStageCreateInfo, 2> shader_stages{
         {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .module = module,
+            .module = out_pipeline.shader_handle,
             .pName = "vertMain",
         },
         {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .module = module,
+            .module = out_pipeline.shader_handle,
             .pName = "fragMain"
         }
     };
+
+    if (out_pipeline.attrib_description.count() != attrib_descriptions.size()) {
+        out_pipeline.attrib_description.resize(attrib_descriptions.size());
+    }
+    sf_mem_copy(out_pipeline.attrib_description.data(), attrib_descriptions.data(), sizeof(VkVertexInputAttributeDescription) * attrib_descriptions.size());
 
     FixedArray<VkDynamicState, 2> dynamic_state{ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
@@ -59,19 +75,18 @@ bool VulkanPipeline::create(VulkanContext& context) {
     };
 
     auto binding_descr{ Vertex::get_binding_descr() };
-    auto attribute_descr{ VulkanPipeline::get_attr_description() };
 
     VkPipelineVertexInputStateCreateInfo vertex_input_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = &binding_descr,
-        .vertexAttributeDescriptionCount = attribute_descr.count(),
-        .pVertexAttributeDescriptions = attribute_descr.data(),
+        .vertexAttributeDescriptionCount = out_pipeline.attrib_description.count(),
+        .pVertexAttributeDescriptions = out_pipeline.attrib_description.data(),
     };
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        .topology = primitive_topology
     };
 
     VkViewport viewport{ context.get_viewport() };
@@ -105,7 +120,7 @@ bool VulkanPipeline::create(VulkanContext& context) {
     };
 
     VkPipelineColorBlendAttachmentState color_blending_attachment{
-        .blendEnable = false,
+        .blendEnable = enable_color_blend,
         .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
         .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
         .colorBlendOp = VK_BLEND_OP_ADD,
@@ -122,14 +137,22 @@ bool VulkanPipeline::create(VulkanContext& context) {
         .pAttachments = &color_blending_attachment,
     };
 
+    VkPushConstantRange push_constant_range{
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = sizeof(VulkanPushConstantBlock),
+    };
+
     VkPipelineLayoutCreateInfo pipeline_layout_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = VulkanSwapchain::MAX_FRAMES_IN_FLIGHT,
-        .pSetLayouts = reinterpret_cast<VkDescriptorSetLayout*>(context.descriptor_set_layouts.data()),
+        .setLayoutCount = out_pipeline.descriptor_layouts.count(),
+        .pSetLayouts = reinterpret_cast<VkDescriptorSetLayout*>(out_pipeline.descriptor_layouts.data()),
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &push_constant_range,
     };
 
     // TODO: custom allocator
-    sf_vk_check(vkCreatePipelineLayout(context.device.logical_device, &pipeline_layout_create_info, nullptr, &context.pipeline.pipeline_layout));
+    sf_vk_check(vkCreatePipelineLayout(context.device.logical_device, &pipeline_layout_create_info, nullptr, &out_pipeline.pipeline_layout));
 
     VkPipelineRenderingCreateInfo rendering_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
@@ -149,22 +172,97 @@ bool VulkanPipeline::create(VulkanContext& context) {
         .pMultisampleState = &multisample_create_info,
         .pColorBlendState = &color_blending_state,
         .pDynamicState = &dynamic_create_info,
-        .layout = context.pipeline.pipeline_layout,
+        .layout = out_pipeline.pipeline_layout,
         .renderPass = nullptr,
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = -1
     };
 
     // TODO: custom allocator
-    sf_vk_check(vkCreateGraphicsPipelines(context.device.logical_device, nullptr, 1, &pipeline_create_info, nullptr, &context.pipeline.handle));
+    sf_vk_check(vkCreateGraphicsPipelines(context.device.logical_device, nullptr, 1, &pipeline_create_info, nullptr, &out_pipeline.pipeline_handle));
     LOG_INFO("Graphics pipeline was successfully created!");
 
     return true;
 }
 
-void VulkanPipeline::destroy(const VulkanDevice& device) {
+void VulkanShaderPipeline::bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_frame) {
+    vkCmdBindPipeline(cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_handle);
+    vkCmdBindDescriptorSets(cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_sets[curr_frame], 0, nullptr);
+}
+
+void VulkanShaderPipeline::destroy(const VulkanDevice& device) {
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        descriptor_layouts[i].destroy(device);
+    }
+
     // TODO: custom allocator
-    vkDestroyPipeline(device.logical_device, handle, nullptr);
+    vkDestroyPipeline(device.logical_device, pipeline_handle, nullptr);
+    descriptor_pool.destroy(device);
+    global_ubo.destroy(device);
+}
+
+void VulkanDescriptorPool::create(const VulkanDevice& device, u32 descriptor_count, VkDescriptorType type, u32 max_sets, VulkanDescriptorPool& out_pool) {
+    VkDescriptorPoolSize pool_size{
+        .type = type,
+        .descriptorCount = descriptor_count
+    };
+
+    VkDescriptorPoolCreateInfo create_info{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = max_sets,
+        .poolSizeCount = 1,
+        .pPoolSizes = &pool_size,
+    };
+
+    // TODO: custom allocator
+    sf_vk_check(vkCreateDescriptorPool(device.logical_device, &create_info, nullptr, &out_pool.handle)); 
+}
+
+void VulkanDescriptorPool::allocate_sets(const VulkanDevice& device, u32 count, VkDescriptorSetLayout* layouts, VkDescriptorSet* sets) {
+    VkDescriptorSetAllocateInfo alloc_info{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = handle,
+        .descriptorSetCount = count,
+        .pSetLayouts = layouts
+    };
+
+    sf_vk_check(vkAllocateDescriptorSets(device.logical_device, &alloc_info, sets));
+}
+
+void VulkanDescriptorPool::destroy(const VulkanDevice& device) {
+    if (handle) {
+        // TODO: custom allocator
+        vkDestroyDescriptorPool(device.logical_device, handle, nullptr);
+        handle = nullptr;
+    }
+}
+
+void VulkanDescriptorSetLayout::create(const VulkanDevice& device, std::span<VkDescriptorSetLayoutBinding> bindings, VulkanDescriptorSetLayout& out_layout) {
+    VkDescriptorSetLayoutCreateInfo descriptor_layout_create_info{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<u32>(bindings.size()),
+        .pBindings = bindings.data(),
+    };
+    // TODO: custom allocator
+    sf_vk_check(vkCreateDescriptorSetLayout(device.logical_device, &descriptor_layout_create_info, nullptr, &out_layout.handle));
+}
+
+void VulkanDescriptorSetLayout::create_bindings(u32 index, VkDescriptorType descriptor_type, u32 descriptor_count, VkShaderStageFlags stage_flags, std::span<VkDescriptorSetLayoutBinding> out_bindings) {
+    for (u32 i{0}; i < out_bindings.size(); ++i) {
+        out_bindings[i].binding = index,
+        out_bindings[i].descriptorType = descriptor_type,
+        out_bindings[i].descriptorCount = descriptor_count,
+        out_bindings[i].stageFlags = stage_flags,
+        out_bindings[i].pImmutableSamplers = nullptr;
+    }
+}
+
+void VulkanDescriptorSetLayout::destroy(const VulkanDevice& device) {
+    if (handle) {
+        // TODO: custom allocator
+        vkDestroyDescriptorSetLayout(device.logical_device, handle, nullptr);
+        handle = nullptr;
+    }
 }
 
 } // sf

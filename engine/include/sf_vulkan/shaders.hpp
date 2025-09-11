@@ -6,6 +6,6 @@
 
 namespace sf {
 
-Result<VkShaderModule> create_shader_module(VulkanContext& context, std::filesystem::path shader_file_path);
+Result<VkShaderModule> create_shader_module(const VulkanDevice& device, std::filesystem::path shader_file_path);
 
 } // sf

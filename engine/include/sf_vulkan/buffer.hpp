@@ -21,7 +21,7 @@ public:
     VkBuffer                handle;
     VulkanMemory            memory;
 public:
-    static void create(const VulkanDevice& device, VkDeviceSize size, VkBufferUsageFlagBits usage, VkSharingMode sharing_mode, VkMemoryPropertyFlagBits memory_properties,VulkanBuffer& out_buffer);
+    static void create(const VulkanDevice& device, VkDeviceSize size, VkBufferUsageFlagBits usage, VkSharingMode sharing_mode, VkMemoryPropertyFlagBits memory_properties, VulkanBuffer& out_buffer);
     void destroy(const VulkanDevice& device);
 };
 
@@ -38,21 +38,27 @@ public:
     void destroy(const VulkanDevice& device);
 };
 
-struct VulkanUniformBufferObject {
-    glm::mat4    model;
+// Needs to be at least 256 bytes for Nvidia cards
+struct VulkanGlobalUniformObject {
     glm::mat4    view;
     glm::mat4    proj;
+    glm::mat4    padding_1;
+    glm::mat4    padding_2;
 };
 
-struct VulkanUniformBuffersMapped {
+struct VulkanGlobalUniformBufferObject {
     // THINK: maybe should use array of structures
-    FixedArray<VulkanUniformBufferObject, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> ubos;  
+    FixedArray<VulkanGlobalUniformObject, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> global_uniform_objects;  
     FixedArray<VulkanBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>              buffers;
     FixedArray<void*, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>                     mapped_memory;  
 
-    VulkanUniformBuffersMapped();
-    static bool create(const VulkanDevice& device, VulkanUniformBuffersMapped& out_mapped_buffers);
+    VulkanGlobalUniformBufferObject();
+    static bool create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo);
     void destroy(const VulkanDevice& device);
+};
+
+struct VulkanPushConstantBlock {
+    glm::mat4    model;
 };
 
 } // sf

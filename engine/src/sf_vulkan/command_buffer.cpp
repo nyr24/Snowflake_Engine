@@ -3,6 +3,7 @@
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_vulkan/buffer.hpp"
+#include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"
@@ -69,7 +70,7 @@ void VulkanCommandBuffer::begin_recording(VulkanContext& context, VkCommandBuffe
     state = VulkanCommandBufferState::RECORDING_BEGIN;
 }
 
-void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, u32 image_index) {
+void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, VulkanShaderPipeline& pipeline, u32 image_index) {
     transition_image_layout(
         context,
         context.image_index,
@@ -103,12 +104,10 @@ void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, u32 image
     };
 
     vkCmdBeginRendering(handle, &rendering_info);
-    vkCmdBindPipeline(handle, VK_PIPELINE_BIND_POINT_GRAPHICS, context.pipeline.handle);
- 
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(handle, 0, 1, &context.coherent_buffer.main_buffer.handle, offsets);
     vkCmdBindIndexBuffer(handle, context.coherent_buffer.main_buffer.handle, context.coherent_buffer.indeces_offset, VK_INDEX_TYPE_UINT16);
-    vkCmdBindDescriptorSets(handle, VK_PIPELINE_BIND_POINT_GRAPHICS, context.pipeline.pipeline_layout, 0, 1, &context.descriptor_sets[context.curr_frame], 0, nullptr);
+    vkCmdPushConstants(handle, pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VulkanPushConstantBlock), &pipeline.push_constant_block[context.curr_frame]);
 
     VkViewport viewport{ context.get_viewport() };
     VkRect2D scissors{ context.get_scissors() };

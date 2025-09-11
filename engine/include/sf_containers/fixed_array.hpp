@@ -44,14 +44,14 @@ public:
         }
     }
 
-    constexpr FixedArray(const FixedArray<T, Capacity>& rhs) noexcept
+    FixedArray(const FixedArray<T, Capacity>& rhs) noexcept
         : _count{ rhs._count }
     {
-        sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
+        sf_mem_copy(static_cast<void*>(_buffer), static_cast<void*>(rhs._buffer), sizeof(T) * _count);
     }
 
-    constexpr FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
-        sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
+    FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
+        sf_mem_copy(static_cast<void*>(_buffer), reistatic_cast<void*>(rhs._buffer), sizeof(T) * _count);
         return *this;
     }
 

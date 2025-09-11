@@ -8,7 +8,7 @@
 
 namespace sf {
 
-Result<VkShaderModule> create_shader_module(VulkanContext& context, std::filesystem::path shader_file_path) {
+Result<VkShaderModule> create_shader_module(const VulkanDevice& device, std::filesystem::path shader_file_path) {
     Result<DynamicArray<char>> shader_file_contents = read_file(shader_file_path);
 
     if (shader_file_contents.is_err()) {
@@ -26,7 +26,7 @@ Result<VkShaderModule> create_shader_module(VulkanContext& context, std::filesys
     VkShaderModule shader_handle;
 
     // TODO: custom allocator
-    sf_vk_check(vkCreateShaderModule(context.device.logical_device, &create_info, nullptr, &shader_handle));
+    sf_vk_check(vkCreateShaderModule(device.logical_device, &create_info, nullptr, &shader_handle));
     return {shader_handle};
 }
 

@@ -102,7 +102,7 @@ public:
         , _count{ rhs._count }
         , _buffer{ sf_mem_alloc_typed<T, true>(rhs._capacity) }
     {
-        sf_mem_copy(_buffer, rhs._buffer, rhs._count * sizeof(T));
+        sf_mem_copy(static_cast<void*>(_buffer), static_cast<void*>(rhs._buffer), rhs._count * sizeof(T));
     }
 
     DynamicArray<T>& operator=(const DynamicArray<T>& rhs) noexcept {
@@ -112,7 +112,7 @@ public:
             reallocate(rhs._capacity);
         }
         _count = rhs._count;
-        sf_mem_copy(_buffer, rhs._buffer, rhs._count * sizeof(T));
+        sf_mem_copy(static_cast<void*>(_buffer), static_cast<void*>(rhs._buffer), rhs._count * sizeof(T));
 
         return *this;
     }

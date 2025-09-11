@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sf_containers/optional.hpp"
-#include "sf_vulkan/buffer.hpp"
+#include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_vulkan/synch.hpp"
@@ -10,6 +10,7 @@
 
 namespace sf {
 struct VulkanContext;
+struct VulkanShaderPipeline;
 
 enum struct VulkanCommandBufferState {
     NOT_ALLOCATED,
@@ -45,7 +46,7 @@ public:
         VkAccessFlags2 dst_access_mask
     );
     void copy_buffer_data(VkBuffer src, VkBuffer dst, VkBufferCopy* copy_region);
-    void record_draw_commands(VulkanContext& context, u32 image_index);
+    void record_draw_commands(VulkanContext& context, VulkanShaderPipeline& curr_pipeline, u32 image_index);
 };
 
 enum struct VulkanCommandPoolType {

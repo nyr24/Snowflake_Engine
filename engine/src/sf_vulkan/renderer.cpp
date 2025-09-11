@@ -4,7 +4,6 @@
 #include "sf_core/memory_sf.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
-#include "sf_vulkan/descriptor.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/synch.hpp"
@@ -28,7 +27,9 @@ namespace sf {
 static VulkanRenderer vk_renderer{};
 static VulkanContext vk_context{};
 
-static constexpr u8 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
+static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
+static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
+static const char* MAIN_SHADER_FILE_NAME{"shader.spv"};
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
 void create_debugger();
@@ -37,6 +38,16 @@ bool init_validation_layers(VkInstanceCreateInfo& create_info, FixedArray<const 
 void init_synch_primitives(VulkanContext& context);
 void init_descriptor_set_layouts_and_sets(VulkanContext& context);
 void destroy_synch_primitives(VulkanContext& context);
+void create_descriptor_layouts_and_sets_for_ubo(
+    const VulkanDevice& device,
+    VulkanDescriptorPool& pool,
+    u32 descriptor_size,
+    std::span<VulkanBuffer> buffers,
+    std::span<VulkanDescriptorSetLayout> out_layouts,
+    std::span<VkDescriptorSet> out_sets
+);
+void create_attribute_descriptions(FixedArray<VkVertexInputAttributeDescription, MAIN_PIPELINE_ATTRIB_COUNT>& out_descriptions);
+bool create_main_shader_pipeline();
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     if (!create_instance(config, platform_state)) {
@@ -53,14 +64,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
         return false;
     }
 
-    if (!VulkanUniformBuffersMapped::create(vk_context.device, vk_context.uniform_buffers)) {
-        return false;
-    }
-
-    VulkanDescriptorPool::create(vk_context.device, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, vk_context.descriptor_pool);
-    init_descriptor_set_layouts_and_sets(vk_context);
-
-    if (!VulkanPipeline::create(vk_context)) {
+    if (!create_main_shader_pipeline()) {
         return false;
     }
 
@@ -78,7 +82,6 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
 
     init_synch_primitives(vk_context);
 
-    // set events
     event_set_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
 
     return true;
@@ -156,7 +159,8 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     curr_transfer_buffer.submit(vk_context, vk_context.device.transfer_queue, transfer_submit_info, {curr_transfer_fence});
 
     curr_graphics_buffer.begin_recording(vk_context, 0);
-    curr_graphics_buffer.record_draw_commands(vk_context, vk_context.image_index);
+    vk_context.pipeline.bind(curr_graphics_buffer, vk_context.curr_frame);
+    curr_graphics_buffer.record_draw_commands(vk_context, vk_context.pipeline, vk_context.image_index);
     curr_graphics_buffer.end_recording(vk_context);
     
     VkPipelineStageFlags wait_dest_mask{ VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -174,7 +178,8 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     curr_graphics_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, Option<VulkanFence>{curr_draw_fence});
 
-    update_ubo(vk_context.uniform_buffers.ubos[vk_context.curr_frame], vk_context.uniform_buffers.mapped_memory[vk_context.curr_frame], packet.elapsed_time, vk_context.get_aspect_ratio());
+    update_ubo(vk_context.pipeline.global_ubo.global_uniform_objects[vk_context.curr_frame], vk_context.pipeline.global_ubo.mapped_memory[vk_context.curr_frame], vk_context.get_aspect_ratio());
+    update_push_constant_block(vk_context.pipeline.push_constant_block[vk_context.curr_frame], packet.elapsed_time);
 
     if (!curr_transfer_fence.wait(vk_context)) {
         return false;
@@ -236,8 +241,6 @@ VulkanContext::VulkanContext()
     render_finished_semaphores.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
     draw_fences.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
     transfer_fences.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    descriptor_set_layouts.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    descriptor_sets.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
 }
 
 VulkanContext::~VulkanContext() {
@@ -256,18 +259,12 @@ VulkanContext::~VulkanContext() {
         }
     }
 
-    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
-        descriptor_set_layouts[i].destroy(vk_context.device);
-    }
-
     coherent_buffer.destroy(vk_context.device);
 
     transfer_command_pool.destroy(*this);
     graphics_command_pool.destroy(*this);
 
     pipeline.destroy(device);
-    descriptor_pool.destroy(vk_context.device);
-    uniform_buffers.destroy(vk_context.device);
 
     swapchain.destroy(*this);
 
@@ -439,31 +436,79 @@ void destroy_synch_primitives(VulkanContext& context) {
     }
 }
 
-void init_descriptor_set_layouts_and_sets(VulkanContext& context) {
-    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
-        VkDescriptorSetLayoutBinding layout_binding;
-        VulkanDescriptorSetLayout::create_binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, layout_binding);
-        VulkanDescriptorSetLayout::create(context.device, 1, &layout_binding, context.descriptor_set_layouts[i]);
+bool create_main_shader_pipeline() {
+    if (!VulkanGlobalUniformBufferObject::create(vk_context.device, vk_context.pipeline.global_ubo)) {
+        return false;
     }
 
-    context.descriptor_pool.allocate_sets(context.device, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT,
-        reinterpret_cast<VkDescriptorSetLayout*>(context.descriptor_set_layouts.data()),
-        reinterpret_cast<VkDescriptorSet*>(context.descriptor_sets.data())
+    VulkanDescriptorPool::create(vk_context.device, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, vk_context.pipeline.descriptor_pool);
+
+    FixedArray<VkVertexInputAttributeDescription, MAIN_PIPELINE_ATTRIB_COUNT> attrib_descriptions(MAIN_PIPELINE_ATTRIB_COUNT);
+    create_attribute_descriptions(attrib_descriptions);
+
+    create_descriptor_layouts_and_sets_for_ubo(
+        vk_context.device,
+        vk_context.pipeline.descriptor_pool,
+        sizeof(VulkanGlobalUniformObject),
+        {vk_context.pipeline.global_ubo.buffers.data(), vk_context.pipeline.global_ubo.buffers.count()},
+        {vk_context.pipeline.descriptor_layouts.data(), vk_context.pipeline.descriptor_layouts.count()},
+        {vk_context.pipeline.descriptor_sets.data(), vk_context.pipeline.descriptor_sets.count()}
     );
 
-    // updating descriptors
+    return VulkanShaderPipeline::create(
+        vk_context,
+        MAIN_SHADER_FILE_NAME,
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        true,     
+        {attrib_descriptions.data(), attrib_descriptions.count()},
+        vk_context.pipeline
+    );
+}
+
+void create_attribute_descriptions(FixedArray<VkVertexInputAttributeDescription, MAIN_PIPELINE_ATTRIB_COUNT>& out_descriptions) {
+    out_descriptions[0].binding = 0;
+    out_descriptions[0].location = 0;
+    out_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    out_descriptions[0].offset = 0;
+    out_descriptions[1].binding = 0;
+    out_descriptions[1].location = 1;
+    out_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    out_descriptions[1].offset = sizeof(glm::vec3);
+}
+
+void create_descriptor_layouts_and_sets_for_ubo(
+    const VulkanDevice& device,
+    VulkanDescriptorPool& pool,
+    u32 descriptor_size,
+    std::span<VulkanBuffer> buffers,
+    std::span<VulkanDescriptorSetLayout> out_layouts,
+    std::span<VkDescriptorSet> out_sets
+) {
+    SF_ASSERT_MSG(buffers.size() == out_layouts.size() && buffers.size() == out_sets.size(), "Count of elements inside arrays should be equal");
+    SF_ASSERT_MSG(buffers.size() <= VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, "Should not be more than frames in flight maximum");
+
+    const u32 count{ static_cast<u32>(buffers.size()) };
+        
+    for (u32 i{0}; i < count; ++i) {
+        VkDescriptorSetLayoutBinding binding;
+        VulkanDescriptorSetLayout::create_bindings(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, {&binding, 1});
+        VulkanDescriptorSetLayout::create(device, {&binding, 1}, out_layouts[i]);
+    }
+
+    pool.allocate_sets(device, count, reinterpret_cast<VkDescriptorSetLayout*>(out_layouts.data()), out_sets.data());
+
     VkWriteDescriptorSet descriptor_writes[VulkanSwapchain::MAX_FRAMES_IN_FLIGHT];
 
-    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+    for (u32 i{0}; i < count; ++i) {
         VkDescriptorBufferInfo buffer_info{
-            .buffer = context.uniform_buffers.buffers[i].handle,
+            .buffer = buffers[i].handle,
             .offset = 0,
-            .range = sizeof(context.uniform_buffers.ubos[i])
+            .range = descriptor_size
         };
 
         descriptor_writes[i] = {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = context.descriptor_sets[i],
+            .dstSet = out_sets[i],
             .dstBinding = 0,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -474,7 +519,7 @@ void init_descriptor_set_layouts_and_sets(VulkanContext& context) {
         };
     }
 
-    vkUpdateDescriptorSets(context.device.logical_device, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, descriptor_writes, 0, nullptr);
+    vkUpdateDescriptorSets(device.logical_device, count, descriptor_writes, 0, nullptr);
 }
 
 VkViewport VulkanContext::get_viewport() const {

@@ -93,20 +93,20 @@ void VulkanCoherentBuffer::destroy(const VulkanDevice& device) {
     main_buffer.destroy(device);
 }
 
-VulkanUniformBuffersMapped::VulkanUniformBuffersMapped()
+VulkanGlobalUniformBufferObject::VulkanGlobalUniformBufferObject()
 {
-    ubos.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    global_uniform_objects.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
     buffers.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
     mapped_memory.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
 }
 
-bool VulkanUniformBuffersMapped::create(const VulkanDevice& device, VulkanUniformBuffersMapped& out_mapped_buffers) {
+bool VulkanGlobalUniformBufferObject::create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo) {
     for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
-        VulkanBuffer::create(device, sizeof(VulkanUniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-            out_mapped_buffers.buffers[i]
+        VulkanBuffer::create(device, sizeof(VulkanGlobalUniformObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+            out_global_ubo.buffers[i]
         );  
-        if (vkMapMemory(device.logical_device, out_mapped_buffers.buffers[i].memory.handle, 0, sizeof(VulkanUniformBufferObject), 0, &out_mapped_buffers.mapped_memory[i]) != VK_SUCCESS) {
+        if (vkMapMemory(device.logical_device, out_global_ubo.buffers[i].memory.handle, 0, sizeof(VulkanGlobalUniformObject), 0, &out_global_ubo.mapped_memory[i]) != VK_SUCCESS) {
             return false;
         }
     }
@@ -114,7 +114,7 @@ bool VulkanUniformBuffersMapped::create(const VulkanDevice& device, VulkanUnifor
     return true;
 }
 
-void VulkanUniformBuffersMapped::destroy(const VulkanDevice& device) {
+void VulkanGlobalUniformBufferObject::destroy(const VulkanDevice& device) {
     for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
         buffers[i].destroy(device);
     }
