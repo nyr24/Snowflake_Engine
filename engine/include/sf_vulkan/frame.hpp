@@ -13,12 +13,12 @@ struct Vertex {
     static VkVertexInputBindingDescription get_binding_descr();
 };
 
-struct VulkanGlobalUniformObject;
-struct VulkanPushConstantBlock;
+struct VulkanShaderPipeline;
 
 DynamicArray<Vertex>  define_vertices();
 DynamicArray<u16>     define_indices();
-void                  update_ubo(VulkanGlobalUniformObject& ubo, void* ubo_mapped_mem, f32 aspect_ratio);
-void                  update_push_constant_block(VulkanPushConstantBlock& push_constant_block, f64 elapsed_time);
+// TODO + THINK: move this to renderer
+void                  update_ubo(VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio);
+void                  update_push_constant_block(VulkanShaderPipeline& pipeline, u32 curr_frame, f64 elapsed_time);
 
 } // sf

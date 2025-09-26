@@ -35,7 +35,7 @@ public:
     VkDebugUtilsMessengerEXT              debug_messenger;
 #endif
     VulkanSwapchain                       swapchain;
-    VulkanCoherentBuffer                  coherent_buffer;
+    VulkanVertexIndexBuffer               vertex_index_buffer;
     VulkanShaderPipeline                  pipeline;
     VulkanCommandPool                     graphics_command_pool;
     VulkanCommandPool                     transfer_command_pool;

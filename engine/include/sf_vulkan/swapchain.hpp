@@ -7,6 +7,7 @@
 
 namespace sf {
 struct VulkanContext;
+struct VulkanDevice;
 
 struct VulkanSwapchain {
 public:
@@ -20,19 +21,21 @@ public:
 
 public:
     static bool create(
-        VulkanContext& context,
+        VulkanDevice& device,
+        VkSurfaceKHR surface,
         u16 width,
         u16 height,
         VulkanSwapchain& out_swapchain
     );
 
     bool recreate(
-        VulkanContext& context,
+        VulkanDevice& device,
+        VkSurfaceKHR surface,
         u16 width,
         u16 height
     );
 
-    void destroy(const VulkanContext& context);
+    void destroy(const VulkanDevice& device);
 
     bool acquire_next_image_index(
         VulkanContext& context,
@@ -51,7 +54,8 @@ public:
 
 private:
     static bool create_inner(
-        VulkanContext& context,
+        VulkanDevice& device,
+        VkSurfaceKHR surface,
         u16 width,
         u16 height,
         VulkanSwapchain& out_swapchain

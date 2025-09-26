@@ -1,6 +1,7 @@
 #include "sf_vulkan/image.hpp"
 #include "sf_containers/optional.hpp"
 #include "sf_core/logger.hpp"
+#include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include <vulkan/vulkan_core.h>
@@ -8,7 +9,7 @@
 namespace sf {
 
 bool VulkanImage::create(
-    const VulkanContext& context,
+    const VulkanDevice& device,
     VulkanImage& out_image,
     VkImageType type,
     u32 width,
@@ -42,13 +43,12 @@ bool VulkanImage::create(
     create_info.extent.depth = 1,
 
     // TODO: custom allocator
-    // sf_vk_check(vkCreateImage(context.device.logical_device, &create_info, &context.allocator, &out_image.handle));
-    sf_vk_check(vkCreateImage(context.device.logical_device, &create_info, nullptr, &out_image.handle));
+    sf_vk_check(vkCreateImage(device.logical_device, &create_info, nullptr, &out_image.handle));
 
     VkMemoryRequirements memory_requirements;
-    vkGetImageMemoryRequirements(context.device.logical_device, out_image.handle, &memory_requirements);
+    vkGetImageMemoryRequirements(device.logical_device, out_image.handle, &memory_requirements);
 
-    Option<u32> memory_type = context.device.find_memory_index(memory_requirements.memoryTypeBits, static_cast<VkMemoryPropertyFlagBits>(memory_flags));
+    Option<u32> memory_type = device.find_memory_index(memory_requirements.memoryTypeBits, static_cast<VkMemoryPropertyFlagBits>(memory_flags));
     if (memory_type.is_none()) {
         LOG_ERROR("Required memory type not found. Image not valid.");
         return false;
@@ -58,27 +58,65 @@ bool VulkanImage::create(
     allocate_info.allocationSize = memory_requirements.size;
     allocate_info.memoryTypeIndex = memory_type.unwrap_copy();
     // TODO: custom allocator
-    // sf_vk_check(vkAllocateMemory(context.device.logical_device, &allocate_info, &context.allocator, &out_image.memory));
-    sf_vk_check(vkAllocateMemory(context.device.logical_device, &allocate_info, nullptr, &out_image.memory));
+    sf_vk_check(vkAllocateMemory(device.logical_device, &allocate_info, nullptr, &out_image.memory));
 
-    sf_vk_check(vkBindImageMemory(context.device.logical_device, out_image.handle, out_image.memory, 0));
+    sf_vk_check(vkBindImageMemory(device.logical_device, out_image.handle, out_image.memory, 0));
 
     if (create_view) {
         out_image.view = nullptr;
-        out_image.create_view(context, format, aspect_flags);
+        out_image.view = VulkanImage::create_view(out_image.handle, device, format, aspect_flags);
     }
 
     return true;
 }
 
-void VulkanImage::create_view(
-    const VulkanContext& context,
+void VulkanImage::transition_layout(
+    VkImage image, VulkanCommandBuffer& cmd_buffer,
+    VkImageLayout old_layout, VkImageLayout new_layout,
+    VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
+    VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask
+) {
+    VkImageMemoryBarrier2 barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = src_stage_mask,
+        .srcAccessMask = src_access_mask,
+        .dstStageMask = dst_stage_mask,
+        .dstAccessMask = dst_access_mask,
+        .oldLayout = old_layout,
+        .newLayout = new_layout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_MIP_LEVELS,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        }
+    };
+
+    VkDependencyInfo dep_info{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .dependencyFlags = 0,
+        .imageMemoryBarrierCount =  1,
+        .pImageMemoryBarriers = &barrier
+    };
+
+    vkCmdPipelineBarrier2(cmd_buffer.handle, &dep_info);
+}
+
+VkImageView VulkanImage::create_view(
+    VkImage image,
+    const VulkanDevice& device,
     VkFormat format,
     VkImageAspectFlags aspect_flags
 ) {
+    VkImageView view;
+        
     VkImageViewCreateInfo create_info{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = handle,
+        .image = image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .format = format,
     };
@@ -90,27 +128,24 @@ void VulkanImage::create_view(
     create_info.subresourceRange.layerCount = 1,
 
     // TODO: custom allocator
-    // sf_vk_check(vkCreateImageView(context.device.logical_device, &create_info, &context.allocator, &image.view));
-    sf_vk_check(vkCreateImageView(context.device.logical_device, &create_info, nullptr, &view));
+    sf_vk_check(vkCreateImageView(device.logical_device, &create_info, nullptr, &view));
+    return view;
 }
 
-void VulkanImage::destroy(const VulkanContext& context) {
+void VulkanImage::destroy(const VulkanDevice& device) {
     if (view) {
         // TODO: custom allocator
-        // vkDestroyImageView(context.device.logical_device, image.view, &context.allocator);
-        vkDestroyImageView(context.device.logical_device, view, nullptr);
+        vkDestroyImageView(device.logical_device, view, nullptr);
         view = nullptr;
     }
     if (memory) {
         // TODO: custom allocator
-        // vkFreeMemory(context.device.logical_device, image.memory, &context.allocator);
-        vkFreeMemory(context.device.logical_device, memory, nullptr);
+        vkFreeMemory(device.logical_device, memory, nullptr);
         memory = nullptr;
     }
     if (handle) {
         // TODO: custom allocator
-        // vkDestroyImage(context.device.logical_device, image.handle, &context.allocator);
-        vkDestroyImage(context.device.logical_device, handle, nullptr);
+        vkDestroyImage(device.logical_device, handle, nullptr);
         handle = nullptr;
     }
 }

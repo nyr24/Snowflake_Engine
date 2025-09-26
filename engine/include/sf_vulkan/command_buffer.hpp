@@ -29,23 +29,16 @@ public:
 public:
     VulkanCommandBuffer();
 
-    static void allocate(VulkanContext& context, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary);
-    void begin_recording(VulkanContext& context, VkCommandBufferUsageFlags begin_flags);
-    void end_recording(VulkanContext& context);
+    static void allocate(const VulkanContext& context, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary);
+    void begin_recording(VkCommandBufferUsageFlags begin_flags);
+    void end_recording(const VulkanContext& context);
+    void allocate_and_begin_single_use(const VulkanContext& context, VkCommandPool command_pool, VulkanCommandBuffer& out_buffer);
+    void end_single_use(const VulkanContext& context, VkCommandPool command_pool);
     void reset(VulkanContext& context);
-    void submit(VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, Option<VulkanFence> fence);
-    void free(VulkanContext& context, VkCommandPool command_pool);
-    void transition_image_layout(
-        VulkanContext& context,
-        uint32_t image_index,
-        VkImageLayout old_layout,
-        VkImageLayout new_layout,
-        VkPipelineStageFlags2 src_stage_mask,
-        VkAccessFlags2 src_access_mask,
-        VkPipelineStageFlags2 dst_stage_mask,
-        VkAccessFlags2 dst_access_mask
-    );
-    void copy_buffer_data(VkBuffer src, VkBuffer dst, VkBufferCopy* copy_region);
+    void submit(const VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, Option<VulkanFence> fence);
+    void free(const VulkanContext& context, VkCommandPool command_pool);
+    void copy_data_between_buffers(VkBuffer src, VkBuffer dst, VkBufferCopy& copy_region);
+    void copy_data_from_buffer_to_image(VkBuffer src_buffer, VulkanImage& dst_image, VkImageLayout dst_image_layout);
     void record_draw_commands(VulkanContext& context, VulkanShaderPipeline& curr_pipeline, u32 image_index);
 };
 

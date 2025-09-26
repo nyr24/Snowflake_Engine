@@ -24,6 +24,7 @@ void VulkanBuffer::create(
     // TODO: custom allocator
     sf_vk_check(vkCreateBuffer(device.logical_device, &create_info, nullptr, &out_buffer.handle));
 
+
     vkGetBufferMemoryRequirements(device.logical_device, out_buffer.handle, &out_buffer.memory.requirements);
     Option<u32> memory_index = device.find_memory_index(out_buffer.memory.requirements.memoryTypeBits, memory_properties);
 
@@ -42,6 +43,18 @@ void VulkanBuffer::create(
     sf_vk_check(vkBindBufferMemory(device.logical_device, out_buffer.handle, out_buffer.memory.handle, 0));
 }
 
+bool VulkanBuffer::copy_data(const VulkanDevice& device, void* data, u32 byte_size) {
+    void* mapped_data;
+
+    if (vkMapMemory(device.logical_device, memory.handle, 0, byte_size, 0, &mapped_data) != VK_SUCCESS) {
+        return false;
+    }
+
+    sf_mem_copy(mapped_data, data, byte_size);
+    vkUnmapMemory(device.logical_device, memory.handle);
+    return true;
+}
+
 void VulkanBuffer::destroy(const VulkanDevice& device) {
     if (handle) {
         // TODO: custom allocator
@@ -55,7 +68,7 @@ void VulkanBuffer::destroy(const VulkanDevice& device) {
     }
 }
 
-bool VulkanCoherentBuffer::create(const VulkanDevice& device, DynamicArray<Vertex>&& vertices, DynamicArray<u16>&& indices, VulkanCoherentBuffer& out_buffer) {
+bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, DynamicArray<Vertex>&& vertices, DynamicArray<u16>&& indices, VulkanVertexIndexBuffer& out_buffer) {
     out_buffer.data.resize(vertices.size_in_bytes() + indices.size_in_bytes());
     out_buffer.indeces_count = indices.count();
     out_buffer.indeces_offset = vertices.size_in_bytes(); 
@@ -74,30 +87,12 @@ bool VulkanCoherentBuffer::create(const VulkanDevice& device, DynamicArray<Verte
         out_buffer.main_buffer
     );
 
-    return out_buffer.copy_data_to_gpu(device);
+    return out_buffer.staging_buffer.copy_data(device, out_buffer.data.data(), out_buffer.data.size_in_bytes());
 }
 
-bool VulkanCoherentBuffer::copy_data_to_gpu(const VulkanDevice& device) {
-    void* mapped_gpu_data;
-    if (vkMapMemory(device.logical_device, staging_buffer.memory.handle, 0, data.size_in_bytes(), 0, &mapped_gpu_data) != VK_SUCCESS) {
-        return false;
-    }
-
-    sf_mem_copy(mapped_gpu_data, data.data(), data.size_in_bytes());
-    vkUnmapMemory(device.logical_device, staging_buffer.memory.handle);
-    return true;
-}
-
-void VulkanCoherentBuffer::destroy(const VulkanDevice& device) {
+void VulkanVertexIndexBuffer::destroy(const VulkanDevice& device) {
     staging_buffer.destroy(device);
     main_buffer.destroy(device);
-}
-
-VulkanGlobalUniformBufferObject::VulkanGlobalUniformBufferObject()
-{
-    global_uniform_objects.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    buffers.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    mapped_memory.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
 }
 
 bool VulkanGlobalUniformBufferObject::create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo) {
@@ -114,10 +109,27 @@ bool VulkanGlobalUniformBufferObject::create(const VulkanDevice& device, VulkanG
     return true;
 }
 
+VulkanGlobalUniformBufferObject::VulkanGlobalUniformBufferObject() {
+    global_ubos.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    buffers.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    mapped_memory.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+}
+
+void VulkanGlobalUniformBufferObject::update(u32 curr_frame, const glm::mat4& view, const glm::mat4& proj) {
+    global_ubos[curr_frame].view = view;
+    global_ubos[curr_frame].proj = proj;
+    sf_mem_copy(mapped_memory[curr_frame], &global_ubos[curr_frame], sizeof(VulkanGlobalUniformObject));
+}
+
 void VulkanGlobalUniformBufferObject::destroy(const VulkanDevice& device) {
     for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
         buffers[i].destroy(device);
+        vkUnmapMemory(device.logical_device, buffers[i].memory.handle);
     }
+}
+
+void VulkanPushConstantBlock::update(const glm::mat4& model_new) {
+    model = model_new;
 }
 
 } // sf

@@ -1,12 +1,12 @@
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/result.hpp"
+#include "sf_core/io.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
-#include "sf_vulkan/shaders.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include <vulkan/vulkan_core.h>
@@ -19,8 +19,8 @@ namespace sf {
 
 VulkanShaderPipeline::VulkanShaderPipeline()
 {
-    attrib_description.resize(VulkanShaderPipeline::MAX_ATTRIB_COUNT);
-    push_constant_block.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    push_constant_blocks.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    attrib_descriptions.resize(VulkanShaderPipeline::MAX_ATTRIB_COUNT);
     descriptor_layouts.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
     descriptor_sets.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
 }
@@ -39,7 +39,7 @@ bool VulkanShaderPipeline::create(
     fs::path shader_path = fs::current_path() / "build" / "release/engine/shaders/" / shader_file_name;
     #endif
 
-    Result<VkShaderModule> maybe_shader_module = create_shader_module(context.device, shader_path);
+    Result<VkShaderModule> maybe_shader_module = create_shader_module(context.device, std::move(shader_path));
     if (maybe_shader_module.is_err()) {
         return false;
     }
@@ -61,10 +61,10 @@ bool VulkanShaderPipeline::create(
         }
     };
 
-    if (out_pipeline.attrib_description.count() != attrib_descriptions.size()) {
-        out_pipeline.attrib_description.resize(attrib_descriptions.size());
+    if (out_pipeline.attrib_descriptions.count() != attrib_descriptions.size()) {
+        out_pipeline.attrib_descriptions.resize(attrib_descriptions.size());
     }
-    sf_mem_copy(out_pipeline.attrib_description.data(), attrib_descriptions.data(), sizeof(VkVertexInputAttributeDescription) * attrib_descriptions.size());
+    sf_mem_copy(out_pipeline.attrib_descriptions.data(), attrib_descriptions.data(), sizeof(VkVertexInputAttributeDescription) * attrib_descriptions.size());
 
     FixedArray<VkDynamicState, 2> dynamic_state{ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
@@ -80,8 +80,8 @@ bool VulkanShaderPipeline::create(
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = &binding_descr,
-        .vertexAttributeDescriptionCount = out_pipeline.attrib_description.count(),
-        .pVertexAttributeDescriptions = out_pipeline.attrib_description.data(),
+        .vertexAttributeDescriptionCount = out_pipeline.attrib_descriptions.count(),
+        .pVertexAttributeDescriptions = out_pipeline.attrib_descriptions.data(),
     };
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info{
@@ -190,15 +190,19 @@ void VulkanShaderPipeline::bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_
     vkCmdBindDescriptorSets(cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &descriptor_sets[curr_frame], 0, nullptr);
 }
 
+void VulkanShaderPipeline::update_global_state(u32 curr_frame, const glm::mat4& view, const glm::mat4& proj) {
+    global_ubo.update(curr_frame, view, proj);
+}
+
 void VulkanShaderPipeline::destroy(const VulkanDevice& device) {
     for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
         descriptor_layouts[i].destroy(device);
     }
 
     // TODO: custom allocator
+    global_ubo.destroy(device);
     vkDestroyPipeline(device.logical_device, pipeline_handle, nullptr);
     descriptor_pool.destroy(device);
-    global_ubo.destroy(device);
 }
 
 void VulkanDescriptorPool::create(const VulkanDevice& device, u32 descriptor_count, VkDescriptorType type, u32 max_sets, VulkanDescriptorPool& out_pool) {
@@ -263,6 +267,28 @@ void VulkanDescriptorSetLayout::destroy(const VulkanDevice& device) {
         vkDestroyDescriptorSetLayout(device.logical_device, handle, nullptr);
         handle = nullptr;
     }
+}
+
+Result<VkShaderModule> create_shader_module(const VulkanDevice& device, fs::path&& shader_file_path) {
+    Result<DynamicArray<char>> shader_file_contents = read_file(shader_file_path);
+
+    if (shader_file_contents.is_err()) {
+        return {ResultError::VALUE};
+    }
+
+    DynamicArray<char>& shader_file_contents_unwrapped{ shader_file_contents.unwrap() };
+
+    VkShaderModuleCreateInfo create_info{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = shader_file_contents_unwrapped.count(),
+        .pCode = reinterpret_cast<u32*>(shader_file_contents_unwrapped.data()),
+    };
+
+    VkShaderModule shader_handle;
+
+    // TODO: custom allocator
+    sf_vk_check(vkCreateShaderModule(device.logical_device, &create_info, nullptr, &shader_handle));
+    return {shader_handle};
 }
 
 } // sf

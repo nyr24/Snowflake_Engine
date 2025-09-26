@@ -60,7 +60,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
         return false;
     }
 
-    if (!VulkanSwapchain::create(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain)) {
+    if (!VulkanSwapchain::create(vk_context.device, vk_context.surface, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain)) {
         return false;
     }
 
@@ -73,7 +73,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::TRANSFER, vk_context.device.queue_family_info.transfer_family_index,
         static_cast<VkCommandPoolCreateFlagBits>(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT), vk_context.transfer_command_pool);
 
-    if (!VulkanCoherentBuffer::create(vk_context.device, define_vertices(), define_indices(), vk_context.coherent_buffer)) {
+    if (!VulkanVertexIndexBuffer::create(vk_context.device, define_vertices(), define_indices(), vk_context.vertex_index_buffer)) {
        return false; 
     }
 
@@ -109,7 +109,7 @@ bool renderer_begin_frame(f64 delta_time) {
     if (vk_context.framebuffer_last_size_generation != vk_context.framebuffer_size_generation) {
         vk_context.recreating_swapchain = true;
         vkDeviceWaitIdle(vk_context.device.logical_device);
-        vk_context.swapchain.recreate(vk_context, vk_context.framebuffer_width, vk_context.framebuffer_height);
+        vk_context.swapchain.recreate(vk_context.device, vk_context.surface, vk_context.framebuffer_width, vk_context.framebuffer_height);
         vk_context.recreating_swapchain = false;
         vk_context.framebuffer_last_size_generation = vk_context.framebuffer_size_generation;
         return false;
@@ -132,22 +132,22 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     VulkanFence& curr_transfer_fence = vk_context.transfer_fences[vk_context.curr_frame];
 
     // THINK: we maybe need semaphore to synch copy and draw commands
-    curr_transfer_buffer.begin_recording(vk_context, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    curr_transfer_buffer.begin_recording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
     VkBufferCopy vertex_copy_region{
         .srcOffset = 0,
         .dstOffset = 0,
-        .size = vk_context.coherent_buffer.indeces_offset 
+        .size = vk_context.vertex_index_buffer.indeces_offset 
     };
 
     VkBufferCopy index_copy_region{
-        .srcOffset = vk_context.coherent_buffer.indeces_offset,
-        .dstOffset = vk_context.coherent_buffer.indeces_offset,
-        .size = vk_context.coherent_buffer.indeces_count * sizeof(u16)
+        .srcOffset = vk_context.vertex_index_buffer.indeces_offset,
+        .dstOffset = vk_context.vertex_index_buffer.indeces_offset,
+        .size = vk_context.vertex_index_buffer.indeces_count * sizeof(u16)
     };
     
-    curr_transfer_buffer.copy_buffer_data(vk_context.coherent_buffer.staging_buffer.handle, vk_context.coherent_buffer.main_buffer.handle, &vertex_copy_region);
-    curr_transfer_buffer.copy_buffer_data(vk_context.coherent_buffer.staging_buffer.handle, vk_context.coherent_buffer.main_buffer.handle, &index_copy_region);
+    curr_transfer_buffer.copy_data_between_buffers(vk_context.vertex_index_buffer.staging_buffer.handle, vk_context.vertex_index_buffer.main_buffer.handle, vertex_copy_region);
+    curr_transfer_buffer.copy_data_between_buffers(vk_context.vertex_index_buffer.staging_buffer.handle, vk_context.vertex_index_buffer.main_buffer.handle, index_copy_region);
     curr_transfer_buffer.end_recording(vk_context);
 
     VkSubmitInfo transfer_submit_info{
@@ -158,7 +158,7 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     curr_transfer_buffer.submit(vk_context, vk_context.device.transfer_queue, transfer_submit_info, {curr_transfer_fence});
 
-    curr_graphics_buffer.begin_recording(vk_context, 0);
+    curr_graphics_buffer.begin_recording(0);
     vk_context.pipeline.bind(curr_graphics_buffer, vk_context.curr_frame);
     curr_graphics_buffer.record_draw_commands(vk_context, vk_context.pipeline, vk_context.image_index);
     curr_graphics_buffer.end_recording(vk_context);
@@ -178,8 +178,9 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     curr_graphics_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, Option<VulkanFence>{curr_draw_fence});
 
-    update_ubo(vk_context.pipeline.global_ubo.global_uniform_objects[vk_context.curr_frame], vk_context.pipeline.global_ubo.mapped_memory[vk_context.curr_frame], vk_context.get_aspect_ratio());
-    update_push_constant_block(vk_context.pipeline.push_constant_block[vk_context.curr_frame], packet.elapsed_time);
+    // TODO: should be update_global_state() call on shaderPipeline
+    update_ubo(vk_context.pipeline, vk_context.curr_frame, vk_context.get_aspect_ratio());
+    update_push_constant_block(vk_context.pipeline, vk_context.curr_frame, packet.elapsed_time);
 
     if (!curr_transfer_fence.wait(vk_context)) {
         return false;
@@ -259,14 +260,14 @@ VulkanContext::~VulkanContext() {
         }
     }
 
-    coherent_buffer.destroy(vk_context.device);
+    vertex_index_buffer.destroy(vk_context.device);
 
     transfer_command_pool.destroy(*this);
     graphics_command_pool.destroy(*this);
 
     pipeline.destroy(device);
 
-    swapchain.destroy(*this);
+    swapchain.destroy(device);
 
     vk_context.device.destroy(*this);
 

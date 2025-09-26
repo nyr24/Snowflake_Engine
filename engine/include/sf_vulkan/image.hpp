@@ -4,7 +4,8 @@
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
-struct VulkanContext;
+struct VulkanDevice;
+struct VulkanCommandBuffer;
 
 struct VulkanImage {
 public:
@@ -16,7 +17,7 @@ public:
 
 public:
     static bool create(
-        const VulkanContext& context,
+        const VulkanDevice& device,
         VulkanImage& out_image,
         VkImageType type,
         u32 width,
@@ -30,13 +31,25 @@ public:
         VkImageLayout image_init_layout = VK_IMAGE_LAYOUT_UNDEFINED
     );
 
-    void create_view(
-        const VulkanContext& context,
+    static void transition_layout(
+        VkImage image,
+        VulkanCommandBuffer& cmd_buffer,
+        VkImageLayout old_layout,
+        VkImageLayout new_layout,
+        VkPipelineStageFlags2 src_stage_mask,
+        VkAccessFlags2 src_access_mask,
+        VkPipelineStageFlags2 dst_stage_mask,
+        VkAccessFlags2 dst_access_mask
+    );
+
+    static VkImageView create_view(
+        VkImage image,
+        const VulkanDevice& device,
         VkFormat format,
         VkImageAspectFlags aspect_flags
     );
 
-    void destroy(const VulkanContext& context);
+    void destroy(const VulkanDevice& device);
 };
 
 } // sf

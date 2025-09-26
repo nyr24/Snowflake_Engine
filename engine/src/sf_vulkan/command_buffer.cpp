@@ -1,8 +1,10 @@
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
+#include "sf_containers/optional.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_vulkan/buffer.hpp"
+#include "sf_vulkan/image.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
 #include "sf_vulkan/renderer.hpp"
@@ -37,7 +39,7 @@ VulkanCommandBuffer::VulkanCommandBuffer()
 {
 }
 
-void VulkanCommandBuffer::allocate(VulkanContext& context, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary) {
+void VulkanCommandBuffer::allocate(const VulkanContext& context, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary) {
     FixedArray<VkCommandBuffer, MAX_BUFFER_ALLOC_COUNT> handles(out_buffers.size());
 
     VkCommandBufferAllocateInfo alloc_info{
@@ -55,7 +57,7 @@ void VulkanCommandBuffer::allocate(VulkanContext& context, VkCommandPool command
     }
 }
 
-void VulkanCommandBuffer::begin_recording(VulkanContext& context, VkCommandBufferUsageFlags begin_flags) {
+void VulkanCommandBuffer::begin_recording(VkCommandBufferUsageFlags begin_flags) {
     if (state != VulkanCommandBufferState::READY) {
         LOG_ERROR("Trying to begin command_buffer which is not in READY state");
         return;
@@ -71,9 +73,9 @@ void VulkanCommandBuffer::begin_recording(VulkanContext& context, VkCommandBuffe
 }
 
 void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, VulkanShaderPipeline& pipeline, u32 image_index) {
-    transition_image_layout(
-        context,
-        context.image_index,
+    VulkanImage::transition_layout(
+        context.swapchain.images[context.image_index],
+        *this,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
@@ -105,21 +107,21 @@ void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, VulkanSha
 
     vkCmdBeginRendering(handle, &rendering_info);
     VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(handle, 0, 1, &context.coherent_buffer.main_buffer.handle, offsets);
-    vkCmdBindIndexBuffer(handle, context.coherent_buffer.main_buffer.handle, context.coherent_buffer.indeces_offset, VK_INDEX_TYPE_UINT16);
-    vkCmdPushConstants(handle, pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VulkanPushConstantBlock), &pipeline.push_constant_block[context.curr_frame]);
+    vkCmdBindVertexBuffers(handle, 0, 1, &context.vertex_index_buffer.main_buffer.handle, offsets);
+    vkCmdBindIndexBuffer(handle, context.vertex_index_buffer.main_buffer.handle, context.vertex_index_buffer.indeces_offset, VK_INDEX_TYPE_UINT16);
+    vkCmdPushConstants(handle, pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VulkanPushConstantBlock), &pipeline.push_constant_blocks[context.curr_frame]);
 
     VkViewport viewport{ context.get_viewport() };
     VkRect2D scissors{ context.get_scissors() };
 
     vkCmdSetViewport(handle, 0, 1, &viewport);
     vkCmdSetScissor(handle, 0, 1, &scissors);
-    vkCmdDrawIndexed(handle, context.coherent_buffer.indeces_count, 1, 0, 0, 0);
+    vkCmdDrawIndexed(handle, context.vertex_index_buffer.indeces_count, 1, 0, 0, 0);
     vkCmdEndRendering(handle);
 
-    transition_image_layout(
-        context,
-        context.image_index,
+    VulkanImage::transition_layout(
+        context.swapchain.images[context.image_index],
+        *this,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
@@ -129,11 +131,29 @@ void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, VulkanSha
     );
 }
 
-void VulkanCommandBuffer::copy_buffer_data(VkBuffer src, VkBuffer dst, VkBufferCopy* copy_region) {
-    vkCmdCopyBuffer(handle, src, dst, 1, copy_region);
+void VulkanCommandBuffer::copy_data_between_buffers(VkBuffer src, VkBuffer dst, VkBufferCopy& copy_region) {
+    vkCmdCopyBuffer(handle, src, dst, 1, &copy_region);
 }
 
-void VulkanCommandBuffer::end_recording(VulkanContext& context) {
+void VulkanCommandBuffer::copy_data_from_buffer_to_image(VkBuffer src_buffer, VulkanImage& dst_image, VkImageLayout dst_image_layout) {
+    VkBufferImageCopy copy_region{
+        .imageSubresource = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        },
+        .imageExtent = {
+            .width = dst_image.width,
+            .height = dst_image.height,
+            .depth = 1
+        }
+    };
+    
+    vkCmdCopyBufferToImage(handle, src_buffer, dst_image.handle, dst_image_layout, 1, &copy_region);
+}
+
+void VulkanCommandBuffer::end_recording(const VulkanContext& context) {
     if (state != VulkanCommandBufferState::RECORDING_BEGIN) {
         LOG_WARN("Trying to end command_buffer which is not in RECORDING_END state");
         return;
@@ -143,7 +163,7 @@ void VulkanCommandBuffer::end_recording(VulkanContext& context) {
     state = VulkanCommandBufferState::RECORDING_END;
 }
 
-void VulkanCommandBuffer::submit(VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, Option<VulkanFence> maybe_fence) {
+void VulkanCommandBuffer::submit(const VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, Option<VulkanFence> maybe_fence) {
     if (state != VulkanCommandBufferState::RECORDING_END) {
         LOG_WARN("Trying to submit command_buffer which is not in RECORDING_END state");
         return;
@@ -158,7 +178,7 @@ void VulkanCommandBuffer::submit(VulkanContext& context, VkQueue queue, VkSubmit
     VulkanFence& fence = maybe_fence.unwrap();
     
     if (fence.is_signaled) {
-        LOG_WARN("Fence can't be in signaled state when submitting a queue, reseting...");
+        LOG_WARN("Fence can't be in signaled state when submitting a queue, resetting...");
         fence.reset(context);
     }
 
@@ -171,52 +191,32 @@ void VulkanCommandBuffer::reset(VulkanContext& context) {
     state = VulkanCommandBufferState::READY;
 }
 
-void VulkanCommandBuffer::free(VulkanContext &contex, VkCommandPool command_pool) {
+void VulkanCommandBuffer::allocate_and_begin_single_use(const VulkanContext& context, VkCommandPool command_pool, VulkanCommandBuffer& out_buffer) {
+    VulkanCommandBuffer::allocate(context, command_pool, {&out_buffer, 1}, true);
+    out_buffer.begin_recording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+}
+
+void VulkanCommandBuffer::end_single_use(const VulkanContext& context, VkCommandPool command_pool) {
+    this->end_recording(context);
+
+    VkSubmitInfo submit_info{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &handle
+    };
+    
+    this->submit(context, context.device.graphics_queue, submit_info, {None::VALUE});
+    sf_vk_check(vkQueueWaitIdle(context.device.graphics_queue));
+
+    this->free(context, command_pool);
+}
+
+void VulkanCommandBuffer::free(const VulkanContext &contex, VkCommandPool command_pool) {
     if (handle) {
         vkFreeCommandBuffers(contex.device.logical_device, command_pool, 1, &handle);
         handle = nullptr;
     }
     state = VulkanCommandBufferState::NOT_ALLOCATED;
-}
-
-void VulkanCommandBuffer::transition_image_layout(
-    VulkanContext& context,
-    uint32_t image_index,
-    VkImageLayout old_layout,
-    VkImageLayout new_layout,
-    VkPipelineStageFlags2 src_stage_mask,
-    VkAccessFlags2 src_access_mask,
-    VkPipelineStageFlags2 dst_stage_mask,
-    VkAccessFlags2 dst_access_mask
-) {
-    VkImageMemoryBarrier2 barrier = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask = src_stage_mask,
-        .srcAccessMask = src_access_mask,
-        .dstStageMask = dst_stage_mask,
-        .dstAccessMask = dst_access_mask,
-        .oldLayout = old_layout,
-        .newLayout = new_layout,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = context.swapchain.images[image_index],
-        .subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = VK_REMAINING_MIP_LEVELS,
-            .baseArrayLayer = 0,
-            .layerCount = 1
-        }
-    };
-
-    VkDependencyInfo dep_info{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .dependencyFlags = 0,
-        .imageMemoryBarrierCount =  1,
-        .pImageMemoryBarriers = &barrier
-    };
-
-    vkCmdPipelineBarrier2(handle, &dep_info);
 }
 
 } // sf
