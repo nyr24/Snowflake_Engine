@@ -7,6 +7,7 @@
 #include "sf_vulkan/frame.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/swapchain.hpp"
+#include "sf_vulkan/resource.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -40,15 +41,33 @@ public:
 };
 
 // Needs to be at least 256 bytes for Nvidia cards
-struct VulkanGlobalUniformObject {
+struct GlobalUniformObject {
     glm::mat4    view;
     glm::mat4    proj;
     glm::mat4    padding_1;
     glm::mat4    padding_2;
 };
 
+struct LocalUniformObject {
+    glm::vec4 diffuse_color;
+    glm::vec4 reserved_space_0;
+    glm::vec4 reserved_space_1;
+    glm::vec4 reserved_space_2;
+};
+
+struct GeometryRenderData {
+    glm::mat4               model;
+    FixedArray<Texture, 16> textures;
+    u32                     id;
+
+    GeometryRenderData()
+    {
+        textures.resize_to_capacity();
+    }
+};
+
 struct VulkanGlobalUniformBufferObject {
-    FixedArray<VulkanGlobalUniformObject, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> global_ubos;
+    FixedArray<GlobalUniformObject, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>       global_ubos;
     FixedArray<VulkanBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>              buffers;
     FixedArray<void*, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>                     mapped_memory;
 
@@ -56,6 +75,18 @@ struct VulkanGlobalUniformBufferObject {
     static bool create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo);
     void destroy(const VulkanDevice& device);
     void update(u32 curr_frame, const glm::mat4& view, const glm::mat4& proj);
+};
+
+// THINK: do we need this per frame also?
+struct VulkanLocalUniformBufferObject {
+    LocalUniformObject        uniform_object;
+    VulkanBuffer              buffer;
+    void*                     mapped_memory;
+
+    // VulkanLocalUniformBufferObject();
+    static bool create(const VulkanDevice& device, VulkanLocalUniformBufferObject& out_local_ubo);
+    void destroy(const VulkanDevice& device);
+    void update(glm::vec4 diffuse_color);
 };
 
 struct VulkanPushConstantBlock {

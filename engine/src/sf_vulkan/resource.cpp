@@ -3,6 +3,7 @@
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/image.hpp"
 #include "sf_vulkan/renderer.hpp"
+#include "sf_vulkan/synch.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -20,6 +21,7 @@ namespace sf {
 // especially the transitions and copy in the createTextureImage function. Try to experiment with this by creating a setupCommandBuffer that the helper functions record commands into,
 // and add a flushSetupCommands to execute the commands that have been recorded so far. It's best to do this after the texture mapping works to check if the texture resources are still set up correctly.
 
+// THINK: why texture does not get id from acquire_resources?
 bool Texture::create(const VulkanContext& context, const char* file_name, bool has_transparency, Texture& out_texture) {
 #ifdef DEBUG
     fs::path texture_path = fs::current_path() / "build" / "debug/engine/textures/" / file_name;
@@ -40,6 +42,8 @@ bool Texture::create(const VulkanContext& context, const char* file_name, bool h
         static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT), staging_buffer
     );
 
+    staging_buffer.copy_data(context.device, out_texture.pixels, image_size);
+
     if (!VulkanImage::create(
         context.device, out_texture.image, VK_IMAGE_TYPE_2D,
         out_texture.width, out_texture.height, VK_FORMAT_B8G8R8A8_UNORM,
@@ -59,7 +63,7 @@ bool Texture::create(const VulkanContext& context, const char* file_name, bool h
         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT
     );
 
-    cmd_buffer.copy_data_from_buffer_to_image(staging_buffer.handle, out_texture.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    cmd_buffer.copy_data_from_buffer_to_image(staging_buffer.handle, out_texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     VulkanImage::transition_layout(
         out_texture.image.handle, cmd_buffer,
@@ -93,16 +97,22 @@ bool Texture::create(const VulkanContext& context, const char* file_name, bool h
     out_texture.has_transparency = has_transparency;
     out_texture.generation++;
 
-    staging_buffer.destroy(context.device);
     cmd_buffer.end_single_use(context, context.graphics_command_pool.handle);
+    staging_buffer.destroy(context.device);
 
     return true;
 }
 
 void Texture::destroy(const VulkanDevice& device) {
+    vkDeviceWaitIdle(device.logical_device);
+    
     image.destroy(device);
-    // TODO: custom allocator
-    vkDestroySampler(device.logical_device, sampler, nullptr);
+
+    if (sampler) {
+        // TODO: custom allocator
+        vkDestroySampler(device.logical_device, sampler, nullptr);
+        sampler = nullptr;
+    }
 }
 
 } // sf

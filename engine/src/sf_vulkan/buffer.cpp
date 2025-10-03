@@ -97,11 +97,11 @@ void VulkanVertexIndexBuffer::destroy(const VulkanDevice& device) {
 
 bool VulkanGlobalUniformBufferObject::create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo) {
     for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
-        VulkanBuffer::create(device, sizeof(VulkanGlobalUniformObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VulkanBuffer::create(device, sizeof(GlobalUniformObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
             out_global_ubo.buffers[i]
         );  
-        if (vkMapMemory(device.logical_device, out_global_ubo.buffers[i].memory.handle, 0, sizeof(VulkanGlobalUniformObject), 0, &out_global_ubo.mapped_memory[i]) != VK_SUCCESS) {
+        if (vkMapMemory(device.logical_device, out_global_ubo.buffers[i].memory.handle, 0, sizeof(GlobalUniformObject), 0, &out_global_ubo.mapped_memory[i]) != VK_SUCCESS) {
             return false;
         }
     }
@@ -118,7 +118,7 @@ VulkanGlobalUniformBufferObject::VulkanGlobalUniformBufferObject() {
 void VulkanGlobalUniformBufferObject::update(u32 curr_frame, const glm::mat4& view, const glm::mat4& proj) {
     global_ubos[curr_frame].view = view;
     global_ubos[curr_frame].proj = proj;
-    sf_mem_copy(mapped_memory[curr_frame], &global_ubos[curr_frame], sizeof(VulkanGlobalUniformObject));
+    sf_mem_copy(mapped_memory[curr_frame], &global_ubos[curr_frame], sizeof(GlobalUniformObject));
 }
 
 void VulkanGlobalUniformBufferObject::destroy(const VulkanDevice& device) {
@@ -128,8 +128,30 @@ void VulkanGlobalUniformBufferObject::destroy(const VulkanDevice& device) {
     }
 }
 
-void VulkanPushConstantBlock::update(const glm::mat4& model_new) {
-    model = model_new;
+bool VulkanLocalUniformBufferObject::create(const VulkanDevice& device, VulkanLocalUniformBufferObject& out_local_ubo) {
+    VulkanBuffer::create(device, sizeof(LocalUniformObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+        out_local_ubo.buffer
+    );  
+    if (vkMapMemory(device.logical_device, out_local_ubo.buffer.memory.handle, 0, sizeof(LocalUniformObject), 0, &out_local_ubo.mapped_memory) != VK_SUCCESS) {
+        return false;
+    }
+
+    return true;
 }
+
+void VulkanLocalUniformBufferObject::update(glm::vec4 diffuse_color) {
+    uniform_object.diffuse_color = diffuse_color;
+    sf_mem_copy(mapped_memory, &uniform_object, sizeof(LocalUniformObject));
+}
+
+void VulkanLocalUniformBufferObject::destroy(const VulkanDevice& device) {
+    buffer.destroy(device);
+    vkUnmapMemory(device.logical_device, buffer.memory.handle);
+}
+
+// void VulkanPushConstantBlock::update(const glm::mat4& model_new) {
+//     model = model_new;
+// }
 
 } // sf

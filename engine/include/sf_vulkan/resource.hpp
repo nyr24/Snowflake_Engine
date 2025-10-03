@@ -7,6 +7,7 @@
 namespace sf {
 
 struct VulkanContext;
+struct VulkanFence;
 
 struct Texture {
 public:

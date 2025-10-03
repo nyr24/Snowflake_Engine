@@ -14,7 +14,7 @@ struct VulkanSemaphore {
 
 struct VulkanFence {
     VkFence handle;
-    bool is_signaled;
+    bool    is_signaled;
 
     static VulkanFence create(const VulkanContext& context, bool create_singaled);
     bool wait(const VulkanContext& context);

@@ -47,11 +47,11 @@ public:
     FixedArray(const FixedArray<T, Capacity>& rhs) noexcept
         : _count{ rhs._count }
     {
-        sf_mem_copy(static_cast<void*>(_buffer), static_cast<void*>(rhs._buffer), sizeof(T) * _count);
+        sf_mem_copy((void*)_buffer, (void*)(rhs._buffer), sizeof(T) * _count);
     }
 
     FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
-        sf_mem_copy(static_cast<void*>(_buffer), reistatic_cast<void*>(rhs._buffer), sizeof(T) * _count);
+        sf_mem_copy((void*)_buffer, (void*)rhs._buffer, sizeof(T) * _count);
         return *this;
     }
 
@@ -127,6 +127,10 @@ public:
         if (count <= Capacity) {
             _count = count;
         }
+    }
+
+    constexpr void resize_to_capacity() noexcept {
+        _count = Capacity;
     }
 
     constexpr void pop() noexcept {

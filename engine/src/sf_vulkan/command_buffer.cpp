@@ -72,7 +72,7 @@ void VulkanCommandBuffer::begin_recording(VkCommandBufferUsageFlags begin_flags)
     state = VulkanCommandBufferState::RECORDING_BEGIN;
 }
 
-void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, VulkanShaderPipeline& pipeline, u32 image_index) {
+void VulkanCommandBuffer::record_draw_commands(const VulkanContext& context, VulkanShaderPipeline& pipeline, u32 image_index) {
     VulkanImage::transition_layout(
         context.swapchain.images[context.image_index],
         *this,
@@ -107,9 +107,10 @@ void VulkanCommandBuffer::record_draw_commands(VulkanContext& context, VulkanSha
 
     vkCmdBeginRendering(handle, &rendering_info);
     VkDeviceSize offsets[] = {0};
+    // TODO: make buffers for binding configurable
     vkCmdBindVertexBuffers(handle, 0, 1, &context.vertex_index_buffer.main_buffer.handle, offsets);
     vkCmdBindIndexBuffer(handle, context.vertex_index_buffer.main_buffer.handle, context.vertex_index_buffer.indeces_offset, VK_INDEX_TYPE_UINT16);
-    vkCmdPushConstants(handle, pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VulkanPushConstantBlock), &pipeline.push_constant_blocks[context.curr_frame]);
+    // vkCmdPushConstants(handle, pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VulkanPushConstantBlock), &pipeline.push_constant_blocks[context.curr_frame]);
 
     VkViewport viewport{ context.get_viewport() };
     VkRect2D scissors{ context.get_scissors() };

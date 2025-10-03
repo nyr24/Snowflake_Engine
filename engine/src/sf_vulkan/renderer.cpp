@@ -5,6 +5,7 @@
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/pipeline.hpp"
+#include "sf_vulkan/resource.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/synch.hpp"
 #include "sf_vulkan/renderer.hpp"
@@ -21,6 +22,11 @@
 #include <span>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
+#include "glm/ext/matrix_clip_space.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/trigonometric.hpp"
 
 namespace sf {
 
@@ -46,8 +52,10 @@ void create_descriptor_layouts_and_sets_for_ubo(
     std::span<VulkanDescriptorSetLayout> out_layouts,
     std::span<VkDescriptorSet> out_sets
 );
-void create_attribute_descriptions(FixedArray<VkVertexInputAttributeDescription, MAIN_PIPELINE_ATTRIB_COUNT>& out_descriptions);
 bool create_main_shader_pipeline();
+void create_default_texture();
+void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio);
+void update_object_state(VulkanShaderPipeline& pipeline, f64 elapsed_time);
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     if (!create_instance(config, platform_state)) {
@@ -84,6 +92,8 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
 
     event_set_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
 
+    create_default_texture();
+
     return true;
 }
 
@@ -100,6 +110,8 @@ bool renderer_on_resize(u8 code, void* sender, void* listener_inst, EventContext
 }
 
 bool renderer_begin_frame(f64 delta_time) {
+    vk_context.frame_delta_time = delta_time;
+
     vkQueueWaitIdle(vk_context.device.present_queue);
 
     if (vk_context.recreating_swapchain) {
@@ -160,7 +172,9 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     curr_graphics_buffer.begin_recording(0);
     vk_context.pipeline.bind(curr_graphics_buffer, vk_context.curr_frame);
+    vk_context.pipeline.bind_object_descriptor_sets(curr_graphics_buffer, 0, vk_context.curr_frame);
     curr_graphics_buffer.record_draw_commands(vk_context, vk_context.pipeline, vk_context.image_index);
+    update_object_state(vk_context.pipeline, packet.elapsed_time);
     curr_graphics_buffer.end_recording(vk_context);
     
     VkPipelineStageFlags wait_dest_mask{ VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -178,9 +192,7 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     curr_graphics_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, Option<VulkanFence>{curr_draw_fence});
 
-    // TODO: should be update_global_state() call on shaderPipeline
-    update_ubo(vk_context.pipeline, vk_context.curr_frame, vk_context.get_aspect_ratio());
-    update_push_constant_block(vk_context.pipeline, vk_context.curr_frame, packet.elapsed_time);
+    update_global_state(vk_context.device, vk_context.pipeline, vk_context.curr_frame, vk_context.get_aspect_ratio());
 
     if (!curr_transfer_fence.wait(vk_context)) {
         return false;
@@ -246,6 +258,8 @@ VulkanContext::VulkanContext()
 
 VulkanContext::~VulkanContext() {
     vkDeviceWaitIdle(vk_context.device.logical_device);
+
+    default_texture.destroy(vk_context.device);
 
     destroy_synch_primitives(*this);
     
@@ -438,89 +452,56 @@ void destroy_synch_primitives(VulkanContext& context) {
 }
 
 bool create_main_shader_pipeline() {
-    if (!VulkanGlobalUniformBufferObject::create(vk_context.device, vk_context.pipeline.global_ubo)) {
-        return false;
-    }
-
-    VulkanDescriptorPool::create(vk_context.device, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, vk_context.pipeline.descriptor_pool);
-
-    FixedArray<VkVertexInputAttributeDescription, MAIN_PIPELINE_ATTRIB_COUNT> attrib_descriptions(MAIN_PIPELINE_ATTRIB_COUNT);
-    create_attribute_descriptions(attrib_descriptions);
-
-    create_descriptor_layouts_and_sets_for_ubo(
-        vk_context.device,
-        vk_context.pipeline.descriptor_pool,
-        sizeof(VulkanGlobalUniformObject),
-        {vk_context.pipeline.global_ubo.buffers.data(), vk_context.pipeline.global_ubo.buffers.count()},
-        {vk_context.pipeline.descriptor_layouts.data(), vk_context.pipeline.descriptor_layouts.count()},
-        {vk_context.pipeline.descriptor_sets.data(), vk_context.pipeline.descriptor_sets.count()}
-    );
-
+    FixedArray<VkVertexInputAttributeDescription, VulkanShaderPipeline::MAX_ATTRIB_COUNT> attrib_descriptions(MAIN_PIPELINE_ATTRIB_COUNT);
+    // Position
+    attrib_descriptions[0].binding = 0;
+    attrib_descriptions[0].location = 0;
+    attrib_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attrib_descriptions[0].offset = 0;
+    // Color
+    // attrib_descriptions[1].binding = 0;
+    // attrib_descriptions[1].location = 1;
+    // attrib_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    // attrib_descriptions[1].offset = sizeof(glm::vec3);
+    // Texture sampler
+    attrib_descriptions[1].binding = 0;
+    attrib_descriptions[1].location = 1;
+    attrib_descriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_descriptions[1].offset = sizeof(glm::vec3);
+    
     return VulkanShaderPipeline::create(
         vk_context,
         MAIN_SHADER_FILE_NAME,
         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         true,     
-        {attrib_descriptions.data(), attrib_descriptions.count()},
+        attrib_descriptions,
         vk_context.pipeline
     );
 }
 
-void create_attribute_descriptions(FixedArray<VkVertexInputAttributeDescription, MAIN_PIPELINE_ATTRIB_COUNT>& out_descriptions) {
-    out_descriptions[0].binding = 0;
-    out_descriptions[0].location = 0;
-    out_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    out_descriptions[0].offset = 0;
-    out_descriptions[1].binding = 0;
-    out_descriptions[1].location = 1;
-    out_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    out_descriptions[1].offset = sizeof(glm::vec3);
+void create_default_texture() {
+    vk_context.pipeline.acquire_resouces(vk_context.device);
+    
+    if (!Texture::create(vk_context, "brick_wall.jpg", true, vk_context.default_texture)) {
+        LOG_ERROR("Error when trying to create default texture");
+    }
 }
 
-void create_descriptor_layouts_and_sets_for_ubo(
-    const VulkanDevice& device,
-    VulkanDescriptorPool& pool,
-    u32 descriptor_size,
-    std::span<VulkanBuffer> buffers,
-    std::span<VulkanDescriptorSetLayout> out_layouts,
-    std::span<VkDescriptorSet> out_sets
-) {
-    SF_ASSERT_MSG(buffers.size() == out_layouts.size() && buffers.size() == out_sets.size(), "Count of elements inside arrays should be equal");
-    SF_ASSERT_MSG(buffers.size() <= VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, "Should not be more than frames in flight maximum");
+void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio) {
+    glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 proj = glm::perspective(45.0f, aspect_ratio, 0.1f, 10.0f);
+    proj[1][1] *= -1.0f;
 
-    const u32 count{ static_cast<u32>(buffers.size()) };
-        
-    for (u32 i{0}; i < count; ++i) {
-        VkDescriptorSetLayoutBinding binding;
-        VulkanDescriptorSetLayout::create_bindings(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, {&binding, 1});
-        VulkanDescriptorSetLayout::create(device, {&binding, 1}, out_layouts[i]);
-    }
+    pipeline.update_global_state(device, curr_frame, view, proj);
+}
 
-    pool.allocate_sets(device, count, reinterpret_cast<VkDescriptorSetLayout*>(out_layouts.data()), out_sets.data());
+void update_object_state(VulkanShaderPipeline& pipeline, f64 elapsed_time) {
+    GeometryRenderData render_data{};
+    render_data.model = { glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) },
+    render_data.id = 0;
 
-    VkWriteDescriptorSet descriptor_writes[VulkanSwapchain::MAX_FRAMES_IN_FLIGHT];
-
-    for (u32 i{0}; i < count; ++i) {
-        VkDescriptorBufferInfo buffer_info{
-            .buffer = buffers[i].handle,
-            .offset = 0,
-            .range = descriptor_size
-        };
-
-        descriptor_writes[i] = {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = out_sets[i],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .pImageInfo = nullptr,
-            .pBufferInfo = &buffer_info,
-            .pTexelBufferView = nullptr,
-        };
-    }
-
-    vkUpdateDescriptorSets(device.logical_device, count, descriptor_writes, 0, nullptr);
+    render_data.textures[0] = vk_context.default_texture;
+    pipeline.update_object_state(vk_context, render_data);
 }
 
 VkViewport VulkanContext::get_viewport() const {
@@ -543,6 +524,10 @@ VkRect2D VulkanContext::get_scissors() const {
 
 f32 VulkanContext::get_aspect_ratio() const {
     return static_cast<f32>(framebuffer_width) / framebuffer_height;
+}
+
+VulkanCommandBuffer& VulkanContext::curr_frame_graphics_cmd_buffer() {
+    return graphics_command_buffers[curr_frame];
 }
 
 } // sf

@@ -1,12 +1,5 @@
 #include "sf_vulkan/frame.hpp"
-#include "glm/ext/matrix_clip_space.hpp"
-#include "glm/ext/matrix_float4x4.hpp"
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/ext/vector_float3.hpp"
-#include "glm/trigonometric.hpp"
 #include "sf_containers/dynamic_array.hpp"
-#include "sf_vulkan/buffer.hpp"
-#include "sf_vulkan/pipeline.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan_core.h>
@@ -35,10 +28,10 @@ VkVertexInputBindingDescription Vertex::get_binding_descr() {
 
 DynamicArray<Vertex> define_vertices() {
     return {
-        {{ TLN }, { 1.0f, 0.0f, 0.0f }},
-        {{ TRN }, { 0.0f, 1.0f, 0.0f }},
-        {{ BRN }, { 0.0f, 0.0f, 1.0f }},
-        {{ BLN }, { 0.0f, 0.5f, 0.5f }},
+        {{ TLN }, { +0.0f, +1.0f }},
+        {{ TRN }, { +1.0f, +1.0f }},
+        {{ BRN }, { +1.0f, +0.0f }},
+        {{ BLN }, { +0.0f, +0.0f }},
     };
 }
 
@@ -46,18 +39,6 @@ DynamicArray<u16> define_indices() {
     return { 0, 1, 2, 2, 3, 0 };
 }
 
-void update_ubo(VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio) {
-    glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 proj = glm::perspective(45.0f, aspect_ratio, 0.1f, 10.0f);
-    proj[1][1] *= -1.0f;
-
-    pipeline.update_global_state(curr_frame, view, proj);
-}
-
-void update_push_constant_block(VulkanShaderPipeline& pipeline, u32 curr_frame, f64 elapsed_time) {
-    glm::mat4 model = glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    pipeline.push_constant_blocks[curr_frame].update(model);
-}
     
 } // sf
 

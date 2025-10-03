@@ -10,6 +10,7 @@
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
+#include "sf_vulkan/resource.hpp"
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
@@ -24,7 +25,6 @@ struct VulkanContext;
 
 using VulkanAllocator = VkAllocationCallbacks;
 
-// context
 struct VulkanContext {
 public:
     VkInstance                            instance;
@@ -45,6 +45,9 @@ public:
     FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            render_finished_semaphores;
     FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>                draw_fences;
     FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>                transfer_fences;
+    // NOTE: TEMP
+    Texture                               default_texture;
+    f64                                   frame_delta_time;
     u32                                   image_index;
     u32                                   curr_frame;
     u32                                   framebuffer_size_generation;
@@ -56,12 +59,12 @@ public:
     VulkanContext();
     ~VulkanContext();
 
-    VkViewport get_viewport() const;
-    VkRect2D get_scissors() const;
-    f32 get_aspect_ratio() const;
+    VkViewport    get_viewport() const;
+    VkRect2D      get_scissors() const;
+    f32           get_aspect_ratio() const;
+    VulkanCommandBuffer& curr_frame_graphics_cmd_buffer();
 };
 
-// renderer
 struct RenderPacket {
     f64 delta_time;
     f64 elapsed_time;
@@ -70,9 +73,6 @@ struct RenderPacket {
 struct VulkanRenderer {
     PlatformState*  platform_state;
     u64             frame_count;
-
-public:
-    VulkanRenderer() = default;
 };
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state);

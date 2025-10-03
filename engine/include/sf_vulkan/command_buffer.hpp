@@ -39,7 +39,7 @@ public:
     void free(const VulkanContext& context, VkCommandPool command_pool);
     void copy_data_between_buffers(VkBuffer src, VkBuffer dst, VkBufferCopy& copy_region);
     void copy_data_from_buffer_to_image(VkBuffer src_buffer, VulkanImage& dst_image, VkImageLayout dst_image_layout);
-    void record_draw_commands(VulkanContext& context, VulkanShaderPipeline& curr_pipeline, u32 image_index);
+    void record_draw_commands(const VulkanContext& context, VulkanShaderPipeline& curr_pipeline, u32 image_index);
 };
 
 enum struct VulkanCommandPoolType {
