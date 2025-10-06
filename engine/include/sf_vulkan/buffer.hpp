@@ -4,10 +4,9 @@
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
-#include "sf_vulkan/frame.hpp"
+#include "sf_vulkan/mesh.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/swapchain.hpp"
-#include "sf_vulkan/resource.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -35,9 +34,11 @@ public:
     u32                              indeces_offset;
     u16                              indeces_count;
 public:
-    static bool create(const VulkanDevice& device, DynamicArray<Vertex>&& vertices, DynamicArray<u16>&& indices, VulkanVertexIndexBuffer& out_buffer);
+    static bool create(const VulkanDevice& device, Mesh&& mesh, VulkanVertexIndexBuffer& out_buffer);
     bool copy_data_to_staging_buffer(const VulkanDevice& device);
     void destroy(const VulkanDevice& device);
+    void bind(const VulkanCommandBuffer& cmd_buffer);
+    void draw(const VulkanCommandBuffer& cmd_buffer);
 };
 
 // Needs to be at least 256 bytes for Nvidia cards
@@ -53,17 +54,6 @@ struct LocalUniformObject {
     glm::vec4 reserved_space_0;
     glm::vec4 reserved_space_1;
     glm::vec4 reserved_space_2;
-};
-
-struct GeometryRenderData {
-    glm::mat4               model;
-    FixedArray<Texture, 16> textures;
-    u32                     id;
-
-    GeometryRenderData()
-    {
-        textures.resize_to_capacity();
-    }
 };
 
 struct VulkanGlobalUniformBufferObject {

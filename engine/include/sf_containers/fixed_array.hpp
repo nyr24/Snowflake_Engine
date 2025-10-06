@@ -146,6 +146,8 @@ public:
 
     constexpr T* data() noexcept { return _buffer; }
     constexpr T& first() noexcept { return *_buffer; }
+    constexpr T& last() noexcept { return *(_buffer + _count - 1); }
+    constexpr T& last_past_end() noexcept { return *(_buffer + _count); }
     constexpr T* first_ptr() noexcept { return _buffer; }
     constexpr T* last_ptr() noexcept { return _buffer + _count - 1; }
     constexpr u32 count() const noexcept { return _count; }
@@ -156,6 +158,7 @@ public:
     const T* data() const noexcept { return _buffer; }
     const T& first() const noexcept { return *_buffer; }
     const T& last() const noexcept { return *(_buffer + _count - 1); }
+    const T& last_past_end() const noexcept { return *(_buffer + _count); }
     const T* first_ptr() const noexcept { return _buffer; }
     const T* last_ptr() const noexcept { return _buffer + _count - 1; }
 

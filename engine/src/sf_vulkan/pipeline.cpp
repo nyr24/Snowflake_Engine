@@ -12,7 +12,6 @@
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/resource.hpp"
 #include "sf_vulkan/swapchain.hpp"
-#include <cmath>
 #include <vulkan/vulkan_core.h>
 #include <filesystem>
 #include <span>
@@ -42,6 +41,8 @@ bool VulkanShaderPipeline::create(
     VkPrimitiveTopology            primitive_topology,
     bool                           enable_color_blend,
     const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& attrib_description_config,
+    VkViewport                     viewport,
+    VkRect2D                       scissors,
     VulkanShaderPipeline&          out_pipeline
 ) {
     #ifdef SF_DEBUG
@@ -110,9 +111,6 @@ bool VulkanShaderPipeline::create(
         .topology = primitive_topology
     };
 
-    VkViewport viewport{ context.get_viewport() };
-    VkRect2D scissors{ context.get_scissors() };
-
     VkPipelineViewportStateCreateInfo viewport_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .viewportCount = 1,
@@ -120,6 +118,8 @@ bool VulkanShaderPipeline::create(
         .scissorCount = 1,
         .pScissors = &scissors
     };
+    out_pipeline.viewport = viewport;
+    out_pipeline.scissors = scissors;
 
     VkPipelineRasterizationStateCreateInfo rasterization_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -209,6 +209,8 @@ bool VulkanShaderPipeline::create(
 void VulkanShaderPipeline::bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_frame) {
     vkCmdBindPipeline(cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_handle);
     vkCmdBindDescriptorSets(cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &global_descriptor_sets[curr_frame], 0, nullptr);
+    vkCmdSetViewport(cmd_buffer.handle, 0, 1, &viewport);
+    vkCmdSetScissor(cmd_buffer.handle, 0, 1, &scissors);
 }
 
 void VulkanShaderPipeline::update_global_state(const VulkanDevice& device, u32 curr_frame, const glm::mat4& view, const glm::mat4& proj) {
@@ -232,13 +234,13 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
     u32 descriptor_index{0};
 
     u32 range{sizeof(LocalUniformObject)};
-    u64 offset{sizeof(LocalUniformObject) * render_data.id};
+    u64 offset{/* sizeof(LocalUniformObject) * render_data.id */ 0};
 
     // TODO: get diffuse color from a material
     // static f32 accumulator{0.0f};
     // accumulator += context.frame_delta_time;
     // f32 s{(std::sin(accumulator) + 1.0f) / 2.0f};
-    glm::vec4 diffuse_color{ glm::vec4{ 0.1f, 0.25f, 0.25f, 0.5f }};
+    glm::vec4 diffuse_color{ glm::vec4(0.0f, 0.0f, 0.5f, 1.0f)};
 
     local_ubo.update(diffuse_color);
 
@@ -275,13 +277,13 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
     FixedArray<VkDescriptorImageInfo, SAMPLER_COUNT> image_infos(SAMPLER_COUNT);
 
     for (u32 i{0}; i < SAMPLER_COUNT; ++i) {
-        const Texture& texture{ render_data.textures[i] };
+        const Texture* texture{ render_data.textures[i] };
         u32& descriptor_generation{ object_state.descriptor_states[descriptor_index].generations[curr_frame] };
 
-        if (descriptor_generation != texture.generation || texture.generation == INVALID_ID) {
+        if (descriptor_generation != texture->generation || texture->generation == INVALID_ID) {
             image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            image_infos[i].imageView = texture.image.view;
-            image_infos[i].sampler = texture.sampler; 
+            image_infos[i].imageView = texture->image.view;
+            image_infos[i].sampler = texture->sampler; 
 
             VkWriteDescriptorSet descriptor_write{
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -298,8 +300,8 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
             // TODO: why ConstLrefOrVal does not work
             descriptor_writes.append(std::move(descriptor_write));
 
-            if (texture.generation != INVALID_ID) {
-                descriptor_generation = texture.generation;
+            if (texture->generation != INVALID_ID) {
+                descriptor_generation = texture->generation;
             }
             descriptor_index++;
         }
@@ -315,7 +317,7 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
 void VulkanShaderPipeline::bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame) {
     vkCmdBindDescriptorSets(
         cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout,
-        /* THINK: 0 or 1? */ 1, 1, &object_shader_states[object_id].descriptor_sets[curr_frame],
+        1, 1, &object_shader_states[object_id].descriptor_sets[curr_frame],
         0, nullptr
     );
 }

@@ -16,7 +16,14 @@ struct Vertex {
 
 struct VulkanShaderPipeline;
 
-DynamicArray<Vertex>  define_vertices();
-DynamicArray<u16>     define_indices();
+struct Mesh {
+    DynamicArray<Vertex>  vertices;
+    DynamicArray<u16>     indices;
+
+    static Mesh get_cube_mesh();
+private:
+    static DynamicArray<Vertex> define_cube_vertices();
+    static DynamicArray<u16> define_cube_indices();
+};
 
 } // sf

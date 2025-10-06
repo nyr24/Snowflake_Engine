@@ -32,6 +32,9 @@ public:
     static void allocate(const VulkanContext& context, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary);
     void begin_recording(VkCommandBufferUsageFlags begin_flags);
     void end_recording(const VulkanContext& context);
+    void begin_rendering(const VulkanContext& context);
+    void end_rendering(const VulkanContext& context);
+    // void record_draw_commands(const VulkanContext& context, VulkanShaderPipeline& curr_pipeline, u32 image_index);
     void allocate_and_begin_single_use(const VulkanContext& context, VkCommandPool command_pool, VulkanCommandBuffer& out_buffer);
     void end_single_use(const VulkanContext& context, VkCommandPool command_pool);
     void reset(VulkanContext& context);
@@ -39,7 +42,6 @@ public:
     void free(const VulkanContext& context, VkCommandPool command_pool);
     void copy_data_between_buffers(VkBuffer src, VkBuffer dst, VkBufferCopy& copy_region);
     void copy_data_from_buffer_to_image(VkBuffer src_buffer, VulkanImage& dst_image, VkImageLayout dst_image_layout);
-    void record_draw_commands(const VulkanContext& context, VulkanShaderPipeline& curr_pipeline, u32 image_index);
 };
 
 enum struct VulkanCommandPoolType {

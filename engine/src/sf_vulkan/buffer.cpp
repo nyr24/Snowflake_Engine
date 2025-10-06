@@ -2,6 +2,7 @@
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/utility.hpp"
+#include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"
@@ -68,12 +69,12 @@ void VulkanBuffer::destroy(const VulkanDevice& device) {
     }
 }
 
-bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, DynamicArray<Vertex>&& vertices, DynamicArray<u16>&& indices, VulkanVertexIndexBuffer& out_buffer) {
-    out_buffer.data.resize(vertices.size_in_bytes() + indices.size_in_bytes());
-    out_buffer.indeces_count = indices.count();
-    out_buffer.indeces_offset = vertices.size_in_bytes(); 
-    sf_mem_copy(out_buffer.data.data(), vertices.data(), vertices.size_in_bytes());
-    sf_mem_copy(out_buffer.data.data() + out_buffer.indeces_offset, indices.data(), indices.size_in_bytes());
+bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, Mesh&& mesh, VulkanVertexIndexBuffer& out_buffer) {
+    out_buffer.data.resize(mesh.vertices.size_in_bytes() + mesh.indices.size_in_bytes());
+    out_buffer.indeces_count = mesh.indices.count();
+    out_buffer.indeces_offset = mesh.vertices.size_in_bytes(); 
+    sf_mem_copy(out_buffer.data.data(), mesh.vertices.data(), mesh.vertices.size_in_bytes());
+    sf_mem_copy(out_buffer.data.data() + out_buffer.indeces_offset, mesh.indices.data(), mesh.indices.size_in_bytes());
 
     VulkanBuffer::create(
         device, out_buffer.data.size_in_bytes(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -93,6 +94,16 @@ bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, DynamicArray<Ve
 void VulkanVertexIndexBuffer::destroy(const VulkanDevice& device) {
     staging_buffer.destroy(device);
     main_buffer.destroy(device);
+}
+
+void VulkanVertexIndexBuffer::bind(const VulkanCommandBuffer& cmd_buffer) {
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(cmd_buffer.handle, 0, 1, &main_buffer.handle, offsets);
+    vkCmdBindIndexBuffer(cmd_buffer.handle, main_buffer.handle, indeces_offset, VK_INDEX_TYPE_UINT16);
+}
+
+void VulkanVertexIndexBuffer::draw(const VulkanCommandBuffer& cmd_buffer) {
+    vkCmdDrawIndexed(cmd_buffer.handle, indeces_count, 1, 0, 0, 0);
 }
 
 bool VulkanGlobalUniformBufferObject::create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo) {

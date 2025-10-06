@@ -44,5 +44,5 @@ VSOutput vertMain(VSInput input) {
 [shader("fragment")]
 float4 fragMain(VSOutput input) : SV_Target
 {
-    return float4(object_ubo.diffuse_color.xyz, 1.0f) * sampler.Sample(input.texture_coord);
+    return /* object_ubo.diffuse_color * */ sampler.Sample(input.texture_coord);
 }

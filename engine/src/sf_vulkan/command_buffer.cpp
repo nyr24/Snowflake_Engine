@@ -3,7 +3,6 @@
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/optional.hpp"
 #include "sf_core/logger.hpp"
-#include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/image.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
@@ -72,7 +71,7 @@ void VulkanCommandBuffer::begin_recording(VkCommandBufferUsageFlags begin_flags)
     state = VulkanCommandBufferState::RECORDING_BEGIN;
 }
 
-void VulkanCommandBuffer::record_draw_commands(const VulkanContext& context, VulkanShaderPipeline& pipeline, u32 image_index) {
+void VulkanCommandBuffer::begin_rendering(const VulkanContext& context) {
     VulkanImage::transition_layout(
         context.swapchain.images[context.image_index],
         *this,
@@ -106,18 +105,9 @@ void VulkanCommandBuffer::record_draw_commands(const VulkanContext& context, Vul
     };
 
     vkCmdBeginRendering(handle, &rendering_info);
-    VkDeviceSize offsets[] = {0};
-    // TODO: make buffers for binding configurable
-    vkCmdBindVertexBuffers(handle, 0, 1, &context.vertex_index_buffer.main_buffer.handle, offsets);
-    vkCmdBindIndexBuffer(handle, context.vertex_index_buffer.main_buffer.handle, context.vertex_index_buffer.indeces_offset, VK_INDEX_TYPE_UINT16);
-    // vkCmdPushConstants(handle, pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(VulkanPushConstantBlock), &pipeline.push_constant_blocks[context.curr_frame]);
+}
 
-    VkViewport viewport{ context.get_viewport() };
-    VkRect2D scissors{ context.get_scissors() };
-
-    vkCmdSetViewport(handle, 0, 1, &viewport);
-    vkCmdSetScissor(handle, 0, 1, &scissors);
-    vkCmdDrawIndexed(handle, context.vertex_index_buffer.indeces_count, 1, 0, 0, 0);
+void VulkanCommandBuffer::end_rendering(const VulkanContext& context) {
     vkCmdEndRendering(handle);
 
     VulkanImage::transition_layout(

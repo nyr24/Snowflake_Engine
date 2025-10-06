@@ -1,4 +1,5 @@
 #include "sf_containers/optional.hpp"
+#include "sf_containers/result.hpp"
 #include "sf_core/application.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/memory_sf.hpp"
@@ -14,12 +15,13 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_containers/fixed_array.hpp"
-#include "sf_vulkan/frame.hpp"
+#include "sf_vulkan/mesh.hpp"
 #include "sf_vulkan/buffer.hpp"
 // #include "sf_vulkan/allocator.hpp"
 // #include "sf_allocators/free_list_allocator.hpp"
 // #include <list>
 #include <span>
+#include <string_view>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 #include "glm/ext/matrix_clip_space.hpp"
@@ -35,7 +37,18 @@ static VulkanContext vk_context{};
 
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
+static constexpr u32 MAX_TEXTURE_COUNT{ 10 };
 static const char* MAIN_SHADER_FILE_NAME{"shader.spv"};
+
+// NOTE: testing
+struct ObjectRenderData {
+    Texture*    texture;  
+    u32         id;
+};
+
+static const FixedArray<std::string_view, MAX_TEXTURE_COUNT> texture_names{ /* "brick_wall.jpg", "brick.jpg", "ocean.jpg", */ "mickey_mouse.jpg" }; 
+static FixedArray<Texture, MAX_TEXTURE_COUNT> textures;
+static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
 void create_debugger();
@@ -53,9 +66,10 @@ void create_descriptor_layouts_and_sets_for_ubo(
     std::span<VkDescriptorSet> out_sets
 );
 bool create_main_shader_pipeline();
-void create_default_texture();
+bool create_textures();
+bool init_objects_render_data();
 void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio);
-void update_object_state(VulkanShaderPipeline& pipeline, f64 elapsed_time);
+void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     if (!create_instance(config, platform_state)) {
@@ -81,7 +95,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::TRANSFER, vk_context.device.queue_family_info.transfer_family_index,
         static_cast<VkCommandPoolCreateFlagBits>(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT), vk_context.transfer_command_pool);
 
-    if (!VulkanVertexIndexBuffer::create(vk_context.device, define_vertices(), define_indices(), vk_context.vertex_index_buffer)) {
+    if (!VulkanVertexIndexBuffer::create(vk_context.device, Mesh::get_cube_mesh(), vk_context.vertex_index_buffer)) {
        return false; 
     }
 
@@ -92,7 +106,13 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
 
     event_set_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
 
-    create_default_texture();
+    if (!create_textures()) {
+        return false;
+    }
+    
+    if (!init_objects_render_data()) {
+        return false;
+    }
 
     return true;
 }
@@ -172,9 +192,11 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     curr_graphics_buffer.begin_recording(0);
     vk_context.pipeline.bind(curr_graphics_buffer, vk_context.curr_frame);
-    vk_context.pipeline.bind_object_descriptor_sets(curr_graphics_buffer, 0, vk_context.curr_frame);
-    curr_graphics_buffer.record_draw_commands(vk_context, vk_context.pipeline, vk_context.image_index);
-    update_object_state(vk_context.pipeline, packet.elapsed_time);
+    vk_context.vertex_index_buffer.bind(curr_graphics_buffer);
+    update_object_state(vk_context.pipeline, curr_graphics_buffer, packet.elapsed_time);
+    curr_graphics_buffer.begin_rendering(vk_context);
+    vk_context.vertex_index_buffer.draw(curr_graphics_buffer);
+    curr_graphics_buffer.end_rendering(vk_context);
     curr_graphics_buffer.end_recording(vk_context);
     
     VkPipelineStageFlags wait_dest_mask{ VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -451,6 +473,7 @@ void destroy_synch_primitives(VulkanContext& context) {
     }
 }
 
+// TODO: generate attrib descriptions from the input type of Vertex inside a pipeline
 bool create_main_shader_pipeline() {
     FixedArray<VkVertexInputAttributeDescription, VulkanShaderPipeline::MAX_ATTRIB_COUNT> attrib_descriptions(MAIN_PIPELINE_ATTRIB_COUNT);
     // Position
@@ -458,16 +481,14 @@ bool create_main_shader_pipeline() {
     attrib_descriptions[0].location = 0;
     attrib_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     attrib_descriptions[0].offset = 0;
-    // Color
-    // attrib_descriptions[1].binding = 0;
-    // attrib_descriptions[1].location = 1;
-    // attrib_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    // attrib_descriptions[1].offset = sizeof(glm::vec3);
     // Texture sampler
     attrib_descriptions[1].binding = 0;
     attrib_descriptions[1].location = 1;
     attrib_descriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
     attrib_descriptions[1].offset = sizeof(glm::vec3);
+
+    VkViewport viewport{ vk_context.get_viewport() };
+    VkRect2D scissors{ vk_context.get_scissors() };
     
     return VulkanShaderPipeline::create(
         vk_context,
@@ -475,16 +496,41 @@ bool create_main_shader_pipeline() {
         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         true,     
         attrib_descriptions,
+        viewport,
+        scissors,
         vk_context.pipeline
     );
 }
 
-void create_default_texture() {
-    vk_context.pipeline.acquire_resouces(vk_context.device);
+
+// TODO: textures temp shared cmd_buffer
+bool create_textures() {
+    textures.resize(texture_names.count());
     
-    if (!Texture::create(vk_context, "brick_wall.jpg", true, vk_context.default_texture)) {
-        LOG_ERROR("Error when trying to create default texture");
+    for (u32 i{0}; i < texture_names.count(); ++i) {
+        if (!Texture::create(vk_context, texture_names[i].data(), true, textures[i])) {
+            LOG_ERROR("Error when trying to create default texture with name: {}", texture_names[i]);
+            return false;
+        }
     }
+    
+    return true;
+}
+
+bool init_objects_render_data() {
+    for (u32 i{0}; i < texture_names.count(); ++i) {
+        Result<u32> maybe_resource_id = vk_context.pipeline.acquire_resouces(vk_context.device);
+        if (maybe_resource_id.is_err()) {
+            return false;
+        }
+    
+        object_render_data.append(ObjectRenderData{
+            .texture = &textures[i],
+            .id = maybe_resource_id.unwrap_copy()
+        });
+    }
+
+    return true;
 }
 
 void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio) {
@@ -495,13 +541,21 @@ void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipel
     pipeline.update_global_state(device, curr_frame, view, proj);
 }
 
-void update_object_state(VulkanShaderPipeline& pipeline, f64 elapsed_time) {
-    GeometryRenderData render_data{};
-    render_data.model = { glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) },
-    render_data.id = 0;
+// THINK: bind then update or otherwise?
+void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
+    SF_ASSERT_MSG(object_render_data.count() == texture_names.count(), "Each object should have a bounded texture");
+    
+    glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) };
 
-    render_data.textures[0] = vk_context.default_texture;
-    pipeline.update_object_state(vk_context, render_data);
+    for (u32 i{0}; i < object_render_data.count(); ++i) {
+        GeometryRenderData render_data{};
+        // glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(0.5f * i, 0.5f * i, -1.0f * i)) };
+        render_data.model = { rotate_mat };
+        render_data.id = object_render_data[i].id;
+        render_data.textures[0] = object_render_data[i].texture;
+        vk_context.pipeline.bind_object_descriptor_sets(cmd_buffer, object_render_data[i].id, vk_context.curr_frame);
+        pipeline.update_object_state(vk_context, render_data);
+    }
 }
 
 VkViewport VulkanContext::get_viewport() const {

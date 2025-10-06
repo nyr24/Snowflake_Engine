@@ -53,6 +53,17 @@ struct ObjectShaderState {
     FixedArray<VulkanDescriptorState, OBJECT_SHADER_DESCRIPTOR_COUNT>            descriptor_states;
 };
 
+struct GeometryRenderData {
+    glm::mat4               model;
+    FixedArray<Texture*, 16> textures;
+    u32                     id;
+
+    GeometryRenderData()
+    {
+        textures.resize_to_capacity();
+    }
+};
+
 // TODO: shader object with multiple pipelines (default/wireframe)
 // struct VulkanPipelineConfig {};
 // struct VulkanPipeline {};
@@ -75,6 +86,8 @@ public:
     VkShaderModule               shader_handle;
     VkPipeline                   pipeline_handle;
     VkPipelineLayout             pipeline_layout;
+    VkViewport                   viewport;
+    VkRect2D                     scissors;
     u32                          object_id_counter;
 public:
     VulkanShaderPipeline();
@@ -85,6 +98,8 @@ public:
         VkPrimitiveTopology            primitive_topology,
         bool                           enable_color_blend,
         const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& attrib_descriptions,
+        VkViewport                     viewport,
+        VkRect2D                       scissors,
         VulkanShaderPipeline&          out_pipeline
     );
     void destroy(const VulkanDevice& device);
