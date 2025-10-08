@@ -4,6 +4,7 @@
 #include "sf_core/utility.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
+#include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include <vulkan/vulkan_core.h>
@@ -24,7 +25,6 @@ void VulkanBuffer::create(
 
     // TODO: custom allocator
     sf_vk_check(vkCreateBuffer(device.logical_device, &create_info, nullptr, &out_buffer.handle));
-
 
     vkGetBufferMemoryRequirements(device.logical_device, out_buffer.handle, &out_buffer.memory.requirements);
     Option<u32> memory_index = device.find_memory_index(out_buffer.memory.requirements.memoryTypeBits, memory_properties);
@@ -140,7 +140,7 @@ void VulkanGlobalUniformBufferObject::destroy(const VulkanDevice& device) {
 }
 
 bool VulkanLocalUniformBufferObject::create(const VulkanDevice& device, VulkanLocalUniformBufferObject& out_local_ubo) {
-    VulkanBuffer::create(device, sizeof(LocalUniformObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+    VulkanBuffer::create(device, sizeof(LocalUniformObject) * MAX_OBJECT_COUNT, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
         out_local_ubo.buffer
     );  
@@ -151,18 +151,14 @@ bool VulkanLocalUniformBufferObject::create(const VulkanDevice& device, VulkanLo
     return true;
 }
 
-void VulkanLocalUniformBufferObject::update(glm::vec4 diffuse_color) {
+void VulkanLocalUniformBufferObject::update(u32 offset, glm::vec4 diffuse_color) {
     uniform_object.diffuse_color = diffuse_color;
-    sf_mem_copy(mapped_memory, &uniform_object, sizeof(LocalUniformObject));
+    sf_mem_copy(ptr_step_bytes_forward(mapped_memory, offset), &uniform_object, sizeof(LocalUniformObject));
 }
 
 void VulkanLocalUniformBufferObject::destroy(const VulkanDevice& device) {
     buffer.destroy(device);
     vkUnmapMemory(device.logical_device, buffer.memory.handle);
 }
-
-// void VulkanPushConstantBlock::update(const glm::mat4& model_new) {
-//     model = model_new;
-// }
 
 } // sf

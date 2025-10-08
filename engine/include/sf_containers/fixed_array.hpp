@@ -76,7 +76,7 @@ public:
         allocate_and_construct(std::forward<Args>(args)...);
     }
 
-    constexpr void append(ConstLRefOrVal<T> item) noexcept {
+    constexpr void append(const T& item) noexcept {
         allocate_and_construct(item);
     }
 
@@ -139,6 +139,12 @@ public:
 
     constexpr void clear() noexcept {
         deallocate(_count);
+    }
+
+    constexpr void fill(ConstLRefOrValType<T> val) noexcept {
+        for (u32 i{0}; i < Capacity; ++i) {
+            _buffer[i] = val;
+        }
     }
 
     constexpr bool is_empty() const { return _count == 0; }

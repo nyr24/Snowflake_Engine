@@ -76,7 +76,7 @@ struct VulkanLocalUniformBufferObject {
     // VulkanLocalUniformBufferObject();
     static bool create(const VulkanDevice& device, VulkanLocalUniformBufferObject& out_local_ubo);
     void destroy(const VulkanDevice& device);
-    void update(glm::vec4 diffuse_color);
+    void update(u32 offset, glm::vec4 diffuse_color);
 };
 
 struct VulkanPushConstantBlock {

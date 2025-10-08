@@ -11,7 +11,8 @@ VkVertexInputBindingDescription Vertex::get_binding_descr() {
         .binding = 0,
         .stride = sizeof(Vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-    }; }
+    };
+}
 
 // Positions
 #define POS_TLN -0.5f, -0.5f, 0.0f

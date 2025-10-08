@@ -3,6 +3,7 @@
 #include "sf_core/application.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/memory_sf.hpp"
+#include "sf_core/utility.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/pipeline.hpp"
@@ -192,8 +193,9 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     curr_graphics_buffer.begin_recording(0);
     vk_context.pipeline.bind(curr_graphics_buffer, vk_context.curr_frame);
-    vk_context.vertex_index_buffer.bind(curr_graphics_buffer);
     update_object_state(vk_context.pipeline, curr_graphics_buffer, packet.elapsed_time);
+    update_global_state(vk_context.device, vk_context.pipeline, vk_context.curr_frame, vk_context.get_aspect_ratio());
+    vk_context.vertex_index_buffer.bind(curr_graphics_buffer);
     curr_graphics_buffer.begin_rendering(vk_context);
     vk_context.vertex_index_buffer.draw(curr_graphics_buffer);
     curr_graphics_buffer.end_rendering(vk_context);
@@ -213,8 +215,6 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     };
 
     curr_graphics_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, Option<VulkanFence>{curr_draw_fence});
-
-    update_global_state(vk_context.device, vk_context.pipeline, vk_context.curr_frame, vk_context.get_aspect_ratio());
 
     if (!curr_transfer_fence.wait(vk_context)) {
         return false;
@@ -549,11 +549,10 @@ void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cm
 
     for (u32 i{0}; i < object_render_data.count(); ++i) {
         GeometryRenderData render_data{};
-        // glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(0.5f * i, 0.5f * i, -1.0f * i)) };
-        render_data.model = { rotate_mat };
+        // glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(1.50f, 0.00f, 0.00f)) };
+        render_data.model = { /* translate_mat */ rotate_mat };
         render_data.id = object_render_data[i].id;
         render_data.textures[0] = object_render_data[i].texture;
-        vk_context.pipeline.bind_object_descriptor_sets(cmd_buffer, object_render_data[i].id, vk_context.curr_frame);
         pipeline.update_object_state(vk_context, render_data);
     }
 }

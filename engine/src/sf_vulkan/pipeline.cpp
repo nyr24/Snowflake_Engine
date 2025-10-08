@@ -164,10 +164,15 @@ bool VulkanShaderPipeline::create(
         .size = sizeof(glm::mat4),
     };
 
+    FixedArray<VkDescriptorSetLayout, 2> layouts = {
+        out_pipeline.global_descriptor_layout.handle,
+        out_pipeline.object_descriptor_layout.handle  
+    };
+
     VkPipelineLayoutCreateInfo pipeline_layout_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 2,
-        .pSetLayouts = &out_pipeline.global_descriptor_layout.handle,
+        .setLayoutCount = layouts.count(),
+        .pSetLayouts = layouts.data(),
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &push_constant_range,
     };
@@ -218,7 +223,6 @@ void VulkanShaderPipeline::update_global_state(const VulkanDevice& device, u32 c
     update_global_descriptors(device);
 }
 
-// model_matrix(push constant) + diffuse_color + texture sampler
 void VulkanShaderPipeline::update_object_state(VulkanContext& context, const GeometryRenderData& render_data) {
     VulkanCommandBuffer& curr_cmd_buffer{ context.curr_frame_graphics_cmd_buffer() };    
     SF_ASSERT_MSG(curr_cmd_buffer.state == VulkanCommandBufferState::RECORDING_BEGIN, "Should be in recording state");
@@ -234,15 +238,15 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
     u32 descriptor_index{0};
 
     u32 range{sizeof(LocalUniformObject)};
-    u64 offset{/* sizeof(LocalUniformObject) * render_data.id */ 0};
+    u64 offset{sizeof(LocalUniformObject) * render_data.id};
 
     // TODO: get diffuse color from a material
     // static f32 accumulator{0.0f};
     // accumulator += context.frame_delta_time;
     // f32 s{(std::sin(accumulator) + 1.0f) / 2.0f};
-    glm::vec4 diffuse_color{ glm::vec4(0.0f, 0.0f, 0.5f, 1.0f)};
+    glm::vec4 diffuse_color{ glm::vec4(0.0f, 1.0f, 0.0f, 0.0f)};
 
-    local_ubo.update(diffuse_color);
+    local_ubo.update(offset, diffuse_color);
 
     if (object_state.descriptor_states[descriptor_index].generations[curr_frame] == INVALID_ID) {
         VkDescriptorBufferInfo buffer_info{
@@ -263,8 +267,7 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
             .pTexelBufferView = nullptr,
         };
 
-        // TODO: why ConstLrefOrVal does not work
-        descriptor_writes.append(std::move(descriptor_write));
+        descriptor_writes.append(descriptor_write);
 
         // update the frame generation (needed only once)
         object_state.descriptor_states[descriptor_index].generations[curr_frame] = 1;
@@ -297,8 +300,7 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
                 .pTexelBufferView = nullptr,
             };
 
-            // TODO: why ConstLrefOrVal does not work
-            descriptor_writes.append(std::move(descriptor_write));
+            descriptor_writes.append(descriptor_write);
 
             if (texture->generation != INVALID_ID) {
                 descriptor_generation = texture->generation;
@@ -307,11 +309,11 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
         }
     }
 
-    bind_object_descriptor_sets(curr_cmd_buffer, render_data.id, curr_frame);    
-
     if (descriptor_writes.count() > 0) {
         vkUpdateDescriptorSets(context.device.logical_device, descriptor_writes.count(), descriptor_writes.data(), 0, nullptr);
     }
+
+    bind_object_descriptor_sets(curr_cmd_buffer, render_data.id, curr_frame);    
 }
 
 void VulkanShaderPipeline::bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame) {
@@ -334,18 +336,15 @@ Result<u32> VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
         }
     }
 
-    VkDescriptorSetLayout layouts[VulkanSwapchain::MAX_FRAMES_IN_FLIGHT];
+    FixedArray<VkDescriptorSetLayout, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> layouts(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    layouts.fill(object_descriptor_layout.handle);
 
-    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
-        layouts[i] = object_descriptor_layout.handle;
-    }
-
-    object_descriptor_pool.allocate_sets(device, object_state.descriptor_sets.count(), layouts, object_state.descriptor_sets.data());
+    object_descriptor_pool.allocate_sets(device, object_state.descriptor_sets.count(), layouts.data(), object_state.descriptor_sets.data());
     return {object_id};
 }
 
 void VulkanShaderPipeline::release_resouces(const VulkanDevice& device, u32 object_id) {
-    ObjectShaderState object_state{ object_shader_states[object_id] };     
+    ObjectShaderState& object_state{ object_shader_states[object_id] };     
 
     VkResult result{ vkFreeDescriptorSets(device.logical_device, object_descriptor_pool.handle, object_state.descriptor_sets.count(), object_state.descriptor_sets.data()) };
     if (result != VK_SUCCESS) {
@@ -375,13 +374,10 @@ void VulkanShaderPipeline::create_global_descriptors(const VulkanDevice& device)
 
     FixedArray<VkDescriptorType, 1> types = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER };
     FixedArray<VkDescriptorSetLayoutBinding, 1> bindings(1);
-    VulkanDescriptorSetLayout::create_bindings(1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, {types.data(), types.count()}, {bindings.data(), bindings.count()});
+    VulkanDescriptorSetLayout::create_bindings(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, {types.data(), types.count()}, {bindings.data(), bindings.count()});
     VulkanDescriptorSetLayout::create(device, {bindings.data(), bindings.count()}, global_descriptor_layout);
-    FixedArray<VulkanDescriptorSetLayout, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> layouts(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-
-    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
-        layouts[i] = global_descriptor_layout;
-    }
+    FixedArray<VkDescriptorSetLayout, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> layouts(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    layouts.fill(global_descriptor_layout.handle);
 
     global_descriptor_pool.allocate_sets(device, global_descriptor_sets.count(), reinterpret_cast<VkDescriptorSetLayout*>(layouts.data()), global_descriptor_sets.data());
 
@@ -401,8 +397,7 @@ void VulkanShaderPipeline::create_local_descriptors(const VulkanDevice& device) 
     
     FixedArray<VkDescriptorSetLayoutBinding, OBJECT_SHADER_DESCRIPTOR_COUNT> bindings(OBJECT_SHADER_DESCRIPTOR_COUNT);
 
-    // TODO: should pass index
-    VulkanDescriptorSetLayout::create_bindings(descriptor_types.count(), VK_SHADER_STAGE_FRAGMENT_BIT, {descriptor_types.data(), descriptor_types.count()}, {bindings.data(), bindings.count()});
+    VulkanDescriptorSetLayout::create_bindings(VK_SHADER_STAGE_FRAGMENT_BIT, {descriptor_types.data(), descriptor_types.count()}, {bindings.data(), bindings.count()});
     VulkanDescriptorSetLayout::create(device, {bindings.data(), bindings.count()}, object_descriptor_layout);
 }
 
@@ -485,13 +480,13 @@ void VulkanDescriptorSetLayout::create(const VulkanDevice& device, std::span<VkD
     sf_vk_check(vkCreateDescriptorSetLayout(device.logical_device, &descriptor_layout_create_info, nullptr, &out_layout.handle));
 }
 
-void VulkanDescriptorSetLayout::create_bindings(u32 descriptor_count, VkShaderStageFlags stage_flags, std::span<VkDescriptorType> descriptor_types, std::span<VkDescriptorSetLayoutBinding> out_bindings) {
+void VulkanDescriptorSetLayout::create_bindings(VkShaderStageFlags stage_flags, std::span<VkDescriptorType> descriptor_types, std::span<VkDescriptorSetLayoutBinding> out_bindings) {
     SF_ASSERT_MSG(descriptor_types.size() == out_bindings.size(), "Should be equal");
     
     for (u32 i{0}; i < out_bindings.size(); ++i) {
         out_bindings[i].binding = i,
         out_bindings[i].descriptorType = descriptor_types[i],
-        out_bindings[i].descriptorCount = descriptor_count,
+        out_bindings[i].descriptorCount = 1,
         out_bindings[i].stageFlags = stage_flags,
         out_bindings[i].pImmutableSamplers = nullptr;
     }

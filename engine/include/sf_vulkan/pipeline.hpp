@@ -26,7 +26,7 @@ public:
     VkDescriptorSetLayout handle;
 public:
     static void create(const VulkanDevice& device, std::span<VkDescriptorSetLayoutBinding> bindings, VulkanDescriptorSetLayout& out_layout);  
-    static void create_bindings(u32 descriptor_count, VkShaderStageFlags stage_flags, std::span<VkDescriptorType> descriptor_types, std::span<VkDescriptorSetLayoutBinding> out_bindings);
+    static void create_bindings(VkShaderStageFlags stage_flags, std::span<VkDescriptorType> descriptor_types, std::span<VkDescriptorSetLayoutBinding> out_bindings);
     void destroy(const VulkanDevice& device);
 };
 
