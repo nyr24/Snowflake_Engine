@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sf_core/asserts_sf.hpp"
 #include <concepts>
 #include <format>
 #include <string_view>
@@ -8,6 +9,7 @@
 namespace sf {
 
 [[noreturn]] void panic(const char* message);
+std::string_view extract_extension_from_file_path(std::string_view file_name);
 
 template<typename T>
 constexpr bool is_power_of_two(T x)  noexcept {

@@ -4,6 +4,8 @@
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/asserts_sf.hpp"
+#include "sf_core/event.hpp"
+#include "sf_core/input.hpp"
 #include "sf_core/io.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_vulkan/buffer.hpp"
@@ -87,6 +89,8 @@ bool VulkanShaderPipeline::create(
     }
 
     out_pipeline.create_local_descriptors(context.device);
+
+    event_set_listener(SystemEventCode::KEY_PRESSED, &out_pipeline, VulkanShaderPipeline::handle_swap_default_texture);
 
     FixedArray<VkDynamicState, 2> dynamic_state{ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
@@ -223,7 +227,7 @@ void VulkanShaderPipeline::update_global_state(const VulkanDevice& device, u32 c
     update_global_descriptors(device);
 }
 
-void VulkanShaderPipeline::update_object_state(VulkanContext& context, const GeometryRenderData& render_data) {
+void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryRenderData& render_data) {
     VulkanCommandBuffer& curr_cmd_buffer{ context.curr_frame_graphics_cmd_buffer() };    
     SF_ASSERT_MSG(curr_cmd_buffer.state == VulkanCommandBufferState::RECORDING_BEGIN, "Should be in recording state");
 
@@ -280,8 +284,15 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, const Geo
     FixedArray<VkDescriptorImageInfo, SAMPLER_COUNT> image_infos(SAMPLER_COUNT);
 
     for (u32 i{0}; i < SAMPLER_COUNT; ++i) {
-        const Texture* texture{ render_data.textures[i] };
+        Texture* texture{ render_data.textures[i] };
+        
         u32& descriptor_generation{ object_state.descriptor_states[descriptor_index].generations[curr_frame] };
+
+        // if texture hasn't been loaded - use the default one
+        if (!texture || texture->generation == INVALID_ID) {
+            texture = default_textures[default_texture_index]; 
+            descriptor_generation = INVALID_ID;
+        }
 
         if (descriptor_generation != texture->generation || texture->generation == INVALID_ID) {
             image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -356,6 +367,30 @@ void VulkanShaderPipeline::release_resouces(const VulkanDevice& device, u32 obje
             object_state.descriptor_states[i].generations[j] = INVALID_ID;
         }
     }
+}
+
+void VulkanShaderPipeline::set_default_textures(const FixedArray<Texture*, MAX_DEFAULT_TEXTURES>& default_textures) {
+    this->default_textures = default_textures;
+}
+
+bool VulkanShaderPipeline::handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
+    SF_ASSERT_MSG(maybe_context.is_some(), "Context should be presented");
+    EventContext& context{ maybe_context.unwrap() };
+
+    VulkanShaderPipeline* pipeline{ static_cast<VulkanShaderPipeline*>(listener_inst) };
+    Key key_pressed{context.data.u8[0]};
+    
+    switch (key_pressed) {
+        case Key::LEFT: {
+            pipeline->default_texture_index = pipeline->default_texture_index == 0 ? (pipeline->default_textures.count() - 1) : pipeline->default_texture_index - 1;
+        } break;
+        case Key::RIGHT: {
+            pipeline->default_texture_index = (pipeline->default_texture_index + 1) > (pipeline->default_textures.count() - 1) ? 0 : pipeline->default_texture_index + 1;
+        } break;
+        default: return false;
+    }
+
+    return true;
 }
 
 void VulkanShaderPipeline::create_attribute_descriptions(const FixedArray<VkVertexInputAttributeDescription, VulkanShaderPipeline::MAX_ATTRIB_COUNT>& input_descriptions) {

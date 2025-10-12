@@ -51,6 +51,7 @@ public:
     }
 
     FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
+        _count = rhs._count;
         sf_mem_copy((void*)_buffer, (void*)rhs._buffer, sizeof(T) * _count);
         return *this;
     }
@@ -200,7 +201,7 @@ private:
         u32 free_capacity = Capacity - _count;
 
         if (free_capacity < alloc_count) {
-            panic("Not enough memory");
+            panic("Not enough memory in array buffer");
         }
 
         T* return_memory = _buffer + _count;

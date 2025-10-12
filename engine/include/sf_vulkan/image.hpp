@@ -33,7 +33,7 @@ public:
 
     static void transition_layout(
         VkImage image,
-        VulkanCommandBuffer& cmd_buffer,
+        const VulkanCommandBuffer& cmd_buffer,
         VkImageLayout old_layout,
         VkImageLayout new_layout,
         VkPipelineStageFlags2 src_stage_mask,

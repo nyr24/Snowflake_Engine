@@ -29,19 +29,18 @@ public:
 public:
     VulkanCommandBuffer();
 
-    static void allocate(const VulkanContext& context, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary);
+    static void allocate(const VulkanDevice& device, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary);
+    static void allocate_and_begin_single_use(const VulkanDevice& device, VkCommandPool command_pool, VulkanCommandBuffer& out_buffer);
     void begin_recording(VkCommandBufferUsageFlags begin_flags);
-    void end_recording(const VulkanContext& context);
+    void end_recording();
     void begin_rendering(const VulkanContext& context);
     void end_rendering(const VulkanContext& context);
-    // void record_draw_commands(const VulkanContext& context, VulkanShaderPipeline& curr_pipeline, u32 image_index);
-    void allocate_and_begin_single_use(const VulkanContext& context, VkCommandPool command_pool, VulkanCommandBuffer& out_buffer);
     void end_single_use(const VulkanContext& context, VkCommandPool command_pool);
-    void reset(VulkanContext& context);
+    void reset();
     void submit(const VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, Option<VulkanFence> fence);
-    void free(const VulkanContext& context, VkCommandPool command_pool);
+    void free(const VulkanDevice& device, VkCommandPool command_pool);
     void copy_data_between_buffers(VkBuffer src, VkBuffer dst, VkBufferCopy& copy_region);
-    void copy_data_from_buffer_to_image(VkBuffer src_buffer, VulkanImage& dst_image, VkImageLayout dst_image_layout);
+    void copy_data_from_buffer_to_image(VkBuffer src_buffer, VulkanImage& dst_image, VkImageLayout dst_image_layout) const;
 };
 
 enum struct VulkanCommandPoolType {

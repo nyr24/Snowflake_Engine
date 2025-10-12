@@ -1,3 +1,4 @@
+#include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/event.hpp"
 #include "sf_containers/dynamic_array.hpp"
@@ -5,11 +6,15 @@
 namespace sf {
 
 struct EventSystemState {
-    DynamicArray<Event> event_lists[static_cast<u8>(SystemEventCode::COUNT)];
+    static constexpr u32 DEFAULT_EVENT_COUNT{50};
+    FixedArray<DynamicArray<Event>, static_cast<u32>(SystemEventCode::COUNT)> event_lists;
+
     EventSystemState()
     {
+        event_lists.resize_to_capacity();
+        
         for (DynamicArray<Event>& list : event_lists) {
-            list.reserve(50);
+            list.reserve(DEFAULT_EVENT_COUNT);
         }
     }
 };
@@ -40,7 +45,7 @@ SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event_
     return false;
 }
 
-SF_EXPORT bool event_execute_callback(u8 code, void* sender, EventContext* context) {
+SF_EXPORT bool event_execute_callbacks(u8 code, void* sender, Option<EventContext> context) {
     if (state.event_lists[code].count() == 0) {
         return false;
     }

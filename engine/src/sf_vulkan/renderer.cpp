@@ -25,11 +25,12 @@
 #include <string_view>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
-#include "glm/ext/matrix_clip_space.hpp"
-#include "glm/ext/matrix_float4x4.hpp"
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/ext/vector_float3.hpp"
-#include "glm/trigonometric.hpp"
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/trigonometric.hpp>
+#include <stb_image.h>
 
 namespace sf {
 
@@ -38,7 +39,6 @@ static VulkanContext vk_context{};
 
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
-static constexpr u32 MAX_TEXTURE_COUNT{ 10 };
 static const char* MAIN_SHADER_FILE_NAME{"shader.spv"};
 
 // NOTE: testing
@@ -47,8 +47,9 @@ struct ObjectRenderData {
     u32         id;
 };
 
-static const FixedArray<std::string_view, MAX_TEXTURE_COUNT> texture_names{ /* "brick_wall.jpg", "brick.jpg", "ocean.jpg", */ "mickey_mouse.jpg" }; 
-static FixedArray<Texture, MAX_TEXTURE_COUNT> textures;
+static const FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_names{ "brick_wall.jpg", "brick.jpg", "ocean.jpg", "mickey_mouse.jpg" }; 
+static FixedArray<Texture, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> textures;
+FixedArray<Texture*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> main_shader_default_textures;
 static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
@@ -67,8 +68,8 @@ void create_descriptor_layouts_and_sets_for_ubo(
     std::span<VkDescriptorSet> out_sets
 );
 bool create_main_shader_pipeline();
-bool create_textures();
-bool init_objects_render_data();
+bool create_textures(const VulkanCommandPool& graphics_command_pool);
+bool init_objects_render_data(const VulkanDevice& device, VulkanShaderPipeline& pipeline);
 void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio);
 void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
 
@@ -87,10 +88,6 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
         return false;
     }
 
-    if (!create_main_shader_pipeline()) {
-        return false;
-    }
-
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::GRAPHICS, vk_context.device.queue_family_info.graphics_family_index,
         VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, vk_context.graphics_command_pool);
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::TRANSFER, vk_context.device.queue_family_info.transfer_family_index,
@@ -100,31 +97,39 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
        return false; 
     }
 
-    VulkanCommandBuffer::allocate(vk_context, vk_context.graphics_command_pool.handle, std::span{vk_context.graphics_command_buffers.data(), vk_context.graphics_command_buffers.capacity()}, true);
-    VulkanCommandBuffer::allocate(vk_context, vk_context.transfer_command_pool.handle, std::span{vk_context.transfer_command_buffers.data(), vk_context.transfer_command_buffers.capacity()}, true);
+    VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {vk_context.graphics_command_buffers.data(), vk_context.graphics_command_buffers.capacity()}, true);
+    VulkanCommandBuffer::allocate(vk_context.device, vk_context.transfer_command_pool.handle, {vk_context.transfer_command_buffers.data(), vk_context.transfer_command_buffers.capacity()}, true);
+
+    if (!create_main_shader_pipeline()) {
+        return false;
+    }
+
+    if (!create_textures(vk_context.graphics_command_pool)) {
+        return false;
+    }
+
+    vk_context.pipeline.set_default_textures(main_shader_default_textures);
+    
+    if (!init_objects_render_data(vk_context.device, vk_context.pipeline)) {
+        return false;
+    }
 
     init_synch_primitives(vk_context);
 
     event_set_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
 
-    if (!create_textures()) {
-        return false;
-    }
-    
-    if (!init_objects_render_data()) {
-        return false;
-    }
-
     return true;
 }
 
-bool renderer_on_resize(u8 code, void* sender, void* listener_inst, EventContext* context) {
-    if (code != SystemEventCode::RESIZED || !context) {
+bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
+    if (code != SystemEventCode::RESIZED || maybe_context.is_none()) {
         return false;
     }
 
-    vk_context.framebuffer_width = static_cast<u16>(context->data.u16[0]);
-    vk_context.framebuffer_height = static_cast<u16>(context->data.u16[1]);
+    EventContext& context{ maybe_context.unwrap() };
+
+    vk_context.framebuffer_width = static_cast<u16>(context.data.u16[0]);
+    vk_context.framebuffer_height = static_cast<u16>(context.data.u16[1]);
     vk_context.framebuffer_size_generation++;
 
     return true;
@@ -181,7 +186,7 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     
     curr_transfer_buffer.copy_data_between_buffers(vk_context.vertex_index_buffer.staging_buffer.handle, vk_context.vertex_index_buffer.main_buffer.handle, vertex_copy_region);
     curr_transfer_buffer.copy_data_between_buffers(vk_context.vertex_index_buffer.staging_buffer.handle, vk_context.vertex_index_buffer.main_buffer.handle, index_copy_region);
-    curr_transfer_buffer.end_recording(vk_context);
+    curr_transfer_buffer.end_recording();
 
     VkSubmitInfo transfer_submit_info{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -199,7 +204,7 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     curr_graphics_buffer.begin_rendering(vk_context);
     vk_context.vertex_index_buffer.draw(curr_graphics_buffer);
     curr_graphics_buffer.end_rendering(vk_context);
-    curr_graphics_buffer.end_recording(vk_context);
+    curr_graphics_buffer.end_recording();
     
     VkPipelineStageFlags wait_dest_mask{ VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
 
@@ -219,12 +224,12 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     if (!curr_transfer_fence.wait(vk_context)) {
         return false;
     }
-    curr_transfer_buffer.reset(vk_context);
+    curr_transfer_buffer.reset();
 
     if (!curr_draw_fence.wait(vk_context)) {
         return false;
     }
-    curr_graphics_buffer.reset(vk_context);
+    curr_graphics_buffer.reset();
 
     vk_context.swapchain.present(vk_context, vk_context.device.present_queue, curr_render_finished_semaphore.handle, vk_context.image_index);
     return true;
@@ -281,18 +286,16 @@ VulkanContext::VulkanContext()
 VulkanContext::~VulkanContext() {
     vkDeviceWaitIdle(vk_context.device.logical_device);
 
-    default_texture.destroy(vk_context.device);
-
     destroy_synch_primitives(*this);
     
     if (transfer_command_pool.handle) {
         for (auto& cmd_buffer : transfer_command_buffers) {
-            cmd_buffer.free(*this, transfer_command_pool.handle);
+            cmd_buffer.free(device, transfer_command_pool.handle);
         }
     }
     if (graphics_command_pool.handle) {
         for (auto& cmd_buffer : graphics_command_buffers) {
-            cmd_buffer.free(*this, graphics_command_pool.handle);
+            cmd_buffer.free(device, graphics_command_pool.handle);
         }
     }
 
@@ -489,7 +492,7 @@ bool create_main_shader_pipeline() {
 
     VkViewport viewport{ vk_context.get_viewport() };
     VkRect2D scissors{ vk_context.get_scissors() };
-    
+
     return VulkanShaderPipeline::create(
         vk_context,
         MAIN_SHADER_FILE_NAME,
@@ -502,29 +505,41 @@ bool create_main_shader_pipeline() {
     );
 }
 
-
 // TODO: textures temp shared cmd_buffer
-bool create_textures() {
+bool create_textures(const VulkanCommandPool& graphics_command_pool) {
     textures.resize(texture_names.count());
+    stbi_set_flip_vertically_on_load(true);
+
+    VulkanCommandBuffer cmd_buffer;
+    VulkanCommandBuffer::allocate_and_begin_single_use(vk_context.device, vk_context.graphics_command_pool.handle, cmd_buffer);
     
     for (u32 i{0}; i < texture_names.count(); ++i) {
-        if (!Texture::create(vk_context, texture_names[i].data(), true, textures[i])) {
+        if (!Texture::load(vk_context.device, cmd_buffer, texture_names[i].data(), textures[i])) {
             LOG_ERROR("Error when trying to create default texture with name: {}", texture_names[i]);
+            cmd_buffer.reset();
+            cmd_buffer.free(vk_context.device, vk_context.graphics_command_pool.handle);
             return false;
         }
+    }
+    
+    cmd_buffer.end_single_use(vk_context, vk_context.graphics_command_pool.handle);
+
+    // assign main shader default textures
+    for (u32 i{0}; i < textures.count(); ++i) {
+        main_shader_default_textures.append(&textures[i]);
     }
     
     return true;
 }
 
-bool init_objects_render_data() {
+bool init_objects_render_data(const VulkanDevice& device, VulkanShaderPipeline& pipeline) {
     for (u32 i{0}; i < texture_names.count(); ++i) {
-        Result<u32> maybe_resource_id = vk_context.pipeline.acquire_resouces(vk_context.device);
+        Result<u32> maybe_resource_id = pipeline.acquire_resouces(vk_context.device);
         if (maybe_resource_id.is_err()) {
             return false;
         }
     
-        object_render_data.append(ObjectRenderData{
+        object_render_data.append({
             .texture = &textures[i],
             .id = maybe_resource_id.unwrap_copy()
         });
@@ -552,7 +567,7 @@ void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cm
         // glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(1.50f, 0.00f, 0.00f)) };
         render_data.model = { /* translate_mat */ rotate_mat };
         render_data.id = object_render_data[i].id;
-        render_data.textures[0] = object_render_data[i].texture;
+        // render_data.textures[0] = object_render_data[i].texture;
         pipeline.update_object_state(vk_context, render_data);
     }
 }

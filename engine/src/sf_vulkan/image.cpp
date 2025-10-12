@@ -71,7 +71,7 @@ bool VulkanImage::create(
 }
 
 void VulkanImage::transition_layout(
-    VkImage image, VulkanCommandBuffer& cmd_buffer,
+    VkImage image, const VulkanCommandBuffer& cmd_buffer,
     VkImageLayout old_layout, VkImageLayout new_layout,
     VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
     VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask

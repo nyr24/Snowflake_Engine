@@ -11,6 +11,7 @@
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
 #include "sf_vulkan/resource.hpp"
+#include "sf_containers/optional.hpp"
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
@@ -45,8 +46,6 @@ public:
     FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            render_finished_semaphores;
     FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>                draw_fences;
     FixedArray<VulkanFence, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>                transfer_fences;
-    // NOTE: TEMP
-    Texture                               default_texture;
     f64                                   frame_delta_time;
     u32                                   image_index;
     u32                                   curr_frame;
@@ -76,7 +75,7 @@ struct VulkanRenderer {
 };
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state);
-bool renderer_on_resize(u8 code, void* sender, void* listener_inst, EventContext* context);
+bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 bool renderer_begin_frame(f64 delta_time);
 void renderer_end_frame(f64 delta_time);
 bool renderer_draw_frame(const RenderPacket& packet);

@@ -1,3 +1,4 @@
+#include "sf_containers/optional.hpp"
 #include "sf_core/event.hpp"
 #include "sf_platform/defines.hpp"
 
@@ -202,7 +203,7 @@ static void xdg_surface_handle_configure(void *data,
 }
 
 static void xdg_toplevel_handle_close(void* data, xdg_toplevel* xdg_toplevel) {
-    event_execute_callback(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
+    event_execute_callbacks(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, {None::VALUE});
 }
 
 static void xdg_toplevel_handle_configure(void* data, xdg_toplevel* xdg_toplevel, i32 width, i32 height, wl_array* states) {
@@ -215,7 +216,7 @@ static void xdg_toplevel_handle_configure(void* data, xdg_toplevel* xdg_toplevel
     EventContext context;
     context.data.u16[0] = static_cast<u16>(width);
     context.data.u16[1] = static_cast<u16>(height);
-    event_execute_callback(SystemEventCode::RESIZED, nullptr, &context);
+    event_execute_callbacks(SystemEventCode::RESIZED, nullptr, {context});
 }
 
 static void xdg_toplevel_handle_configure_bounds(void* data, xdg_toplevel* xdg_toplevel, i32 width, i32 height) {

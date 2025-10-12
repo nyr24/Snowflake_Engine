@@ -3,6 +3,7 @@
 #include "sf_core/input.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
+#include "sf_containers/optional.hpp"
 #include "sf_vulkan/renderer.hpp"
 
 namespace sf {
@@ -107,7 +108,7 @@ void application_run() {
     application_state.is_running = false;
 }
 
-bool application_on_event(u8 code, void* sender, void* listener_inst, EventContext* context) {
+bool application_on_event(u8 code, void* sender, void* listener_inst, Option<EventContext> context) {
     switch (static_cast<SystemEventCode>(code)) {
         case SystemEventCode::APPLICATION_QUIT: {
             application_state.is_running = false;
@@ -119,16 +120,18 @@ bool application_on_event(u8 code, void* sender, void* listener_inst, EventConte
     return false;
 }
 
-bool application_on_key(u8 code, void* sender, void* listener_inst, EventContext* context) {
-    if (!context) {
+bool application_on_key(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
+    if (maybe_context.is_none()) {
         return false;
     }
 
+    EventContext& context{ maybe_context.unwrap() };
+
     if (code == static_cast<u8>(SystemEventCode::KEY_PRESSED)) {
-        u8 key_code = context->data.u8[0];
+        u8 key_code = context.data.u8[0];
         switch (static_cast<Key>(key_code)) {
             case Key::ESCAPE: {
-                event_execute_callback(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
+                event_execute_callbacks(SystemEventCode::APPLICATION_QUIT, nullptr, {None::VALUE});
                 return true;
             };
             default: {
@@ -136,7 +139,7 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, EventContext
             } break;
         }
     } else if (code == static_cast<u8>(SystemEventCode::KEY_RELEASED)) {
-        u8 key_code = context->data.u8[0];
+        u8 key_code = context.data.u8[0];
         switch (static_cast<Key>(key_code)) {
             default: {
                 LOG_DEBUG("Key '{}' was released", (char)key_code);
@@ -147,12 +150,14 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, EventContext
     return false;
 }
 
-bool application_on_mouse(u8 code, void* sender, void* listener_inst, EventContext* context) {
-    if (!context) {
+bool application_on_mouse(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
+    if (maybe_context.is_none()) {
         return false;
     }
 
-    u8 mouse_btn = context->data.u8[0];
+    EventContext& context{ maybe_context.unwrap() };
+
+    u8 mouse_btn = context.data.u8[0];
     if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_PRESSED)) {
         switch (static_cast<MouseButton>(mouse_btn)) {
             default: {

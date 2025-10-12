@@ -1,9 +1,14 @@
 #include "sf_vulkan/resource.hpp"
+#include "sf_core/asserts_sf.hpp"
+#include "sf_core/logger.hpp"
+#include "sf_core/utility.hpp"
 #include "sf_vulkan/buffer.hpp"
+#include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/image.hpp"
+#include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/renderer.hpp"
-#include "sf_vulkan/synch.hpp"
+#include <string_view>
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -15,58 +20,117 @@ namespace fs = std::filesystem;
 
 namespace sf {
 
-// TODO: 
-// All of the helper functions that submit commands so far have been set up to execute synchronously by waiting for the queue to become idle.
-// For practical applications it is recommended to combine these operations in a single command buffer and execute them asynchronously for higher throughput,
-// especially the transitions and copy in the createTextureImage function. Try to experiment with this by creating a setupCommandBuffer that the helper functions record commands into,
-// and add a flushSetupCommands to execute the commands that have been recorded so far. It's best to do this after the texture mapping works to check if the texture resources are still set up correctly.
+bool Texture::load(
+    const VulkanDevice& device,
+    VulkanCommandBuffer& cmd_buffer,
+    const char* file_name,
+    Texture& out_texture)
+{
+    Texture temp_texture;
+    
+    if (!load_from_disk(file_name, temp_texture)) {
+        return false;
+    }
 
-// THINK: why texture does not get id from acquire_resources?
-bool Texture::create(const VulkanContext& context, const char* file_name, bool has_transparency, Texture& out_texture) {
+    u32 curr_generation = out_texture.generation;
+    out_texture.generation = INVALID_ID;
+
+    if (!temp_texture.upload_to_gpu(device, cmd_buffer)) {
+        return false;
+    }
+
+    Texture old{ out_texture };
+    out_texture = temp_texture;
+
+    old.destroy(device);
+
+    if (curr_generation == INVALID_ID) {
+        out_texture.generation = 0;
+    } else {
+        out_texture.generation = curr_generation + 1;
+    }
+
+    return true;
+}
+    
+bool Texture::load_from_disk(const char* file_name, Texture& out_texture) {
 #ifdef DEBUG
     fs::path texture_path = fs::current_path() / "build" / "debug/engine/textures/" / file_name;
 #else
     fs::path texture_path = fs::current_path() / "build" / "debug/engine/textures/" / file_name;
 #endif
 
-    out_texture.pixels = stbi_load(texture_path.c_str(), reinterpret_cast<i32*>(&out_texture.width), reinterpret_cast<i32*>(&out_texture.height), reinterpret_cast<i32*>(out_texture.channel_count), STBI_rgb_alpha);
+    // detect format
+    std::string_view extension{ extract_extension_from_file_path({ texture_path.c_str() }) };
+    out_texture.format = Texture::map_extension_to_format(extension);
+
+    SF_ASSERT_MSG(out_texture.format != ImageFormat::COUNT, "Should be valid image format");
+
+    constexpr u32 REQUIRED_CHANNEL_COUNT{ 4 /* out_texture.format == ImageFormat::PNG ? 4u : 3u */ };
+
+    out_texture.pixels = stbi_load(texture_path.c_str(), reinterpret_cast<i32*>(&out_texture.width),
+        reinterpret_cast<i32*>(&out_texture.height), reinterpret_cast<i32*>(out_texture.channel_count), REQUIRED_CHANNEL_COUNT);
+
     if (!out_texture.pixels) {
         return false;
     }
+    if (stbi_failure_reason()) {
+        LOG_WARN("Texture load failed for texture {},\n\treason: {}", file_name, stbi_failure_reason());
+    }
 
-    u32 image_size = out_texture.width * out_texture.height * 4;
+    out_texture.generation = 0;
+    out_texture.size = out_texture.width * out_texture.height * REQUIRED_CHANNEL_COUNT;
 
-    VulkanBuffer staging_buffer;
+    // check for transparency for png images
+    if (out_texture.format == ImageFormat::PNG) {
+        bool has_transparency{false};
+
+        for (u32 i{0}; i < out_texture.size; i += 4) {
+            if (out_texture.pixels[i + 3] < 255) {
+                has_transparency = true;
+                break;
+            }
+        }
+
+        out_texture.has_transparency = has_transparency;
+    } else {
+        out_texture.has_transparency = false;
+    }
+
+    return true;
+}
+
+// THINK: why texture does not get id from acquire_resources?
+bool Texture::upload_to_gpu(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer) {
+    SF_ASSERT_MSG(cmd_buffer.state == VulkanCommandBufferState::RECORDING_BEGIN, "Should be in begin state");
+    
     VulkanBuffer::create(
-        context.device, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE,
+        device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE,
         static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT), staging_buffer
     );
 
-    staging_buffer.copy_data(context.device, out_texture.pixels, image_size);
+    staging_buffer.copy_data(device, pixels, size);
 
     if (!VulkanImage::create(
-        context.device, out_texture.image, VK_IMAGE_TYPE_2D,
-        out_texture.width, out_texture.height, VK_FORMAT_B8G8R8A8_UNORM,
+        device, image, VK_IMAGE_TYPE_2D,
+        width, height, VK_FORMAT_B8G8R8A8_UNORM,
         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, true, VK_IMAGE_ASPECT_COLOR_BIT
     )) {
         return false;
     }
 
-    VulkanCommandBuffer cmd_buffer;
-    cmd_buffer.allocate_and_begin_single_use(context, context.graphics_command_pool.handle, cmd_buffer);
-
     VulkanImage::transition_layout(
-        out_texture.image.handle, cmd_buffer,
+        image.handle, cmd_buffer,
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT
     );
 
-    cmd_buffer.copy_data_from_buffer_to_image(staging_buffer.handle, out_texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    cmd_buffer.copy_data_from_buffer_to_image(staging_buffer.handle, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     VulkanImage::transition_layout(
-        out_texture.image.handle, cmd_buffer,
+        image.handle, cmd_buffer,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT
@@ -92,21 +156,34 @@ bool Texture::create(const VulkanContext& context, const char* file_name, bool h
     };
 
     // TODO: custom allocator
-    sf_vk_check(vkCreateSampler(context.device.logical_device, &sampler_create_info, nullptr, &out_texture.sampler));
-
-    out_texture.has_transparency = has_transparency;
-    out_texture.generation++;
-
-    cmd_buffer.end_single_use(context, context.graphics_command_pool.handle);
-    staging_buffer.destroy(context.device);
-
+    sf_vk_check(vkCreateSampler(device.logical_device, &sampler_create_info, nullptr, &sampler));
+    generation++;
+    
     return true;
+}
+
+ImageFormat Texture::map_extension_to_format(std::string_view extension) {
+    for (u32 i{0}; i < image_extensions.count(); ++i) {
+        if (image_extensions[i] == extension) {
+            return static_cast<ImageFormat>(i);
+        }
+    }
+
+    return ImageFormat::COUNT;
 }
 
 void Texture::destroy(const VulkanDevice& device) {
     vkDeviceWaitIdle(device.logical_device);
     
     image.destroy(device);
+    staging_buffer.destroy(device);
+
+    if (pixels) {
+        stbi_image_free(pixels);
+        pixels = nullptr;
+    }
+
+    generation = INVALID_ID;
 
     if (sampler) {
         // TODO: custom allocator

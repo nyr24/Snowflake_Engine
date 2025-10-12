@@ -45,5 +45,6 @@ VSOutput vertMain(VSInput input) {
 float4 fragMain(VSOutput input) : SV_Target
 {
     float4 sampled_texture = sampler.Sample(input.texture_coord);
-    return float4(object_ubo.diffuse_color.xyz * sampled_texture.xyz, 1.0f);
+    // return float4(object_ubo.diffuse_color.xyz * sampled_texture.xyz, 1.0f);
+    return sampled_texture;
 }

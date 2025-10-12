@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sf_core/defines.hpp"
+#include "sf_containers/optional.hpp"
 
 namespace sf {
 
@@ -24,14 +25,6 @@ struct EventContext {
     Data data;
 };
 
-// Should return true if handled.
-using OnEventFn = bool(*)(u8 code, void* sender, void* listener_inst, EventContext* context);
-
-struct Event {
-    void*       listener;
-    OnEventFn   callback;
-};
-
 // System internal event codes. Application should use codes beyond 255.
 enum SystemEventCode : u8 {
     APPLICATION_QUIT,
@@ -45,8 +38,16 @@ enum SystemEventCode : u8 {
     COUNT = 0xFF
 };
 
+// Should return true if handled.
+using OnEventFn = bool(*)(u8 code, void* sender, void* listener_inst, Option<EventContext> context);
+
+struct Event {
+    void*       listener;
+    OnEventFn   callback;
+};
+
 SF_EXPORT bool event_set_listener(u8 code, void* listener, OnEventFn on_event);
 SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event);
-SF_EXPORT bool event_execute_callback(u8 code, void* sender, EventContext* context);
+SF_EXPORT bool event_execute_callbacks(u8 code, void* sender, Option<EventContext> context);
 
 } // sf

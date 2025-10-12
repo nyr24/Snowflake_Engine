@@ -38,7 +38,7 @@ VulkanCommandBuffer::VulkanCommandBuffer()
 {
 }
 
-void VulkanCommandBuffer::allocate(const VulkanContext& context, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary) {
+void VulkanCommandBuffer::allocate(const VulkanDevice& device, VkCommandPool command_pool, std::span<VulkanCommandBuffer> out_buffers, bool is_primary) {
     FixedArray<VkCommandBuffer, MAX_BUFFER_ALLOC_COUNT> handles(out_buffers.size());
 
     VkCommandBufferAllocateInfo alloc_info{
@@ -48,7 +48,7 @@ void VulkanCommandBuffer::allocate(const VulkanContext& context, VkCommandPool c
         .commandBufferCount = static_cast<u32>(out_buffers.size())
     };
 
-    sf_vk_check(vkAllocateCommandBuffers(context.device.logical_device, &alloc_info, handles.data()));
+    sf_vk_check(vkAllocateCommandBuffers(device.logical_device, &alloc_info, handles.data()));
 
     for (u32 i{0}; i < out_buffers.size(); ++i) {
         out_buffers[i].handle = handles[i];
@@ -126,7 +126,7 @@ void VulkanCommandBuffer::copy_data_between_buffers(VkBuffer src, VkBuffer dst, 
     vkCmdCopyBuffer(handle, src, dst, 1, &copy_region);
 }
 
-void VulkanCommandBuffer::copy_data_from_buffer_to_image(VkBuffer src_buffer, VulkanImage& dst_image, VkImageLayout dst_image_layout) {
+void VulkanCommandBuffer::copy_data_from_buffer_to_image(VkBuffer src_buffer, VulkanImage& dst_image, VkImageLayout dst_image_layout) const {
     VkBufferImageCopy copy_region{
         .imageSubresource = {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -144,7 +144,7 @@ void VulkanCommandBuffer::copy_data_from_buffer_to_image(VkBuffer src_buffer, Vu
     vkCmdCopyBufferToImage(handle, src_buffer, dst_image.handle, dst_image_layout, 1, &copy_region);
 }
 
-void VulkanCommandBuffer::end_recording(const VulkanContext& context) {
+void VulkanCommandBuffer::end_recording() {
     if (state != VulkanCommandBufferState::RECORDING_BEGIN) {
         LOG_WARN("Trying to end command_buffer which is not in RECORDING_END state");
         return;
@@ -177,34 +177,34 @@ void VulkanCommandBuffer::submit(const VulkanContext& context, VkQueue queue, Vk
     state = VulkanCommandBufferState::SUBMITTED;
 }
 
-void VulkanCommandBuffer::reset(VulkanContext& context) {
+void VulkanCommandBuffer::reset() {
     sf_vk_check(vkResetCommandBuffer(handle, 0));
     state = VulkanCommandBufferState::READY;
 }
 
-void VulkanCommandBuffer::allocate_and_begin_single_use(const VulkanContext& context, VkCommandPool command_pool, VulkanCommandBuffer& out_buffer) {
-    VulkanCommandBuffer::allocate(context, command_pool, {&out_buffer, 1}, true);
+void VulkanCommandBuffer::allocate_and_begin_single_use(const VulkanDevice& device, VkCommandPool command_pool, VulkanCommandBuffer& out_buffer) {
+    VulkanCommandBuffer::allocate(device, command_pool, {&out_buffer, 1}, true);
     out_buffer.begin_recording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 }
 
 void VulkanCommandBuffer::end_single_use(const VulkanContext& context, VkCommandPool command_pool) {
-    this->end_recording(context);
+    this->end_recording();
 
     VkSubmitInfo submit_info{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &handle
     };
-    
+
     this->submit(context, context.device.graphics_queue, submit_info, {None::VALUE});
     sf_vk_check(vkQueueWaitIdle(context.device.graphics_queue));
 
-    this->free(context, command_pool);
+    this->free(context.device, command_pool);
 }
 
-void VulkanCommandBuffer::free(const VulkanContext &contex, VkCommandPool command_pool) {
+void VulkanCommandBuffer::free(const VulkanDevice& device, VkCommandPool command_pool) {
     if (handle) {
-        vkFreeCommandBuffers(contex.device.logical_device, command_pool, 1, &handle);
+        vkFreeCommandBuffers(device.logical_device, command_pool, 1, &handle);
         handle = nullptr;
     }
     state = VulkanCommandBufferState::NOT_ALLOCATED;
