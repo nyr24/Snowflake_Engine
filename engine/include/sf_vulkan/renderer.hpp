@@ -10,7 +10,7 @@
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
-#include "sf_vulkan/resource.hpp"
+#include "sf_vulkan/texture.hpp"
 #include "sf_containers/optional.hpp"
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
@@ -40,6 +40,7 @@ public:
     VulkanShaderPipeline                  pipeline;
     VulkanCommandPool                     graphics_command_pool;
     VulkanCommandPool                     transfer_command_pool;
+    VulkanCommandBuffer                   texture_load_command_buffer;
     FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        graphics_command_buffers;
     FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        transfer_command_buffers;
     FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            image_available_semaphores;

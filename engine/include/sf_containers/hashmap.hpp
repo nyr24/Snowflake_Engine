@@ -1,12 +1,14 @@
 #pragma once
 
 #include "sf_core/defines.hpp"
+#include "sf_core/logger.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_containers/iterator.hpp"
 #include "sf_containers/optional.hpp"
-#include "sf_core/asserts_sf.hpp"
+#include <cstring>
 #include <functional>
+#include <string_view>
 #include <utility>
 
 namespace sf {
@@ -86,7 +88,7 @@ public:
         : _capacity(static_cast<u32>(prealloc_count))
         , _count{ 0 }
         , _buffer{ static_cast<Bucket*>(sf_mem_alloc_typed<Bucket, true>(prealloc_count)) }
-        , _config{ std::move(config) }
+        , _config{ config }
     {
         init_buffer_empty(_buffer, _capacity);
     }
@@ -117,8 +119,11 @@ public:
     // asserts if hashmap needs reallocate buffer
     template<typename Key, typename Val>
     requires SameTypes<K, Key> && SameTypes<V, Val>
-    void put_assume_capacity(K&& key, V&& val) noexcept {
-        SF_ASSERT_MSG(_count <= (static_cast<u32>(_capacity * _config.load_factor)), "Not enough capacity in HashMap");
+    bool put_assume_capacity(K&& key, V&& val) noexcept {
+        if (_count <= static_cast<u32>(_capacity * _config.load_factor)) {
+            LOG_ERROR("Not enough capacity in HashMap");
+            return false;
+        }
 
         u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
 
@@ -133,6 +138,8 @@ public:
         } else {
             _buffer[index].value = std::move(val);
         }
+
+        return true;
     }
 
     // put without update
@@ -159,13 +166,13 @@ public:
         }
     }
 
-    Option<V> get(ConstLRefOrValType<K> key) noexcept {
+    Option<V*> get(ConstLRefOrValType<K> key) noexcept {
         Option<Bucket*> maybe_bucket = find_bucket(key);
         if (maybe_bucket.is_none()) {
-            return None::VALUE;
+            return {None::VALUE};
         }
 
-        return maybe_bucket.unwrap()->value;
+        return {&maybe_bucket.unwrap()->value};
     }
 
     bool remove(ConstLRefOrValType<K> key) noexcept {
@@ -191,7 +198,7 @@ public:
 private:
     void realloc() noexcept {
         u32 new_capacity = _capacity * _config.grow_factor;
-        Bucket* new_buffer = static_cast<Bucket*>(sf_mem_realloc_typed<Bucket>(new_capacity));
+        Bucket* new_buffer = static_cast<Bucket*>(sf_mem_realloc_typed<Bucket>(_buffer, new_capacity));
         init_buffer_empty(new_buffer, new_capacity);
 
         for (u32 i{0}; i < _capacity; ++i) {
@@ -234,7 +241,8 @@ private:
         u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
         u32 search_count = 0;
 
-        while ((_buffer[index].state != Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) && search_count < _capacity) {
+        // TODO:
+        while ((_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) && search_count < _capacity) {
             ++index;
             index %= _capacity;
             ++search_count;
@@ -261,6 +269,32 @@ u64 hashfn_default(ConstLRefOrValType<K> key) noexcept {
 
     for (u32 i{0}; i < sizeof(K); ++i) {
         hash ^= bytes[i];
+        hash *= PRIME;
+    }
+
+    return hash;
+}
+
+template<>
+inline u64 hashfn_default<std::string_view>(ConstLRefOrValType<std::string_view> key) noexcept {
+    u64 hash = OFFSET_BASIS;
+
+    for (u32 i{0}; i < key.size(); ++i) {
+        hash ^= key[i];
+        hash *= PRIME;
+    }
+
+    return hash;
+}
+
+template<>
+inline u64 hashfn_default<const char*>(ConstLRefOrValType<const char*> key) noexcept {
+    u64 hash = OFFSET_BASIS;
+
+    u32 s_len{ static_cast<u32>(strlen(key)) };
+
+    for (u32 i{0}; i < s_len; ++i) {
+        hash ^= key[i];
         hash *= PRIME;
     }
 

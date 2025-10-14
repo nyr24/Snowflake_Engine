@@ -187,7 +187,7 @@ void VulkanCommandBuffer::allocate_and_begin_single_use(const VulkanDevice& devi
     out_buffer.begin_recording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 }
 
-void VulkanCommandBuffer::end_single_use(const VulkanContext& context, VkCommandPool command_pool) {
+void VulkanCommandBuffer::end_single_use(const VulkanContext& context, VkQueue queue, VkCommandPool command_pool) {
     this->end_recording();
 
     VkSubmitInfo submit_info{

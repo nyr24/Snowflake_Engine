@@ -6,13 +6,14 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
+#include "sf_core/constants.hpp"
 #include "sf_core/io.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/renderer.hpp"
-#include "sf_vulkan/resource.hpp"
+#include "sf_vulkan/texture.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include <vulkan/vulkan_core.h>
 #include <filesystem>
@@ -38,13 +39,14 @@ VulkanShaderPipeline::VulkanShaderPipeline()
 }
     
 bool VulkanShaderPipeline::create(
-    const VulkanContext&           context,
+    VulkanContext&                 context,
     const char*                    shader_file_name,
     VkPrimitiveTopology            primitive_topology,
     bool                           enable_color_blend,
     const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& attrib_description_config,
     VkViewport                     viewport,
     VkRect2D                       scissors,
+    std::span<const TextureInputConfig> default_texture_configs,
     VulkanShaderPipeline&          out_pipeline
 ) {
     #ifdef SF_DEBUG
@@ -57,6 +59,8 @@ bool VulkanShaderPipeline::create(
     if (maybe_shader_module.is_err()) {
         return false;
     }
+
+    out_pipeline.context = &context;
 
     out_pipeline.shader_handle = maybe_shader_module.unwrap();
 
@@ -76,6 +80,7 @@ bool VulkanShaderPipeline::create(
     };
 
     out_pipeline.create_attribute_descriptions(attrib_description_config);
+    out_pipeline.create_default_textures(default_texture_configs);
 
     // Global descriptors
     if (!VulkanGlobalUniformBufferObject::create(context.device, out_pipeline.global_ubo)) {
@@ -369,10 +374,6 @@ void VulkanShaderPipeline::release_resouces(const VulkanDevice& device, u32 obje
     }
 }
 
-void VulkanShaderPipeline::set_default_textures(const FixedArray<Texture*, MAX_DEFAULT_TEXTURES>& default_textures) {
-    this->default_textures = default_textures;
-}
-
 bool VulkanShaderPipeline::handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
     SF_ASSERT_MSG(maybe_context.is_some(), "Context should be presented");
     EventContext& context{ maybe_context.unwrap() };
@@ -400,6 +401,15 @@ void VulkanShaderPipeline::create_attribute_descriptions(const FixedArray<VkVert
 
     for (u32 i{0}; i < input_descriptions.count(); ++i) {
         attrib_descriptions[i] = input_descriptions[i];
+    }
+}
+
+void VulkanShaderPipeline::create_default_textures(std::span<const TextureInputConfig> configs) {
+    SF_ASSERT_MSG(context, "Should be valid pointer to context");
+    
+    for (const auto& config : configs) {
+        Texture* texture = texture_system_get_texture(context->device, context->texture_load_command_buffer, config);
+        default_textures.append(texture);
     }
 }
 

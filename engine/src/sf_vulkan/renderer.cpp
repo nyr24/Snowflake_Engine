@@ -7,7 +7,7 @@
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/pipeline.hpp"
-#include "sf_vulkan/resource.hpp"
+#include "sf_vulkan/texture.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/synch.hpp"
 #include "sf_vulkan/renderer.hpp"
@@ -22,7 +22,6 @@
 // #include "sf_allocators/free_list_allocator.hpp"
 // #include <list>
 #include <span>
-#include <string_view>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 #include <glm/ext/matrix_clip_space.hpp>
@@ -47,9 +46,9 @@ struct ObjectRenderData {
     u32         id;
 };
 
-static const FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_names{ "brick_wall.jpg", "brick.jpg", "ocean.jpg", "mickey_mouse.jpg" }; 
-static FixedArray<Texture, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> textures;
-FixedArray<Texture*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> main_shader_default_textures;
+static const FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_create_configs{
+    {"brick_wall.jpg"}, {"asphalt.jpg"}, {"grass.jpg"}, {"painting.jpg"}, {"fabric_suit.jpg"}, {"mickey_mouse.jpg"}
+}; 
 static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
@@ -67,9 +66,9 @@ void create_descriptor_layouts_and_sets_for_ubo(
     std::span<VulkanDescriptorSetLayout> out_layouts,
     std::span<VkDescriptorSet> out_sets
 );
-bool create_main_shader_pipeline();
-bool create_textures(const VulkanCommandPool& graphics_command_pool);
-bool init_objects_render_data(const VulkanDevice& device, VulkanShaderPipeline& pipeline);
+bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs);
+bool create_initial_textures(VulkanCommandBuffer& cmd_buffer);
+bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline);
 void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio);
 void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
 
@@ -98,19 +97,18 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     }
 
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {vk_context.graphics_command_buffers.data(), vk_context.graphics_command_buffers.capacity()}, true);
+    VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {&vk_context.texture_load_command_buffer, 1}, true);
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.transfer_command_pool.handle, {vk_context.transfer_command_buffers.data(), vk_context.transfer_command_buffers.capacity()}, true);
 
-    if (!create_main_shader_pipeline()) {
+    if (!create_initial_textures(vk_context.texture_load_command_buffer)) {
         return false;
     }
 
-    if (!create_textures(vk_context.graphics_command_pool)) {
+    if (!create_main_shader_pipeline({texture_create_configs.data() + 2, 2})) {
         return false;
     }
 
-    vk_context.pipeline.set_default_textures(main_shader_default_textures);
-    
-    if (!init_objects_render_data(vk_context.device, vk_context.pipeline)) {
+    if (!init_objects_render_data(vk_context.device, vk_context.texture_load_command_buffer, vk_context.pipeline)) {
         return false;
     }
 
@@ -290,11 +288,17 @@ VulkanContext::~VulkanContext() {
     
     if (transfer_command_pool.handle) {
         for (auto& cmd_buffer : transfer_command_buffers) {
+            cmd_buffer.reset();
             cmd_buffer.free(device, transfer_command_pool.handle);
         }
     }
+
+    texture_load_command_buffer.reset();
+    texture_load_command_buffer.free(device, graphics_command_pool.handle);
+
     if (graphics_command_pool.handle) {
         for (auto& cmd_buffer : graphics_command_buffers) {
+            cmd_buffer.reset();
             cmd_buffer.free(device, graphics_command_pool.handle);
         }
     }
@@ -476,8 +480,7 @@ void destroy_synch_primitives(VulkanContext& context) {
     }
 }
 
-// TODO: generate attrib descriptions from the input type of Vertex inside a pipeline
-bool create_main_shader_pipeline() {
+bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs) {
     FixedArray<VkVertexInputAttributeDescription, VulkanShaderPipeline::MAX_ATTRIB_COUNT> attrib_descriptions(MAIN_PIPELINE_ATTRIB_COUNT);
     // Position
     attrib_descriptions[0].binding = 0;
@@ -501,49 +504,41 @@ bool create_main_shader_pipeline() {
         attrib_descriptions,
         viewport,
         scissors,
+        // assign all loaded textures to this shader
+        texture_configs,
         vk_context.pipeline
     );
 }
 
-// TODO: textures temp shared cmd_buffer
-bool create_textures(const VulkanCommandPool& graphics_command_pool) {
-    textures.resize(texture_names.count());
-    stbi_set_flip_vertically_on_load(true);
+bool create_initial_textures(VulkanCommandBuffer& cmd_buffer) {
+    cmd_buffer.begin_recording(0);
+    texture_system_create_textures(vk_context.device, cmd_buffer, {texture_create_configs.data(), texture_create_configs.count()});
+    cmd_buffer.end_recording();
 
-    VulkanCommandBuffer cmd_buffer;
-    VulkanCommandBuffer::allocate_and_begin_single_use(vk_context.device, vk_context.graphics_command_pool.handle, cmd_buffer);
-    
-    for (u32 i{0}; i < texture_names.count(); ++i) {
-        if (!Texture::load(vk_context.device, cmd_buffer, texture_names[i].data(), textures[i])) {
-            LOG_ERROR("Error when trying to create default texture with name: {}", texture_names[i]);
-            cmd_buffer.reset();
-            cmd_buffer.free(vk_context.device, vk_context.graphics_command_pool.handle);
-            return false;
-        }
-    }
-    
-    cmd_buffer.end_single_use(vk_context, vk_context.graphics_command_pool.handle);
+    VkSubmitInfo submit_info{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd_buffer.handle
+    };
 
-    // assign main shader default textures
-    for (u32 i{0}; i < textures.count(); ++i) {
-        main_shader_default_textures.append(&textures[i]);
-    }
-    
+    cmd_buffer.submit(vk_context, vk_context.device.graphics_queue, submit_info, {None::VALUE});
+    vkQueueWaitIdle(vk_context.device.graphics_queue);
+
     return true;
 }
 
-bool init_objects_render_data(const VulkanDevice& device, VulkanShaderPipeline& pipeline) {
-    for (u32 i{0}; i < texture_names.count(); ++i) {
-        Result<u32> maybe_resource_id = pipeline.acquire_resouces(vk_context.device);
-        if (maybe_resource_id.is_err()) {
-            return false;
-        }
-    
-        object_render_data.append({
-            .texture = &textures[i],
-            .id = maybe_resource_id.unwrap_copy()
-        });
+bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline) {
+    Result<u32> maybe_resource_id = pipeline.acquire_resouces(vk_context.device);
+    if (maybe_resource_id.is_err()) {
+        return false;
     }
+
+    // texture_system_get_texture(device, cmd_buffer, {"grass.jpg"});
+
+    object_render_data.append({
+        .texture = nullptr,
+        .id = maybe_resource_id.unwrap_copy()
+    });
 
     return true;
 }
@@ -556,10 +551,7 @@ void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipel
     pipeline.update_global_state(device, curr_frame, view, proj);
 }
 
-// THINK: bind then update or otherwise?
 void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
-    SF_ASSERT_MSG(object_render_data.count() == texture_names.count(), "Each object should have a bounded texture");
-    
     glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) };
 
     for (u32 i{0}; i < object_render_data.count(); ++i) {
@@ -567,7 +559,7 @@ void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cm
         // glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(1.50f, 0.00f, 0.00f)) };
         render_data.model = { /* translate_mat */ rotate_mat };
         render_data.id = object_render_data[i].id;
-        // render_data.textures[0] = object_render_data[i].texture;
+        render_data.textures[0] = object_render_data[i].texture;
         pipeline.update_object_state(vk_context, render_data);
     }
 }

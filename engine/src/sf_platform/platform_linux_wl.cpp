@@ -519,11 +519,8 @@ static void keyboard_handle_key(
     xkb_keysym_get_name(sym, buf, sizeof(buf));
 
     Key translated_key = translate_keycode(sym);
-    if (translated_key == Key::LALT) {
-        
-    }
 
-    if (translated_key != Key::COUNT) {
+    if (translated_key < Key::COUNT) {
         input_process_key(translated_key, key_state == WL_KEYBOARD_KEY_STATE_PRESSED);
     }
 }

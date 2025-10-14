@@ -6,7 +6,7 @@
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/swapchain.hpp"
-#include "sf_vulkan/resource.hpp"
+#include "sf_vulkan/texture.hpp"
 #include "sf_containers/result.hpp"
 #include <filesystem>
 #include <span>
@@ -73,8 +73,9 @@ struct EventContext;
 struct VulkanShaderPipeline {
 public:
     static constexpr u32 MAX_ATTRIB_COUNT{ 3 };
-    static constexpr u32 MAX_DEFAULT_TEXTURES{ 4 };
+    static constexpr u32 MAX_DEFAULT_TEXTURES{ 10 };
 
+    VulkanContext*                                                                context;
     VulkanGlobalUniformBufferObject                                               global_ubo;
     VulkanLocalUniformBufferObject                                                local_ubo;
     FixedArray<Texture*, MAX_DEFAULT_TEXTURES>                                    default_textures;
@@ -90,19 +91,21 @@ public:
     VkPipelineLayout             pipeline_layout;
     VkViewport                   viewport;
     VkRect2D                     scissors;
-    u32                          default_texture_index;
     u32                          object_id_counter;
+    // NOTE: TEMP
+    u32                          default_texture_index;
 public:
     VulkanShaderPipeline();
     
     static bool create(
-        const VulkanContext&           context,
+        VulkanContext&                 context,
         const char*                    shader_file_name,
         VkPrimitiveTopology            primitive_topology,
         bool                           enable_color_blend,
         const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& attrib_descriptions,
         VkViewport                     viewport,
         VkRect2D                       scissors,
+        std::span<const TextureInputConfig> default_texture_configs,
         VulkanShaderPipeline&          out_pipeline
     );
     void destroy(const VulkanDevice& device);
@@ -112,12 +115,12 @@ public:
     void update_object_state(VulkanContext& context, GeometryRenderData& render_data);
     Result<u32> acquire_resouces(const VulkanDevice& device);
     void release_resouces(const VulkanDevice& device, u32 object_id);
-    void set_default_textures(const FixedArray<Texture*, MAX_DEFAULT_TEXTURES>& default_textures);
     static bool handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> context);
 private:
     void create_attribute_descriptions(const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& config);
     void create_global_descriptors(const VulkanDevice& device);
     void create_local_descriptors(const VulkanDevice& device);
+    void create_default_textures(std::span<const TextureInputConfig> configs);
     void update_global_descriptors(const VulkanDevice& device);
     void update_local_descriptors(const VulkanDevice& device);
 };

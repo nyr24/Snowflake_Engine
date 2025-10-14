@@ -35,7 +35,7 @@ public:
     void end_recording();
     void begin_rendering(const VulkanContext& context);
     void end_rendering(const VulkanContext& context);
-    void end_single_use(const VulkanContext& context, VkCommandPool command_pool);
+    void end_single_use(const VulkanContext& context, VkQueue queue, VkCommandPool command_pool);
     void reset();
     void submit(const VulkanContext& context, VkQueue queue, VkSubmitInfo& submit_info, Option<VulkanFence> fence);
     void free(const VulkanDevice& device, VkCommandPool command_pool);

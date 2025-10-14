@@ -17,6 +17,12 @@ struct EventSystemState {
             list.reserve(DEFAULT_EVENT_COUNT);
         }
     }
+
+    ~EventSystemState() {
+        for (auto& list : event_lists) {
+            list.clear();
+        }
+    }
 };
 
 static EventSystemState state{};
@@ -50,8 +56,7 @@ SF_EXPORT bool event_execute_callbacks(u8 code, void* sender, Option<EventContex
         return false;
     }
 
-    for (u32 i{0}; i < state.event_lists[code].count(); ++i) {
-        const Event& event = state.event_lists[code][i];
+    for (const Event& event : state.event_lists[code]) {
         if (event.callback(code, sender, event.listener, context)) {
             // event has been handled, do not send to other listeners
             return true;
