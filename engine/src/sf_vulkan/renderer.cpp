@@ -1,7 +1,10 @@
+#include "glm/geometric.hpp"
 #include "sf_containers/optional.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/application.hpp"
+#include "sf_core/defines.hpp"
 #include "sf_core/event.hpp"
+#include "sf_core/input.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_vulkan/buffer.hpp"
@@ -21,6 +24,7 @@
 // #include "sf_vulkan/allocator.hpp"
 // #include "sf_allocators/free_list_allocator.hpp"
 // #include <list>
+#include <algorithm>
 #include <span>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
@@ -40,7 +44,6 @@ static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
 static const char* MAIN_SHADER_FILE_NAME{"shader.spv"};
 
-// NOTE: testing
 struct ObjectRenderData {
     Texture*    texture;  
     u32         id;
@@ -66,11 +69,17 @@ void create_descriptor_layouts_and_sets_for_ubo(
     std::span<VulkanDescriptorSetLayout> out_layouts,
     std::span<VkDescriptorSet> out_sets
 );
-bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs);
-bool create_initial_textures(VulkanCommandBuffer& cmd_buffer);
-bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline);
-void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio);
-void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
+static bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs);
+static bool create_initial_textures(VulkanCommandBuffer& cmd_buffer);
+static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline);
+static void update_global_state();
+static void shader_update_object_state(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
+static void init_global_descriptors(const VulkanDevice& device);
+static void update_global_descriptors(const VulkanDevice& device);
+static void renderer_update_global_state();
+static bool renderer_handle_mouse_move_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
+static bool renderer_handle_key_press_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
+static bool renderer_handle_mouse_wheel_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     if (!create_instance(config, platform_state)) {
@@ -82,6 +91,12 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     if (!VulkanDevice::create(vk_context)) {
         return false;
     }
+
+    // Global descriptors
+    if (!VulkanGlobalUniformBufferObject::create(vk_context.device, vk_renderer.global_ubo)) {
+        return false;
+    }
+    init_global_descriptors(vk_context.device);
 
     if (!VulkanSwapchain::create(vk_context.device, vk_context.surface, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain)) {
         return false;
@@ -115,6 +130,9 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     init_synch_primitives(vk_context);
 
     event_set_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
+    event_set_listener(SystemEventCode::MOUSE_MOVED, nullptr, renderer_handle_mouse_move_event);
+    event_set_listener(SystemEventCode::KEY_PRESSED, nullptr, renderer_handle_key_press_event);
+    event_set_listener(SystemEventCode::MOUSE_WHEEL, nullptr, renderer_handle_mouse_wheel_event);
 
     return true;
 }
@@ -134,8 +152,8 @@ bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<Event
 }
 
 bool renderer_begin_frame(f64 delta_time) {
-    vk_context.frame_delta_time = delta_time;
-
+    vk_renderer.delta_time = delta_time;
+    
     vkQueueWaitIdle(vk_context.device.present_queue);
 
     if (vk_context.recreating_swapchain) {
@@ -196,8 +214,8 @@ bool renderer_draw_frame(const RenderPacket& packet) {
 
     curr_graphics_buffer.begin_recording(0);
     vk_context.pipeline.bind(curr_graphics_buffer, vk_context.curr_frame);
-    update_object_state(vk_context.pipeline, curr_graphics_buffer, packet.elapsed_time);
-    update_global_state(vk_context.device, vk_context.pipeline, vk_context.curr_frame, vk_context.get_aspect_ratio());
+    renderer_update_global_state();
+    shader_update_object_state(vk_context.pipeline, curr_graphics_buffer, packet.elapsed_time);
     vk_context.vertex_index_buffer.bind(curr_graphics_buffer);
     curr_graphics_buffer.begin_rendering(vk_context);
     vk_context.vertex_index_buffer.draw(curr_graphics_buffer);
@@ -273,12 +291,13 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
 VulkanContext::VulkanContext()
     : curr_frame{0}
 {
-    graphics_command_buffers.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    transfer_command_buffers.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    image_available_semaphores.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    render_finished_semaphores.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    draw_fences.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    transfer_fences.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    graphics_command_buffers.resize_to_capacity();
+    transfer_command_buffers.resize_to_capacity();
+    image_available_semaphores.resize_to_capacity();
+    render_finished_semaphores.resize_to_capacity();
+    draw_fences.resize_to_capacity();
+    transfer_fences.resize_to_capacity();
+    global_descriptor_sets.resize_to_capacity();
 }
 
 VulkanContext::~VulkanContext() {
@@ -480,7 +499,7 @@ void destroy_synch_primitives(VulkanContext& context) {
     }
 }
 
-bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs) {
+static bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs) {
     FixedArray<VkVertexInputAttributeDescription, VulkanShaderPipeline::MAX_ATTRIB_COUNT> attrib_descriptions(MAIN_PIPELINE_ATTRIB_COUNT);
     // Position
     attrib_descriptions[0].binding = 0;
@@ -510,7 +529,7 @@ bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_con
     );
 }
 
-bool create_initial_textures(VulkanCommandBuffer& cmd_buffer) {
+static bool create_initial_textures(VulkanCommandBuffer& cmd_buffer) {
     cmd_buffer.begin_recording(0);
     texture_system_create_textures(vk_context.device, cmd_buffer, {texture_create_configs.data(), texture_create_configs.count()});
     cmd_buffer.end_recording();
@@ -527,7 +546,7 @@ bool create_initial_textures(VulkanCommandBuffer& cmd_buffer) {
     return true;
 }
 
-bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline) {
+static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline) {
     Result<u32> maybe_resource_id = pipeline.acquire_resouces(vk_context.device);
     if (maybe_resource_id.is_err()) {
         return false;
@@ -543,16 +562,153 @@ bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& c
     return true;
 }
 
-void update_global_state(const VulkanDevice& device, VulkanShaderPipeline& pipeline, u32 curr_frame, f32 aspect_ratio) {
-    glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 proj = glm::perspective(45.0f, aspect_ratio, 0.1f, 10.0f);
-    proj[1][1] *= -1.0f;
+static void init_global_descriptors(const VulkanDevice& device) {
+    FixedArray<VkDescriptorPoolSize, 1> pool_sizes{{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = VulkanSwapchain::MAX_FRAMES_IN_FLIGHT }};
+    VulkanDescriptorPool::create(device, {pool_sizes.data(), pool_sizes.count()}, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, vk_context.global_descriptor_pool);
 
-    pipeline.update_global_state(device, curr_frame, view, proj);
+    FixedArray<VkDescriptorType, 1> types = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER };
+    FixedArray<VkDescriptorSetLayoutBinding, 1> bindings(1);
+    VulkanDescriptorSetLayout::create_bindings(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, {types.data(), types.count()}, {bindings.data(), bindings.count()});
+    VulkanDescriptorSetLayout::create(device, {bindings.data(), bindings.count()}, vk_context.global_descriptor_layout);
+
+    FixedArray<VkDescriptorSetLayout, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> layouts(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
+    layouts.fill(vk_context.global_descriptor_layout.handle);
+
+    vk_context.global_descriptor_pool.allocate_sets(device, vk_context.global_descriptor_sets.count(), reinterpret_cast<VkDescriptorSetLayout*>(layouts.data()), vk_context.global_descriptor_sets.data());
+
+    update_global_descriptors(device);
 }
 
-void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
-    glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) };
+static bool renderer_handle_mouse_move_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context)  {
+    SF_ASSERT_MSG(maybe_context.is_some(), "Context should be available");
+
+    EventContext& context{ maybe_context.unwrap() };
+
+    f32 delta_x = context.data.f32[0];
+    f32 delta_y = context.data.f32[1];
+    Camera& camera{ vk_renderer.camera };
+
+    camera.yaw += delta_x * MouseDelta::SENSITIVITY;
+    camera.pitch = std::clamp(camera.pitch + delta_y * MouseDelta::SENSITIVITY, -89.0f, 89.0f);
+
+    camera.update_vectors();
+
+    vk_renderer.camera.dirty = true;
+
+    return false;
+}
+
+Camera::Camera()
+{
+    update_vectors();
+}
+
+void Camera::update_vectors() {
+    target.x = glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
+    target.y = glm::sin(glm::radians(pitch));
+    target.z = glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
+    target = glm::normalize(target);
+
+    right = glm::normalize(glm::cross(target, Camera::WORLD_UP));
+    up = glm::normalize(glm::cross(right, target));
+}
+
+static bool renderer_handle_key_press_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context)  {
+    SF_ASSERT_MSG(maybe_context.is_some(), "Event context should be available");
+    Key key{ maybe_context.unwrap().data.u8[0] };
+    Camera& camera{ vk_renderer.camera };
+    const f32 velocity = camera.speed * static_cast<f32>(vk_renderer.delta_time);
+
+    switch (key) {
+        case Key::W: {
+            camera.pos += camera.target * velocity;
+        } break;
+        case Key::S: {
+            camera.pos -= camera.target * velocity;
+        } break;
+        case Key::A: {
+            camera.pos -= camera.right * velocity;
+        } break;
+        case Key::D: {
+            camera.pos += camera.right * velocity;
+        } break;
+        default: break;
+    }
+
+    vk_renderer.camera.dirty = true;
+    return false;
+}
+
+static bool renderer_handle_mouse_wheel_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
+    SF_ASSERT_MSG(maybe_context.is_some(), "Event context should be available");
+    EventContext& context{ maybe_context.unwrap() };
+    i8 delta{ context.data.i8[0] };
+
+    if (delta > 0) {
+        vk_renderer.camera.zoom += Camera::ZOOM_SPEED;
+    } else {
+        vk_renderer.camera.zoom -= Camera::ZOOM_SPEED;
+    }
+
+    vk_renderer.camera.dirty = true;
+    return false;
+}
+
+static void renderer_update_global_state() {
+    if (!vk_renderer.camera.dirty) {
+        return;
+    }
+
+    glm::mat4 view = glm::lookAt(vk_renderer.camera.pos, vk_renderer.camera.pos + vk_renderer.camera.target, vk_renderer.camera.up);
+    glm::mat4 proj = glm::perspective(glm::radians(vk_renderer.camera.zoom), sf::renderer_get_aspect_ratio(), 0.1f, 90.0f);
+    proj[1][1] *= -1.0f;
+    renderer_update_global_ubo(view, proj);
+
+    vk_renderer.camera.dirty = false;
+}
+
+// THINK: maybe should update only for current frame
+SF_EXPORT void renderer_update_global_ubo(const glm::mat4& view, const glm::mat4& proj) {
+    vk_renderer.global_ubo.update(vk_context.curr_frame, view, proj);
+    update_global_descriptors(vk_context.device);
+}
+
+SF_EXPORT void renderer_update_view(const glm::mat4& view) {
+    vk_renderer.global_ubo.update_view(view);
+    update_global_descriptors(vk_context.device);
+}
+
+SF_EXPORT void renderer_update_proj(const glm::mat4& proj) {
+    vk_renderer.global_ubo.update_proj(proj);
+    update_global_descriptors(vk_context.device);
+}
+
+static void update_global_descriptors(const VulkanDevice& device) {
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        VkDescriptorBufferInfo buffer_info{
+            .buffer = vk_renderer.global_ubo.buffers[i].handle,
+            .offset = 0,
+            .range = sizeof(GlobalUniformObject)
+        };
+
+        VkWriteDescriptorSet descriptor_write = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = vk_context.global_descriptor_sets[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pImageInfo = nullptr,
+            .pBufferInfo = &buffer_info,
+            .pTexelBufferView = nullptr,
+        };
+
+        vkUpdateDescriptorSets(device.logical_device, 1, &descriptor_write, 0, nullptr);
+    }
+}
+
+static void shader_update_object_state(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
+    glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 1.0f)) };
 
     for (u32 i{0}; i < object_render_data.count(); ++i) {
         GeometryRenderData render_data{};
@@ -560,7 +716,7 @@ void update_object_state(VulkanShaderPipeline& pipeline, VulkanCommandBuffer& cm
         render_data.model = { /* translate_mat */ rotate_mat };
         render_data.id = object_render_data[i].id;
         render_data.textures[0] = object_render_data[i].texture;
-        pipeline.update_object_state(vk_context, render_data);
+        shader.update_object_state(vk_context, render_data);
     }
 }
 
@@ -582,8 +738,8 @@ VkRect2D VulkanContext::get_scissors() const {
     };
 }
 
-f32 VulkanContext::get_aspect_ratio() const {
-    return static_cast<f32>(framebuffer_width) / framebuffer_height;
+SF_EXPORT f32 renderer_get_aspect_ratio() {
+    return static_cast<f32>(vk_context.framebuffer_width) / vk_context.framebuffer_height;
 }
 
 VulkanCommandBuffer& VulkanContext::curr_frame_graphics_cmd_buffer() {

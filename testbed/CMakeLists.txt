@@ -35,4 +35,4 @@ target_compile_definitions(
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ENGINE_LIB_NAME})
-target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} ${ENGINE_INCLUDE_DIR})
+target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} ${ENGINE_INCLUDE_DIR} ${GLM_INCLUDE_DIR})

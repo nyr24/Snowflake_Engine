@@ -1,5 +1,6 @@
 -Iinclude
 -I../engine/include/
+-I../engine/lib/glm
 -std=c++20
 -DSF_ASSERTS_ENABLED
 -DSF_BUILD_WAYLAND

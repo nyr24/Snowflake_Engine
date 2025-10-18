@@ -65,6 +65,8 @@ struct VulkanGlobalUniformBufferObject {
     static bool create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo);
     void destroy(const VulkanDevice& device);
     void update(u32 curr_frame, const glm::mat4& view, const glm::mat4& proj);
+    void update_view(const glm::mat4& view);
+    void update_proj(const glm::mat4& proj);
 };
 
 // THINK: do we need this per frame also?

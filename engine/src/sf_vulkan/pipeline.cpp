@@ -26,7 +26,6 @@ namespace sf {
 VulkanShaderPipeline::VulkanShaderPipeline()
 {
     attrib_descriptions.resize_to_capacity();
-    global_descriptor_sets.resize_to_capacity();
     object_shader_states.resize_to_capacity();
     for (auto& state : object_shader_states) {
         state.descriptor_sets.resize_to_capacity();
@@ -81,12 +80,6 @@ bool VulkanShaderPipeline::create(
 
     out_pipeline.create_attribute_descriptions(attrib_description_config);
     out_pipeline.create_default_textures(default_texture_configs);
-
-    // Global descriptors
-    if (!VulkanGlobalUniformBufferObject::create(context.device, out_pipeline.global_ubo)) {
-        return false;
-    }
-    out_pipeline.create_global_descriptors(context.device);
 
     // Local/Object descriptors
     if (!VulkanLocalUniformBufferObject::create(context.device, out_pipeline.local_ubo)) {
@@ -174,8 +167,8 @@ bool VulkanShaderPipeline::create(
     };
 
     FixedArray<VkDescriptorSetLayout, 2> layouts = {
-        out_pipeline.global_descriptor_layout.handle,
-        out_pipeline.object_descriptor_layout.handle  
+        context.global_descriptor_layout.handle,
+        out_pipeline.object_descriptor_layout.handle
     };
 
     VkPipelineLayoutCreateInfo pipeline_layout_create_info{
@@ -222,14 +215,9 @@ bool VulkanShaderPipeline::create(
 
 void VulkanShaderPipeline::bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_frame) {
     vkCmdBindPipeline(cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_handle);
-    vkCmdBindDescriptorSets(cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &global_descriptor_sets[curr_frame], 0, nullptr);
+    vkCmdBindDescriptorSets(cmd_buffer.handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &context->global_descriptor_sets[curr_frame], 0, nullptr);
     vkCmdSetViewport(cmd_buffer.handle, 0, 1, &viewport);
     vkCmdSetScissor(cmd_buffer.handle, 0, 1, &scissors);
-}
-
-void VulkanShaderPipeline::update_global_state(const VulkanDevice& device, u32 curr_frame, const glm::mat4& view, const glm::mat4& proj) {
-    global_ubo.update(curr_frame, view, proj);
-    update_global_descriptors(device);
 }
 
 void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryRenderData& render_data) {
@@ -413,22 +401,6 @@ void VulkanShaderPipeline::create_default_textures(std::span<const TextureInputC
     }
 }
 
-void VulkanShaderPipeline::create_global_descriptors(const VulkanDevice& device) {
-    FixedArray<VkDescriptorPoolSize, 1> pool_sizes{{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = VulkanSwapchain::MAX_FRAMES_IN_FLIGHT }};
-    VulkanDescriptorPool::create(device, {pool_sizes.data(), pool_sizes.count()}, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, global_descriptor_pool);
-
-    FixedArray<VkDescriptorType, 1> types = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER };
-    FixedArray<VkDescriptorSetLayoutBinding, 1> bindings(1);
-    VulkanDescriptorSetLayout::create_bindings(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, {types.data(), types.count()}, {bindings.data(), bindings.count()});
-    VulkanDescriptorSetLayout::create(device, {bindings.data(), bindings.count()}, global_descriptor_layout);
-    FixedArray<VkDescriptorSetLayout, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> layouts(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
-    layouts.fill(global_descriptor_layout.handle);
-
-    global_descriptor_pool.allocate_sets(device, global_descriptor_sets.count(), reinterpret_cast<VkDescriptorSetLayout*>(layouts.data()), global_descriptor_sets.data());
-
-    update_global_descriptors(device);
-}
-
 void VulkanShaderPipeline::create_local_descriptors(const VulkanDevice& device) {
     constexpr u32 LOCAL_SAMPLER_COUNT{1};
     
@@ -446,39 +418,12 @@ void VulkanShaderPipeline::create_local_descriptors(const VulkanDevice& device) 
     VulkanDescriptorSetLayout::create(device, {bindings.data(), bindings.count()}, object_descriptor_layout);
 }
 
-void VulkanShaderPipeline::update_global_descriptors(const VulkanDevice& device) {
-    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
-        VkDescriptorBufferInfo buffer_info{
-            .buffer = global_ubo.buffers[i].handle,
-            .offset = 0,
-            .range = sizeof(GlobalUniformObject)
-        };
-
-        VkWriteDescriptorSet descriptor_write = {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = global_descriptor_sets[i],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .pImageInfo = nullptr,
-            .pBufferInfo = &buffer_info,
-            .pTexelBufferView = nullptr,
-        };
-
-        vkUpdateDescriptorSets(device.logical_device, 1, &descriptor_write, 0, nullptr);
-    }
-}
-
 void VulkanShaderPipeline::destroy(const VulkanDevice& device) {
-    global_descriptor_layout.destroy(device);
     object_descriptor_layout.destroy(device);
 
     // TODO: custom allocator
-    global_ubo.destroy(device);
     local_ubo.destroy(device);
     vkDestroyPipeline(device.logical_device, pipeline_handle, nullptr);
-    global_descriptor_pool.destroy(device);
     object_descriptor_pool.destroy(device);
     vkDestroyShaderModule(device.logical_device, shader_handle, nullptr);
 }

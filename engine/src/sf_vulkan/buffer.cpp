@@ -7,6 +7,7 @@
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"
+#include <cstddef>
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -126,10 +127,27 @@ VulkanGlobalUniformBufferObject::VulkanGlobalUniformBufferObject() {
     mapped_memory.resize(VulkanSwapchain::MAX_FRAMES_IN_FLIGHT);
 }
 
+// NOTE: maybe dangerous to update current frame
 void VulkanGlobalUniformBufferObject::update(u32 curr_frame, const glm::mat4& view, const glm::mat4& proj) {
-    global_ubos[curr_frame].view = view;
-    global_ubos[curr_frame].proj = proj;
-    sf_mem_copy(mapped_memory[curr_frame], &global_ubos[curr_frame], sizeof(GlobalUniformObject));
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        global_ubos[i].view = view;
+        global_ubos[i].proj = proj;
+        sf_mem_copy(mapped_memory[i], &global_ubos[i], sizeof(GlobalUniformObject));
+    }
+}
+
+void VulkanGlobalUniformBufferObject::update_view(const glm::mat4& view) {
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        global_ubos[i].view = view;
+        sf_mem_copy(mapped_memory[i], &global_ubos[i], sizeof(glm::mat4));
+    }
+}
+
+void VulkanGlobalUniformBufferObject::update_proj(const glm::mat4& proj) {
+    for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {
+        global_ubos[i].proj = proj;
+        sf_mem_copy(static_cast<u8*>(mapped_memory[i]) + offsetof(GlobalUniformObject, proj), reinterpret_cast<u8*>(&global_ubos[i]) + offsetof(GlobalUniformObject, proj), sizeof(glm::mat4));
+    }
 }
 
 void VulkanGlobalUniformBufferObject::destroy(const VulkanDevice& device) {

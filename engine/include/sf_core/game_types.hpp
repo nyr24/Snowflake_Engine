@@ -5,7 +5,7 @@
 
 namespace sf {
 struct GameInstance {
-    using InitFn = bool(*)(const GameInstance*);
+    using InitFn   = bool(*)(const GameInstance*);
     using UpdateFn = bool(*)(const GameInstance*, f64 delta_time);
     using RenderFn = bool(*)(const GameInstance*, f64 delta_time);
     using ResizeFn = void(*)(const GameInstance*, u32 width, u32 height);

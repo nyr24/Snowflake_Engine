@@ -228,7 +228,7 @@ bool PlatformState::poll_events(ApplicationState& app_state) {
             case XCB_MOTION_NOTIFY: {
                 // Mouse move
                 xcb_motion_notify_event_t* move_event = reinterpret_cast<xcb_motion_notify_event_t*>(event);
-                input_process_mouse_move(MousePos{ .x = move_event->event_x, .y = move_event->event_y });
+                input_process_mouse_move({ .x = static_cast<f32>(move_event->event_x), .y = static_cast<f32>(move_event->event_y) });
             } break;
             case XCB_CONFIGURE_NOTIFY: {
                 //  TODO: resizing

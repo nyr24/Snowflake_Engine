@@ -2,6 +2,12 @@
 #include "sf_platform/platform.hpp"
 
 namespace sf {
+
+void Clock::start() {
+    start_time = platform_get_abs_time();
+    elapsed_time = 0.0;
+}
+
 f64 Clock::update_and_get_delta() {
     if (start_time != 0.0) {
         f64 new_elapsed_time = platform_get_abs_time() - start_time;
@@ -13,12 +19,18 @@ f64 Clock::update_and_get_delta() {
     }
 }
 
-void Clock::start() {
-    start_time = platform_get_abs_time();
+void Clock::stop() {
+    start_time = 0.0;
     elapsed_time = 0.0;
 }
 
-void Clock::stop() {
-    start_time = 0.0;
+void Clock::restart() {
+    this->stop();
+    this->start();
 }
+
+bool Clock::is_running() {
+    return start_time > 0.0;
+}
+
 } // sf

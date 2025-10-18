@@ -76,15 +76,11 @@ public:
     static constexpr u32 MAX_DEFAULT_TEXTURES{ 10 };
 
     VulkanContext*                                                                context;
-    VulkanGlobalUniformBufferObject                                               global_ubo;
     VulkanLocalUniformBufferObject                                                local_ubo;
     FixedArray<Texture*, MAX_DEFAULT_TEXTURES>                                    default_textures;
     FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>               attrib_descriptions;
-    FixedArray<VkDescriptorSet, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            global_descriptor_sets;
-    VulkanDescriptorSetLayout                                                     global_descriptor_layout;
     VulkanDescriptorSetLayout                                                     object_descriptor_layout;
     FixedArray<ObjectShaderState, MAX_OBJECT_COUNT>                               object_shader_states;
-    VulkanDescriptorPool         global_descriptor_pool;
     VulkanDescriptorPool         object_descriptor_pool;
     VkShaderModule               shader_handle;
     VkPipeline                   pipeline_handle;
@@ -111,18 +107,15 @@ public:
     void destroy(const VulkanDevice& device);
     void bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_frame);
     void bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame);
-    void update_global_state(const VulkanDevice& device, u32 curr_frame, const glm::mat4& view, const glm::mat4& proj);
     void update_object_state(VulkanContext& context, GeometryRenderData& render_data);
     Result<u32> acquire_resouces(const VulkanDevice& device);
     void release_resouces(const VulkanDevice& device, u32 object_id);
     static bool handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> context);
 private:
     void create_attribute_descriptions(const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& config);
-    void create_global_descriptors(const VulkanDevice& device);
     void create_local_descriptors(const VulkanDevice& device);
-    void create_default_textures(std::span<const TextureInputConfig> configs);
-    void update_global_descriptors(const VulkanDevice& device);
     void update_local_descriptors(const VulkanDevice& device);
+    void create_default_textures(std::span<const TextureInputConfig> configs);
 };
 
 } // sf

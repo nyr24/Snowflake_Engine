@@ -62,6 +62,7 @@ void application_run() {
 
         if (!application_state.is_suspended) {
             f64 delta_time = application_state.clock.update_and_get_delta();
+            
             f64 frame_start_time = platform_get_abs_time();
 
             if (!renderer_begin_frame(delta_time)) {

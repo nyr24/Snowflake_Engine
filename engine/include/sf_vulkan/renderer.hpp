@@ -1,5 +1,7 @@
 #pragma once
 
+#include "glm/ext/vector_float3.hpp"
+#include "glm/fwd.hpp"
 #include "sf_core/application.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_containers/fixed_array.hpp"
@@ -38,9 +40,12 @@ public:
     VulkanSwapchain                       swapchain;
     VulkanVertexIndexBuffer               vertex_index_buffer;
     VulkanShaderPipeline                  pipeline;
+    VulkanCommandBuffer                   texture_load_command_buffer;
     VulkanCommandPool                     graphics_command_pool;
     VulkanCommandPool                     transfer_command_pool;
-    VulkanCommandBuffer                   texture_load_command_buffer;
+    VulkanDescriptorSetLayout             global_descriptor_layout;
+    VulkanDescriptorPool                  global_descriptor_pool;
+    FixedArray<VkDescriptorSet, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            global_descriptor_sets;
     FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        graphics_command_buffers;
     FixedArray<VulkanCommandBuffer, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>        transfer_command_buffers;
     FixedArray<VulkanSemaphore, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>            image_available_semaphores;
@@ -61,7 +66,6 @@ public:
 
     VkViewport    get_viewport() const;
     VkRect2D      get_scissors() const;
-    f32           get_aspect_ratio() const;
     VulkanCommandBuffer& curr_frame_graphics_cmd_buffer();
 };
 
@@ -70,9 +74,30 @@ struct RenderPacket {
     f64 elapsed_time;
 };
 
+struct Camera {
+    static constexpr glm::vec3 WORLD_UP{ 0.0f, 1.0f, 0.0f };
+    static constexpr f32 ZOOM_SPEED{ 2.5f };
+
+    glm::vec3 pos{ 0.0f, 0.0f, 5.0f };
+    glm::vec3 target{ 0.0f, 0.0f, -1.0f };
+    glm::vec3 right{ 1.0f, 0.0f, 0.0f };
+    glm::vec3 up{ WORLD_UP };
+    f32       speed{50.0f};
+    f32       yaw{-90.0f};
+    f32       pitch{0.0f};
+    f32       zoom{45.0f};
+    bool      dirty{true};
+
+    Camera();
+    void update_vectors();
+};
+
 struct VulkanRenderer {
-    PlatformState*  platform_state;
-    u64             frame_count;
+    PlatformState*                     platform_state;
+    VulkanGlobalUniformBufferObject    global_ubo;
+    Camera                             camera;
+    u64                                frame_count;
+    f64                                delta_time;
 };
 
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state);
@@ -80,6 +105,10 @@ bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<Event
 bool renderer_begin_frame(f64 delta_time);
 void renderer_end_frame(f64 delta_time);
 bool renderer_draw_frame(const RenderPacket& packet);
+SF_EXPORT void renderer_update_global_ubo(const glm::mat4& view, const glm::mat4& proj);
+SF_EXPORT void renderer_update_view(const glm::mat4& view);
+SF_EXPORT void renderer_update_proj(const glm::mat4& proj);
+SF_EXPORT f32 renderer_get_aspect_ratio();
 
 // shared functions
 void sf_vk_check(VkResult vk_result);

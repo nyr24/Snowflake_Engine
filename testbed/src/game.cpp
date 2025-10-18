@@ -1,5 +1,4 @@
 #include "game.hpp"
-#include <sf_core/logger.hpp>
 
 bool init(const sf::GameInstance* game_inst) {
     return true;

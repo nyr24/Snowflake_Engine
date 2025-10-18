@@ -154,12 +154,18 @@ enum struct Key : u8 {
 };
 
 struct MousePos {
-    i16 x;
-    i16 y;
+    f32 x;
+    f32 y;
 
     friend bool operator==(const MousePos& first, const MousePos& second) {
         return first.x == second.x && first.y == second.y;
     }
+};
+
+struct MouseDelta {
+    static constexpr f32 SENSITIVITY{0.1f};
+    f32 x;
+    f32 y;    
 };
 
 void input_update(f64 delta_time);

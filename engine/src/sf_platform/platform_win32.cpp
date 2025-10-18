@@ -244,9 +244,9 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, UINT msg, WPARAM w_param, LPAR
         input_process_key(key, is_pressed);
     } break;
     case WM_MOUSEMOVE: {
-        i16 x_pos = static_cast<i16>(GET_X_LPARAM(l_param));
-        i16 y_pos = static_cast<i16>(GET_Y_LPARAM(l_param));
-        input_process_mouse_move(MousePos{ .x = x_pos, .y = y_pos });
+        f32 x_pos = static_cast<f32>(GET_X_LPARAM(w_param));
+        f32 y_pos = static_cast<f32>(GET_Y_LPARAM(l_param));
+        input_process_mouse_move({ .x = x_pos, .y = y_pos });
     } break;
     case WM_MOUSEWHEEL: {
         i32 z_delta = GET_WHEEL_DELTA_WPARAM(w_param);

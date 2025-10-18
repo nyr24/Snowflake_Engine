@@ -3,7 +3,6 @@ project(${ENGINE_LIB_NAME} VERSION 0.1.0 LANGUAGES CXX)
 
 set(SRC_DIR ${ENGINE_DIR}/src)
 set(INCLUDE_DIR ${ENGINE_DIR}/include)
-set(GLM_INCLUDE_DIR ${ENGINE_DIR}/lib/glm)
 set(STB_INCLUDE_DIR ${ENGINE_DIR}/lib/stb)
 set(SHADER_SRC_DIR ${ENGINE_DIR}/shaders)
 set(SHADER_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
@@ -75,9 +74,6 @@ add_library(${PROJECT_NAME} SHARED ${VK-ENGINE-SRCS} ${VK-ENGINE-HEADERS})
 
 # shaders
 add_shaders(${PROJECT_NAME})
-
-# glm
-add_subdirectory(${GLM_INCLUDE_DIR})
 
 target_compile_options(
   ${PROJECT_NAME}

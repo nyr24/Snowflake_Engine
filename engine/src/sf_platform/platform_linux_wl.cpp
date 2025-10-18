@@ -1,8 +1,8 @@
-#include "sf_containers/optional.hpp"
-#include "sf_core/event.hpp"
 #include "sf_platform/defines.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
+#include "sf_containers/optional.hpp"
+#include "sf_core/event.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/defines.hpp"
@@ -17,6 +17,7 @@
 #include "sf_containers/fixed_array.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/renderer.hpp"
+#include <cstdlib>
 #include <new>
 #include <wayland-client-protocol.h>
 #include <wayland-client-core.h>
@@ -104,7 +105,6 @@ struct GlobalObjectsState {
     xdg_wm_base*            xdg_wm_base;
     wl_buffer*              buffer;
     u32*                    pool_data;
-    // u32                     last_frame = 0;
     PointerEventState       pointer_state;
     KeyboardState           keyboard_state;
 };
@@ -402,14 +402,14 @@ static void pointer_handle_frame(void* data, wl_pointer* pointer)
     PointerEventState* pointer_state = &state->go_state.pointer_state;
 
     if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_ENTER)) {
-        input_process_mouse_move(MousePos{ .x = static_cast<i16>(pointer_state->surface_x), .y = static_cast<i16>(pointer_state->surface_y) });
+        input_process_mouse_move({ .x = static_cast<f32>(pointer_state->surface_x), .y = static_cast<f32>(pointer_state->surface_y) });
     }
 
     // if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_LEAVE)) {
     // }
 
     if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_MOTION)) {
-        input_process_mouse_move(MousePos{ .x = static_cast<i16>(pointer_state->surface_x), .y = static_cast<i16>(pointer_state->surface_y) });
+        input_process_mouse_move({ .x = static_cast<f32>(pointer_state->surface_x), .y = static_cast<f32>(pointer_state->surface_y) });
     }
 
     if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_BUTTON)) {
@@ -422,8 +422,11 @@ static void pointer_handle_frame(void* data, wl_pointer* pointer)
     // wheel event
     u32 axis_events = static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS) | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE);
     if (axis_events & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE) && pointer_state->axis_source == WL_POINTER_AXIS_SOURCE_WHEEL) {
-        i8 delta = pointer_state->axis[WL_POINTER_AXIS_VERTICAL_SCROLL].value > 0 ? 1 : -1;
-        input_process_mouse_wheel(delta);
+        f64 delta_wl = pointer_state->axis[WL_POINTER_AXIS_VERTICAL_SCROLL].value;
+        if (std::abs(delta_wl) > 0.05) {
+            i8 delta = pointer_state->axis[WL_POINTER_AXIS_VERTICAL_SCROLL].value > 0 ? 1 : -1;
+            input_process_mouse_wheel(delta);
+        }
     }
 
     // u32 axis_events = static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)
@@ -537,7 +540,7 @@ static void keyboard_handle_leave(void* data, wl_keyboard* keyboard, u32 serial,
 
 static void keyboard_handle_repeat_info(void* data, wl_keyboard* keyboard, i32 rate, i32 delay)
 {
-    // LOG_INFO("repeat rate: {} repeat delay: {}", rate, delay);
+    // This space deliberately left blank
 }
 
 static void keyboard_handle_modifiers(
