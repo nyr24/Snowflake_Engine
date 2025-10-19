@@ -1,3 +1,4 @@
+#include "sf_core/logger.hpp"
 #include "sf_platform/defines.hpp"
 #include "sf_core/clock.hpp"
 #include "sf_core/input.hpp"
@@ -148,6 +149,7 @@ void input_process_mouse_move(MousePos pos) {
     if (pos != state.mouse_curr.pos) {
         static bool is_first_event{true};
         state.mouse_curr.pos = pos;
+
         if (is_first_event) {
             is_first_event = false;
             return;

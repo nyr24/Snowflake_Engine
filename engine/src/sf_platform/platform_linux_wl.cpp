@@ -1,14 +1,21 @@
 #include "sf_platform/defines.hpp"
+#include <cmath>
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
+
+#include "sf_platform/wl_relative_pointer.hpp"
+#include "sf_platform/wl_relative_pointer_glue.hpp"
+#include "sf_platform/wl_pointer_constraints.hpp"
+#include "sf_platform/wl_pointer_constraints_glue.hpp"
+#include "sf_platform/wayland-util-custom.hpp"
+#include "sf_platform/xdg-shell-protocol.hpp"
+
 #include "sf_containers/optional.hpp"
 #include "sf_core/event.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/utility.hpp"
-#include "sf_platform/wayland-util-custom.hpp"
-#include "sf_platform/xdg-shell-protocol.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/input.hpp"
@@ -70,7 +77,7 @@ enum struct PointerEventMask : u32 {
     POINTER_EVENT_AXIS_SOURCE = 1 << 5,
     POINTER_EVENT_AXIS_STOP = 1 << 6,
     POINTER_EVENT_AXIS_VALUE120 = 1 << 7,
-    POINTER_EVENT_AXIS_RELATIVE_DIR = 1 << 8
+    POINTER_EVENT_AXIS_RELATIVE_DIR = 1 << 8,
 };
 
 struct PointerAxis {
@@ -80,13 +87,15 @@ struct PointerAxis {
     bool        valid;
 };
 
+struct PointerPos {
+    f32 x;
+    f32 y;  
+};
+
 struct PointerEventState {
     u32         event_mask;
-    f64         surface_x;
-    f64         surface_y;
     u32         button;
     u32         button_state;
-    u32         time;
     u32         serial;
     u32         axis_source;
     PointerAxis axis[2];
@@ -100,12 +109,17 @@ struct GlobalObjectsState {
     wl_keyboard*            keyboard_dev;
     wl_surface*             surface;
     wl_region*              region_opaque;
+    zwp_relative_pointer_manager_v1* relative_pointer_manager;
+    zwp_relative_pointer_v1*         relative_pointer;
+    zwp_locked_pointer_v1*           locked_pointer;
+    zwp_pointer_constraints_v1*      pointer_constraints;
     xdg_surface*            xdg_surface;
     xdg_toplevel*           xdg_toplevel;
     xdg_wm_base*            xdg_wm_base;
     wl_buffer*              buffer;
     u32*                    pool_data;
     PointerEventState       pointer_state;
+    PointerPos              pointer_pos;
     KeyboardState           keyboard_state;
 };
 
@@ -119,7 +133,8 @@ struct Listeners {
     xdg_wm_base_listener    xdg_wm_base_listener;
     xdg_surface_listener    xdg_surface_listener;
     xdg_toplevel_listener   xdg_toplevel_listener;
-
+    zwp_relative_pointer_v1_listener relative_pointer_listener;
+    zwp_locked_pointer_v1_listener   locked_pointer_listener;
 };
 
 struct WindowProps {
@@ -195,8 +210,7 @@ static void xdg_wm_base_handle_ping(void *data, xdg_wm_base *xdg_wm_base, u32 se
     xdg_wm_base_pong(xdg_wm_base, serial);
 }
 
-static void xdg_surface_handle_configure(void *data,
-        struct xdg_surface *xdg_surface, u32 serial)
+static void xdg_surface_handle_configure(void *data, xdg_surface* xdg_surface, u32 serial)
 {
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     xdg_surface_ack_configure(xdg_surface, serial);
@@ -211,8 +225,7 @@ static void xdg_toplevel_handle_configure(void* data, xdg_toplevel* xdg_toplevel
     if (width == 0 || height == 0) {
         return;
     }
-    // state->window_props.width = width;
-    // state->window_props.height = height;
+
     EventContext context;
     context.data.u16[0] = static_cast<u16>(width);
     context.data.u16[1] = static_cast<u16>(height);
@@ -227,7 +240,6 @@ static void xdg_toplevel_handle_configure_bounds(void* data, xdg_toplevel* xdg_t
     state->window_props.width = std::min(static_cast<u32>(width), state->window_props.width);
     state->window_props.height = std::min(static_cast<u32>(height), state->window_props.height);
 }
-
 
 static void registry_handle_global(void* data, struct wl_registry* registry,
     u32 name, const char* interface, u32 version)
@@ -260,6 +272,21 @@ static void registry_handle_global(void* data, struct wl_registry* registry,
         state->xdg_wm_base = static_cast<xdg_wm_base*>(
             wl_registry_bind(registry, name, &xdg_wm_base_interface, 1
         ));
+    }
+
+    // relative pointer
+    if (std::strcmp(interface, "zwp_relative_pointer_manager_v1") == 0)
+    {
+        state->relative_pointer_manager = static_cast<zwp_relative_pointer_manager_v1*>(
+            wl_registry_bind(registry, name, &zwp_relative_pointer_manager_v1_interface, 1)
+        );
+    }
+
+    else if (std::strcmp(interface, "zwp_pointer_constraints_v1") == 0)
+    {
+        state->pointer_constraints = static_cast<zwp_pointer_constraints_v1*>(
+            wl_registry_bind(registry, name, &zwp_pointer_constraints_v1_interface, 1)
+        );
     }
 }
 
@@ -316,8 +343,8 @@ static void pointer_handle_enter(void* data, wl_pointer* pointer, u32 serial, wl
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_ENTER);
     state->go_state.pointer_state.serial = serial;
-    state->go_state.pointer_state.surface_x = wl_fixed_to_double(x);
-    state->go_state.pointer_state.surface_y = wl_fixed_to_double(y);
+    state->go_state.pointer_pos.x = wl_fixed_to_double(x);
+    state->go_state.pointer_pos.y = wl_fixed_to_double(y);
     wl_pointer_set_cursor(pointer, serial, nullptr, 0, 0);
 }
 
@@ -330,11 +357,10 @@ static void pointer_handle_leave(void* data, wl_pointer* pointer, u32 serial, wl
 
 static void pointer_handle_motion(void* data, wl_pointer* pointer, u32 timestamp_ms, wl_fixed_t new_x, wl_fixed_t new_y)
 {
-    WaylandInternState* state = static_cast<WaylandInternState*>(data);
-    state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_MOTION);
-    state->go_state.pointer_state.time = timestamp_ms;
-    state->go_state.pointer_state.surface_x = wl_fixed_to_double(new_x);
-    state->go_state.pointer_state.surface_y = wl_fixed_to_double(new_y);
+    // WaylandInternState* state = static_cast<WaylandInternState*>(data);
+    // state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_MOTION);
+    // state->go_state.pointer_state.pos_x = wl_fixed_to_double(new_x);
+    // state->go_state.pointer_state.pos_y = wl_fixed_to_double(new_y);
 }
 
 static void pointer_handle_button(void* data, wl_pointer* pointer, u32 serial, u32 timestamp_ms, u32 button, u32 button_state)
@@ -342,7 +368,6 @@ static void pointer_handle_button(void* data, wl_pointer* pointer, u32 serial, u
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_BUTTON);
     state->go_state.pointer_state.serial = serial;
-    state->go_state.pointer_state.time = timestamp_ms;
     state->go_state.pointer_state.button = button;
     state->go_state.pointer_state.button_state = button_state;
 }
@@ -351,7 +376,6 @@ static void pointer_handle_axis(void* data, wl_pointer* pointer, u32 timestamp_m
 {
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS);
-    state->go_state.pointer_state.time = timestamp_ms;
     state->go_state.pointer_state.axis[axis].valid = true;
     state->go_state.pointer_state.axis[axis].value = axis_value;
 }
@@ -367,7 +391,6 @@ static void pointer_handle_axis_stop(void* data, wl_pointer* pointer, u32 timest
 {
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
     state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP);
-    state->go_state.pointer_state.time = timestamp_ms;
     state->go_state.pointer_state.axis[axis].valid = true;
 }
 
@@ -387,6 +410,30 @@ static void pointer_handle_axis_relative_dir(void* data, wl_pointer* pointer, u3
     state->go_state.pointer_state.axis[axis].relative_dir = static_cast<u8>(axis_rel_dir);
 }
 
+static void relative_pointer_handle_motion(
+    void* data,
+    struct zwp_relative_pointer_v1* pointer,
+    uint32_t time_high,
+    uint32_t time_low,
+    wl_fixed_t dx,
+    wl_fixed_t dy,
+    wl_fixed_t dx_unaccel,
+    wl_fixed_t dy_unaccel)
+{
+    WaylandInternState* state = static_cast<WaylandInternState*>(data);
+    state->go_state.pointer_state.event_mask |= static_cast<u32>(PointerEventMask::POINTER_EVENT_MOTION);
+    state->go_state.pointer_pos.x += wl_fixed_to_double(dx);
+    state->go_state.pointer_pos.y += wl_fixed_to_double(dy);
+}
+
+static void locked_pointer_handle_locked(void* userData, struct zwp_locked_pointer_v1* lockedPointer)
+{
+}
+
+static void locked_pointer_handle_unlocked(void* userData, struct zwp_locked_pointer_v1* lockedPointer)
+{
+}
+
 static MouseButton map_linux_btn_codes(i32 btn) {
     switch (btn) {
         case BTN_LEFT: return MouseButton::LEFT;
@@ -399,90 +446,41 @@ static MouseButton map_linux_btn_codes(i32 btn) {
 static void pointer_handle_frame(void* data, wl_pointer* pointer)
 {
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
-    PointerEventState* pointer_state = &state->go_state.pointer_state;
+    PointerEventState& pointer_state = state->go_state.pointer_state;
+    PointerPos& pointer_pos = state->go_state.pointer_pos;
 
-    if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_ENTER)) {
-        input_process_mouse_move({ .x = static_cast<f32>(pointer_state->surface_x), .y = static_cast<f32>(pointer_state->surface_y) });
+    if (pointer_state.event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_ENTER)) {
+        input_process_mouse_move({ .x = pointer_pos.x, .y = pointer_pos.y });
     }
 
-    // if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_LEAVE)) {
-    // }
-
-    if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_MOTION)) {
-        input_process_mouse_move({ .x = static_cast<f32>(pointer_state->surface_x), .y = static_cast<f32>(pointer_state->surface_y) });
+    if (pointer_state.event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_MOTION)) {
+        input_process_mouse_move({ .x = pointer_pos.x, .y = pointer_pos.y });
     }
 
-    if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_BUTTON)) {
-        MouseButton app_btn_code = map_linux_btn_codes(pointer_state->button);
+    if (pointer_state.event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_BUTTON)) {
+        MouseButton app_btn_code = map_linux_btn_codes(pointer_state.button);
         if (app_btn_code != MouseButton::COUNT) {
-            input_process_mouse_button(app_btn_code, pointer_state->button_state == WL_POINTER_BUTTON_STATE_PRESSED);
+            input_process_mouse_button(app_btn_code, pointer_state.button_state == WL_POINTER_BUTTON_STATE_PRESSED);
         }
     }
 
     // wheel event
     u32 axis_events = static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS) | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE);
-    if (axis_events & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE) && pointer_state->axis_source == WL_POINTER_AXIS_SOURCE_WHEEL) {
-        f64 delta_wl = pointer_state->axis[WL_POINTER_AXIS_VERTICAL_SCROLL].value;
+    if (axis_events & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE) && pointer_state.axis_source == WL_POINTER_AXIS_SOURCE_WHEEL) {
+        f64 delta_wl = pointer_state.axis[WL_POINTER_AXIS_VERTICAL_SCROLL].value;
         if (std::abs(delta_wl) > 0.05) {
-            i8 delta = pointer_state->axis[WL_POINTER_AXIS_VERTICAL_SCROLL].value > 0 ? 1 : -1;
+            i8 delta = pointer_state.axis[WL_POINTER_AXIS_VERTICAL_SCROLL].value > 0 ? 1 : -1;
             input_process_mouse_wheel(delta);
         }
     }
 
-    // u32 axis_events = static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)
-    //         | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE)
-    //         | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP)
-    //         | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120)
-    //         | static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR);
-
-    // const i8* axis_name[2] = {
-    //     "vertical",
-    //     "horizontal",
-    // };
-    //
-    // const i8* axis_relative_dir[2] = {
-    //     "identical",
-    //     "inverted",
-    // };
-    //
-    // const i8* axis_source[4] = {
-    //     "wheel",
-    //     "finger",
-    //     "continuous",
-    //     "wheel tilt",
-    // };
- 
-    // if (pointer_state->event_mask & axis_events) {
-    //     for (size_t i = 0; i < 2; ++i) {
-    //         if (!pointer_state->axis[i].valid) {
-    //             continue;
-    //         }
-    //         LOG_INFO("{} axis ", axis_name[i]);
-    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS)) {
-    //             LOG_INFO("value {} ", pointer_state->axis[i].value);
-    //         }
-    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_SOURCE)) {
-    //             LOG_INFO("source {} ", axis_source[pointer_state->axis_source]);
-    //         }
-    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_VALUE120)) {
-    //             LOG_INFO("value120 {} ", pointer_state->axis[i].value120);
-    //         }
-    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_RELATIVE_DIR)) {
-    //             LOG_INFO("relative dir {} ", axis_relative_dir[pointer_state->axis[i].relative_dir]);
-    //         }
-    //         if (pointer_state->event_mask & static_cast<u32>(PointerEventMask::POINTER_EVENT_AXIS_STOP)) {
-    //             LOG_INFO("stopped ");
-    //         }
-    //     }
-    // }
-
-    sf_mem_zero(pointer_state, sizeof(PointerEventState));
+    sf_mem_zero(&pointer_state, sizeof(PointerEventState));
 }
 
 // Keyboard events
 static void keyboard_handle_keymap(void* data, wl_keyboard* keyboard, u32 format, i32 fd, u32 size)
 {
-    assert(format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
+    SF_ASSERT(format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
     WaylandInternState* state = static_cast<WaylandInternState*>(data);
 
     i8* map_shm = static_cast<i8*>(
@@ -563,6 +561,28 @@ static void seat_handle_capabilities(void* data, wl_seat* seat, u32 capabilities
     if (have_pointer) {
         state->go_state.pointer_dev = wl_seat_get_pointer(state->go_state.seat);
         wl_pointer_add_listener(state->go_state.pointer_dev, &state->listeners.pointer_listener, static_cast<void*>(state));
+
+        // locked pointer setup
+        state->go_state.relative_pointer =
+            zwp_relative_pointer_manager_v1_get_relative_pointer(
+                state->go_state.relative_pointer_manager,
+                state->go_state.pointer_dev);
+
+        zwp_relative_pointer_v1_add_listener(state->go_state.relative_pointer,
+             &state->listeners.relative_pointer_listener,
+             state);
+
+        state->go_state.locked_pointer =
+            zwp_pointer_constraints_v1_lock_pointer(
+                state->go_state.pointer_constraints,
+                state->go_state.surface,
+                state->go_state.pointer_dev,
+                NULL,
+                ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+
+        zwp_locked_pointer_v1_add_listener(state->go_state.locked_pointer,
+           &state->listeners.locked_pointer_listener,
+           state);
     } else if (!have_pointer && state->go_state.pointer_dev != nullptr) {
         wl_pointer_release(state->go_state.pointer_dev);
         state->go_state.pointer_dev = nullptr;
@@ -661,7 +681,14 @@ bool PlatformState::startup(ApplicationState& app_state) {
         .close = xdg_toplevel_handle_close,
         .configure_bounds = xdg_toplevel_handle_configure_bounds
     };
-
+    state->listeners.relative_pointer_listener = zwp_relative_pointer_v1_listener{
+        .relative_motion = relative_pointer_handle_motion 
+    };
+    state->listeners.locked_pointer_listener = zwp_locked_pointer_v1_listener{
+        .locked = locked_pointer_handle_locked,
+        .unlocked = locked_pointer_handle_unlocked
+    };
+    
     wl_registry_add_listener(state->registry, &state->listeners.registry_listener, &state->go_state);
     // waits until we bind to all globals we need
     wl_display_roundtrip(state->display);

@@ -62,8 +62,9 @@ void application_run() {
 
         if (!application_state.is_suspended) {
             f64 delta_time = application_state.clock.update_and_get_delta();
-            
+        #ifdef SF_LIMIT_FRAME_COUNT
             f64 frame_start_time = platform_get_abs_time();
+        #endif
 
             if (!renderer_begin_frame(delta_time)) {
                 LOG_FATAL("Begin frame is failed, shutting down");
@@ -89,9 +90,8 @@ void application_run() {
             packet.elapsed_time = application_state.clock.elapsed_time;
             renderer_draw_frame(packet);
 
-            f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
-
         #ifdef SF_LIMIT_FRAME_COUNT
+            f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
             f64 frame_remain_seconds = application_state.TARGET_FRAME_SECONDS - frame_elapsed_time;
 
             if (frame_remain_seconds > 0.0) {
@@ -136,14 +136,14 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, Option<Event
                 return true;
             };
             default: {
-                LOG_DEBUG("Key '{}' was pressed", (char)key_code);
+                // LOG_DEBUG("Key '{}' was pressed", (char)key_code);
             } break;
         }
     } else if (code == static_cast<u8>(SystemEventCode::KEY_RELEASED)) {
         u8 key_code = context.data.u8[0];
         switch (static_cast<Key>(key_code)) {
             default: {
-                LOG_DEBUG("Key '{}' was released", (char)key_code);
+                // LOG_DEBUG("Key '{}' was released", (char)key_code);
             } break;
         }
     }
