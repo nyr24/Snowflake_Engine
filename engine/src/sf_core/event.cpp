@@ -5,45 +5,38 @@
 
 namespace sf {
 
-struct EventSystemState {
-    static constexpr u32 DEFAULT_EVENT_COUNT{50};
-    FixedArray<DynamicArray<Event>, static_cast<u32>(SystemEventCode::COUNT)> event_lists;
+static EventSystemState* state_ptr{nullptr};
 
-    EventSystemState()
-    {
-        event_lists.resize_to_capacity();
-        
-        for (DynamicArray<Event>& list : event_lists) {
-            list.reserve(DEFAULT_EVENT_COUNT);
-        }
+void EventSystemState::create(LinearAllocator& system_allocator, EventSystemState& out_system) {
+    out_system.event_lists.resize_to_capacity();
+
+    for (auto& list : out_system.event_lists) {
+        list.set_allocator(&system_allocator);
+        list.reserve(MAX_EVENT_COUNT);
     }
+}
 
-    ~EventSystemState() {
-        for (auto& list : event_lists) {
-            list.clear();
-        }
-    }
-};
+void event_system_init_internal_state(EventSystemState* event_state) {
+    state_ptr = event_state;
+}
 
-static EventSystemState state{};
-
-SF_EXPORT bool event_set_listener(u8 code, void* listener, OnEventFn on_event_callback) {
-    for (u32 i{0}; i < state.event_lists[code].count(); ++i) {
-        const Event& event = state.event_lists[code][i];
+SF_EXPORT bool event_system_add_listener(u8 code, void* listener, OnEventFn on_event_callback) {
+    for (u32 i{0}; i < state_ptr->event_lists[code].count(); ++i) {
+        const Event& event = state_ptr->event_lists[code][i];
         if (event.callback == on_event_callback) {
             return false;
         }
     }
 
-    state.event_lists[code].append_emplace(listener, on_event_callback);
+    state_ptr->event_lists[code].append_emplace(listener, on_event_callback);
     return true;
 }
 
-SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event_callback) {
-    for (u32 i{0}; i < state.event_lists[code].count(); ++i) {
-        const Event& event = state.event_lists[code][i];
+SF_EXPORT bool event_system_remove_listener(u8 code, void* listener, OnEventFn on_event_callback) {
+    for (u32 i{0}; i < state_ptr->event_lists[code].count(); ++i) {
+        const Event& event = state_ptr->event_lists[code][i];
         if (event.callback == on_event_callback) {
-            state.event_lists[code].remove_unordered_at(i);
+            state_ptr->event_lists[code].remove_unordered_at(i);
             return true;
         }
     }
@@ -51,12 +44,12 @@ SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event_
     return false;
 }
 
-SF_EXPORT bool event_execute_callbacks(u8 code, void* sender, Option<EventContext> context) {
-    if (state.event_lists[code].count() == 0) {
+SF_EXPORT bool event_system_fire_event(u8 code, void* sender, Option<EventContext> context) {
+    if (state_ptr->event_lists[code].count() == 0) {
         return false;
     }
 
-    for (const Event& event : state.event_lists[code]) {
+    for (const Event& event : state_ptr->event_lists[code]) {
         if (event.callback(code, sender, event.listener, context)) {
             // event has been handled, do not send to other listeners
             return true;

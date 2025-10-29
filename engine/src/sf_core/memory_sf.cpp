@@ -65,6 +65,13 @@ bool is_address_in_range(void* start, u32 total_size, void* addr) {
     return addr_v >= start_v && addr_v < end;
 }
 
+bool is_handle_in_range(void* start, u32 total_size, u32 handle) {
+    usize start_v = reinterpret_cast<usize>(start);
+    usize addr_v = reinterpret_cast<usize>(turn_handle_into_ptr(handle, start));
+    usize end = start_v + total_size;
+    return addr_v >= start_v && addr_v < end;
+}
+
 u32 turn_ptr_into_handle(void* ptr, void* start) {
     usize offset_v = reinterpret_cast<usize>(ptr);
     usize start_v = reinterpret_cast<usize>(start);

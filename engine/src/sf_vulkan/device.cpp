@@ -1,4 +1,5 @@
 #include "sf_vulkan/device.hpp"
+#include "sf_allocators/linear_allocator.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_containers/dynamic_array.hpp"
@@ -36,8 +37,7 @@ bool VulkanDevice::create(VulkanContext& context) {
     u8 index = 0;
     indices[index++] = context.device.queue_family_info.graphics_family_index;
     if (!present_shares_graphics_queue) {
-        indices[index++] = context.device.queue_family_info.present_family_index;
-    }
+        indices[index++] = context.device.queue_family_info.present_family_index; }
     if (!transfer_shares_other_queues) {
         indices[index++] = context.device.queue_family_info.transfer_family_index;
     }
@@ -120,11 +120,11 @@ bool VulkanDevice::select(VulkanContext& context, FixedArray<const char*, DEVICE
     u32 physical_device_count{0};
     sf_vk_check(vkEnumeratePhysicalDevices(context.instance, &physical_device_count, nullptr));
 
-    const u32 physical_device_max_count{5};
-    VkPhysicalDevice physical_devices[physical_device_max_count];
-    sf_vk_check(vkEnumeratePhysicalDevices(context.instance, &physical_device_count, physical_devices));
+    constexpr u32 PHYSICAL_DEVICE_MAX_COUNT{5};
+    FixedArray<VkPhysicalDevice, PHYSICAL_DEVICE_MAX_COUNT> physical_devices(PHYSICAL_DEVICE_MAX_COUNT);
+    sf_vk_check(vkEnumeratePhysicalDevices(context.instance, &physical_device_count, physical_devices.data()));
 
-    SF_ASSERT_MSG(physical_device_max_count >= physical_device_count, "Enumerated physical devices wouldn't feet into array");
+    SF_ASSERT_MSG(PHYSICAL_DEVICE_MAX_COUNT >= physical_device_count, "Enumerated physical devices wouldn't fit into array");
 
     VulkanPhysicalDeviceRequirements physical_device_requirements{
         .flags = VULKAN_PHYSICAL_DEVICE_REQUIREMENT_GRAPHICS
@@ -146,8 +146,15 @@ bool VulkanDevice::select(VulkanContext& context, FixedArray<const char*, DEVICE
         vkGetPhysicalDeviceFeatures(physical_devices[i], &physical_device_features);
 
         VulkanDeviceQueueFamilyInfo queue_family_info;
+
         VulkanSwapchainSupportInfo swapchain_support_info;
-        bool meets_requirements = VulkanDevice::meet_requirements(physical_devices[i], context.surface, physical_device_properties, physical_device_features, physical_device_requirements, queue_family_info, swapchain_support_info);
+        swapchain_support_info.set_allocator(context.render_system_allocator);
+
+        bool meets_requirements = VulkanDevice::meet_requirements(
+            physical_devices[i], context.surface, physical_device_properties,
+            physical_device_features, physical_device_requirements, queue_family_info,
+            swapchain_support_info, context.render_system_allocator
+        );
 
         if (meets_requirements) {
         #ifdef SF_DEBUG
@@ -177,14 +184,12 @@ bool VulkanDevice::select(VulkanContext& context, FixedArray<const char*, DEVICE
                 VK_VERSION_MINOR(physical_device_properties.driverVersion),
                 VK_VERSION_PATCH(physical_device_properties.driverVersion));
 
-            // Vulkan API version.
             LOG_INFO(
                 "Vulkan API version: {}.{}.{}",
                 VK_VERSION_MAJOR(physical_device_properties.apiVersion),
                 VK_VERSION_MINOR(physical_device_properties.apiVersion),
                 VK_VERSION_PATCH(physical_device_properties.apiVersion)
             );
-
 
             VkPhysicalDeviceMemoryProperties physical_device_memory_props;
             vkGetPhysicalDeviceMemoryProperties(physical_devices[i], &physical_device_memory_props);
@@ -203,11 +208,9 @@ bool VulkanDevice::select(VulkanContext& context, FixedArray<const char*, DEVICE
             context.device.physical_device = physical_devices[i];
             context.device.queue_family_info = queue_family_info;
             context.device.properties = physical_device_properties;
-            context.device.properties = physical_device_properties;
-            context.device.properties = physical_device_properties;
             context.device.features = physical_device_features;
             context.device.memory_properties = physical_device_memory_props;
-            context.device.swapchain_support_info = swapchain_support_info;
+            context.device.swapchain_support_info = std::move(swapchain_support_info);
 
             return true;
         }
@@ -222,7 +225,7 @@ void VulkanDevice::query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR
 
     if (out_support_info.format_count) {
         if (out_support_info.formats.count() < out_support_info.format_count) {
-            out_support_info.formats.reallocate_and_resize(out_support_info.format_count, out_support_info.format_count);
+            out_support_info.formats.reserve_and_resize(out_support_info.format_count, out_support_info.format_count);
         }
 
         sf_vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &out_support_info.format_count, out_support_info.formats.data()));
@@ -232,7 +235,7 @@ void VulkanDevice::query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR
     sf_vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &out_support_info.present_mode_count, nullptr));
     if (out_support_info.present_mode_count) {
         if (out_support_info.present_modes.count() < out_support_info.present_mode_count) {
-            out_support_info.present_modes.reallocate_and_resize(out_support_info.present_mode_count, out_support_info.present_mode_count);
+            out_support_info.present_modes.reserve_and_resize(out_support_info.present_mode_count, out_support_info.present_mode_count);
         }
 
         sf_vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &out_support_info.present_mode_count, out_support_info.present_modes.data()));
@@ -246,7 +249,8 @@ bool VulkanDevice::meet_requirements(
     const VkPhysicalDeviceFeatures& features,
     const VulkanPhysicalDeviceRequirements& requirements,
     VulkanDeviceQueueFamilyInfo& out_queue_family_info,
-    VulkanSwapchainSupportInfo& out_swapchain_support_info
+    VulkanSwapchainSupportInfo& out_swapchain_support_info,
+    LinearAllocator& render_system_allocator
 ) {
     if (requirements.flags & VULKAN_PHYSICAL_DEVICE_REQUIREMENT_DISCRETE_GPU) {
         if (properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
@@ -329,7 +333,7 @@ bool VulkanDevice::meet_requirements(
         sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, nullptr));
 
         if (available_extension_count) {
-            DynamicArray<VkExtensionProperties> available_extensions(available_extension_count, available_extension_count);
+            DynamicArray<VkExtensionProperties, LinearAllocator> available_extensions(available_extension_count, available_extension_count, &render_system_allocator);
             sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, available_extensions.data()));
 
             for (const auto* required_extension : requirements.device_extension_names) {
@@ -357,6 +361,12 @@ bool VulkanDevice::meet_requirements(
 
     LOG_INFO("Device {} meets all requirements!", properties.deviceName);
     return true;
+}
+
+void VulkanSwapchainSupportInfo::set_allocator(LinearAllocator& allocator)
+{
+    formats.set_allocator(&allocator);
+    present_modes.set_allocator(&allocator);
 }
 
 bool VulkanDevice::detect_depth_format() {

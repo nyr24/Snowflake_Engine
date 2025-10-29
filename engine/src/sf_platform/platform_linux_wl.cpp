@@ -217,7 +217,7 @@ static void xdg_surface_handle_configure(void *data, xdg_surface* xdg_surface, u
 }
 
 static void xdg_toplevel_handle_close(void* data, xdg_toplevel* xdg_toplevel) {
-    event_execute_callbacks(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, {None::VALUE});
+    event_system_fire_event(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, {None::VALUE});
 }
 
 static void xdg_toplevel_handle_configure(void* data, xdg_toplevel* xdg_toplevel, i32 width, i32 height, wl_array* states) {
@@ -229,7 +229,7 @@ static void xdg_toplevel_handle_configure(void* data, xdg_toplevel* xdg_toplevel
     EventContext context;
     context.data.u16[0] = static_cast<u16>(width);
     context.data.u16[1] = static_cast<u16>(height);
-    event_execute_callbacks(SystemEventCode::RESIZED, nullptr, {context});
+    event_system_fire_event(SystemEventCode::RESIZED, nullptr, {context});
 }
 
 static void xdg_toplevel_handle_configure_bounds(void* data, xdg_toplevel* xdg_toplevel, i32 width, i32 height) {
@@ -622,14 +622,14 @@ bool PlatformState::startup(ApplicationState& app_state) {
     state->app_state = &app_state;
 
     constexpr i32 buff_count = 2;
-    const u32 stride = app_state.config.width * 4;
+    const u32 stride = app_state.config.window_width * 4;
 
     state->window_props = WindowProps{
         .name = app_state.config.name,
-        .width = app_state.config.width,
-        .height = app_state.config.height,
+        .width = app_state.config.window_width,
+        .height = app_state.config.window_height,
         .stride = stride,
-        .shm_pool_size = app_state.config.height * stride * buff_count,
+        .shm_pool_size = app_state.config.window_height * stride * buff_count,
     };
 
     state->display = wl_display_connect(nullptr);

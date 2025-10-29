@@ -2,6 +2,7 @@
 
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
+#include "sf_allocators/linear_allocator.hpp"
 #include "sf_core/application.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_containers/fixed_array.hpp"
@@ -32,6 +33,7 @@ struct VulkanContext {
 public:
     VkInstance                            instance;
     VulkanAllocator                       allocator;
+    LinearAllocator                       render_system_allocator;
     VulkanDevice                          device;
     VkSurfaceKHR                          surface;
 #ifdef SF_DEBUG
@@ -100,11 +102,13 @@ struct VulkanRenderer {
     f64                                delta_time;
 };
 
-bool renderer_init(ApplicationConfig& config, PlatformState& platform_state);
+bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, VulkanDevice* out_seleted_device);
+bool renderer_post_init();
 bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 bool renderer_begin_frame(f64 delta_time);
 void renderer_end_frame(f64 delta_time);
 bool renderer_draw_frame(const RenderPacket& packet);
+const VulkanDevice& renderer_get_device();
 SF_EXPORT void renderer_update_global_ubo(const glm::mat4& view, const glm::mat4& proj);
 SF_EXPORT void renderer_update_view(const glm::mat4& view);
 SF_EXPORT void renderer_update_proj(const glm::mat4& proj);

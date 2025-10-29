@@ -1,6 +1,9 @@
 #pragma once
 
+#include "sf_allocators/linear_allocator.hpp"
+#include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
+#include "sf_containers/hashmap.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/constants.hpp"
@@ -37,26 +40,30 @@ struct TextureInputConfig {
     TextureInputConfig(std::string_view file_name): file_name{ file_name }, auto_release{false} {};
 };
 
+inline constexpr u32 TEXTURE_NAME_MAX_LEN{ 64 };
+
+enum struct TextureUse : u8 {
+    UNKNOWN,
+    MAP_DIFFUSE 
+};
+
 struct Texture {
 public:
     VulkanImage       image;
     VulkanBuffer      staging_buffer;
     VkSampler         sampler;
     u8*               pixels;
-    u32               id;
     u32               width;
     u32               height;
     u32               size;
+    u32               id{INVALID_ID};
     u32               generation{INVALID_ID};
-    u32               ref_count;
     bool              has_transparency;
-    bool              auto_release;
     u8                channel_count; 
     ImageFormat       format;
-    TextureState      state;
+    TextureState      state{TextureState::NOT_LOADED};
 
 public:
-    Texture();
     static bool load(
         const VulkanDevice& device,
         VulkanCommandBuffer& cmd_buffer,
@@ -73,7 +80,34 @@ private:
     bool load_from_disk(std::string_view file_name);
 };
 
-void texture_system_create_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, std::span<const TextureInputConfig> texture_configs);
+struct TextureRef {
+    u32               handle;
+    u32               ref_count;
+    bool              auto_release;
+};
+
+struct TextureSystemState {
+public:
+    static constexpr u32 MAX_TEXTURE_AMOUNT{ 65536 };
+    using TextureHashMap = HashMap<std::string_view, TextureRef, LinearAllocator, MAX_TEXTURE_AMOUNT>;
+
+    DynamicArray<Texture, LinearAllocator, MAX_TEXTURE_AMOUNT>                 textures;
+    TextureHashMap                                                             texture_lookup_table;
+    const VulkanDevice*    device;
+    u32                    id_counter;
+public:
+    static consteval u32 get_memory_requirement() { return MAX_TEXTURE_AMOUNT * sizeof(Texture) + MAX_TEXTURE_AMOUNT * sizeof(TextureHashMap::Bucket); }
+    static void create(LinearAllocator& allocator, const VulkanDevice& device, TextureSystemState& out_system);
+    ~TextureSystemState();
+};
+
+struct TextureMap {
+    Texture*   texture;
+    TextureUse use; 
+};
+
+void texture_system_init_internal_state(TextureSystemState* state);
+void texture_system_load_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, std::span<const TextureInputConfig> texture_configs);
 Texture* texture_system_get_texture(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, const TextureInputConfig config);
 bool texture_system_free_texture(const VulkanDevice& device, std::string_view name);
 

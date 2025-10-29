@@ -49,7 +49,7 @@ struct ObjectRenderData {
     u32         id;
 };
 
-static const FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_create_configs{
+static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_create_configs{
     {"brick_wall.jpg"}, {"asphalt.jpg"}, {"grass.jpg"}, {"painting.jpg"}, {"fabric_suit.jpg"}, {"mickey_mouse.jpg"}
 }; 
 static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
@@ -70,7 +70,7 @@ void create_descriptor_layouts_and_sets_for_ubo(
     std::span<VkDescriptorSet> out_sets
 );
 static bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs);
-static bool create_initial_textures(VulkanCommandBuffer& cmd_buffer);
+static bool create_initial_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer);
 static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline);
 static void update_global_state();
 static void shader_update_object_state(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
@@ -81,7 +81,7 @@ static bool renderer_handle_mouse_move_event(u8 code, void* sender, void* listen
 static bool renderer_handle_key_press_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 static bool renderer_handle_mouse_wheel_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 
-bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
+bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, VulkanDevice* out_selected_device) {
     if (!create_instance(config, platform_state)) {
         return false;
     }
@@ -92,6 +92,8 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
         return false;
     }
 
+    out_selected_device = &vk_context.device;
+    
     // Global descriptors
     if (!VulkanGlobalUniformBufferObject::create(vk_context.device, vk_renderer.global_ubo)) {
         return false;
@@ -114,12 +116,19 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {vk_context.graphics_command_buffers.data(), vk_context.graphics_command_buffers.capacity()}, true);
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {&vk_context.texture_load_command_buffer, 1}, true);
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.transfer_command_pool.handle, {vk_context.transfer_command_buffers.data(), vk_context.transfer_command_buffers.capacity()}, true);
+    
+    init_synch_primitives(vk_context);
 
-    if (!create_initial_textures(vk_context.texture_load_command_buffer)) {
+    return true;
+}
+
+// NOTE: texture, material, event systems should be available at the moment of call
+bool renderer_post_init() {
+    if (!create_initial_textures(vk_context.device, vk_context.texture_load_command_buffer)) {
         return false;
     }
 
-    if (!create_main_shader_pipeline({texture_create_configs.data() + 2, 2})) {
+    if (!create_main_shader_pipeline({texture_create_configs.data(), texture_create_configs.count()})) {
         return false;
     }
 
@@ -127,12 +136,10 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
         return false;
     }
 
-    init_synch_primitives(vk_context);
-
-    event_set_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
-    event_set_listener(SystemEventCode::MOUSE_MOVED, nullptr, renderer_handle_mouse_move_event);
-    event_set_listener(SystemEventCode::KEY_PRESSED, nullptr, renderer_handle_key_press_event);
-    event_set_listener(SystemEventCode::MOUSE_WHEEL, nullptr, renderer_handle_mouse_wheel_event);
+    event_system_add_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
+    event_system_add_listener(SystemEventCode::MOUSE_MOVED, nullptr, renderer_handle_mouse_move_event);
+    event_system_add_listener(SystemEventCode::KEY_PRESSED, nullptr, renderer_handle_key_press_event);
+    event_system_add_listener(SystemEventCode::MOUSE_WHEEL, nullptr, renderer_handle_mouse_wheel_event);
 
     return true;
 }
@@ -290,6 +297,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
 
 VulkanContext::VulkanContext()
     : curr_frame{0}
+    , render_system_allocator{ platform_get_mem_page_size() * 10 }
 {
     graphics_command_buffers.resize_to_capacity();
     transfer_command_buffers.resize_to_capacity();
@@ -392,8 +400,8 @@ bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
     create_debugger();
     #endif
 
-    vk_context.framebuffer_width = config.width;
-    vk_context.framebuffer_height = config.height;
+    vk_context.framebuffer_width = config.window_width;
+    vk_context.framebuffer_height = config.window_height;
 
     return true;
 }
@@ -523,15 +531,14 @@ static bool create_main_shader_pipeline(std::span<const TextureInputConfig> text
         attrib_descriptions,
         viewport,
         scissors,
-        // assign all loaded textures to this shader
         texture_configs,
         vk_context.pipeline
     );
 }
 
-static bool create_initial_textures(VulkanCommandBuffer& cmd_buffer) {
+static bool create_initial_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer) {
     cmd_buffer.begin_recording(0);
-    texture_system_create_textures(vk_context.device, cmd_buffer, {texture_create_configs.data(), texture_create_configs.count()});
+    texture_system_load_textures(vk_context.device, cmd_buffer, {texture_create_configs.data(), texture_create_configs.count()});
     cmd_buffer.end_recording();
 
     VkSubmitInfo submit_info{
@@ -667,6 +674,10 @@ static void renderer_update_global_state() {
     vk_renderer.camera.dirty = false;
 }
 
+const VulkanDevice& renderer_get_device() {
+    return vk_context.device;
+}
+
 // THINK: maybe should update only for current frame
 SF_EXPORT void renderer_update_global_ubo(const glm::mat4& view, const glm::mat4& proj) {
     vk_renderer.global_ubo.update(vk_context.curr_frame, view, proj);
@@ -708,12 +719,14 @@ static void update_global_descriptors(const VulkanDevice& device) {
 }
 
 static void shader_update_object_state(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
-    glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 1.0f)) };
+    // glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 1.0f)) };
+    glm::mat4 identity(1.0f);
 
     for (u32 i{0}; i < object_render_data.count(); ++i) {
         GeometryRenderData render_data{};
         // glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(1.50f, 0.00f, 0.00f)) };
-        render_data.model = { /* translate_mat */ rotate_mat };
+        // render_data.model = { rotate_mat };
+        render_data.model = { identity };
         render_data.id = object_render_data[i].id;
         render_data.textures[0] = object_render_data[i].texture;
         shader.update_object_state(vk_context, render_data);

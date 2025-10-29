@@ -1,6 +1,6 @@
+#include "sf_core/asserts_sf.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"
-#include "sf_containers/dynamic_array.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_vulkan/device.hpp"
@@ -171,6 +171,9 @@ bool VulkanSwapchain::create_inner(
     // Images
     u32 swapchain_image_count = 0;
     sf_vk_check(vkGetSwapchainImagesKHR(device.logical_device, swapchain.handle, &swapchain_image_count, 0));
+
+    SF_ASSERT_MSG(swapchain_image_count <= VulkanSwapchain::MAX_IMAGE_COUNT, "Should be less than fixed array capacity");
+    
     if (swapchain.images.is_empty()) {
         swapchain.images.resize(swapchain_image_count);
     }

@@ -6,5 +6,6 @@
 namespace sf {
 
 inline constexpr u32 INVALID_ID{ UINT_MAX };
+inline constexpr u32 INVALID_ALLOC_HANDLE{ UINT_MAX };
 
 }

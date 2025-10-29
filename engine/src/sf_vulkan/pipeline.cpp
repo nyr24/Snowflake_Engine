@@ -1,8 +1,10 @@
 #include "sf_vulkan/pipeline.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float4.hpp"
+#include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/result.hpp"
+#include "sf_core/application.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
@@ -36,7 +38,7 @@ VulkanShaderPipeline::VulkanShaderPipeline()
          }
     }
 }
-    
+ 
 bool VulkanShaderPipeline::create(
     VulkanContext&                 context,
     const char*                    shader_file_name,
@@ -88,7 +90,7 @@ bool VulkanShaderPipeline::create(
 
     out_pipeline.create_local_descriptors(context.device);
 
-    event_set_listener(SystemEventCode::KEY_PRESSED, &out_pipeline, VulkanShaderPipeline::handle_swap_default_texture);
+    event_system_add_listener(SystemEventCode::KEY_PRESSED, &out_pipeline, VulkanShaderPipeline::handle_swap_default_texture);
 
     FixedArray<VkDynamicState, 2> dynamic_state{ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
@@ -397,7 +399,9 @@ void VulkanShaderPipeline::create_default_textures(std::span<const TextureInputC
     
     for (const auto& config : configs) {
         Texture* texture = texture_system_get_texture(context->device, context->texture_load_command_buffer, config);
-        default_textures.append(texture);
+        if (texture) {
+            default_textures.append(texture);
+        }
     }
 }
 
@@ -491,13 +495,13 @@ void VulkanDescriptorSetLayout::destroy(const VulkanDevice& device) {
 }
 
 Result<VkShaderModule> create_shader_module(const VulkanDevice& device, fs::path&& shader_file_path) {
-    Result<DynamicArray<char>> shader_file_contents = read_file(shader_file_path);
+    Result<DynamicArray<char, StackAllocator>> shader_file_contents = read_file(shader_file_path, application_get_temp_allocator());
 
     if (shader_file_contents.is_err()) {
         return {ResultError::VALUE};
     }
 
-    DynamicArray<char>& shader_file_contents_unwrapped{ shader_file_contents.unwrap() };
+    auto shader_file_contents_unwrapped{ shader_file_contents.unwrap_move() };
 
     VkShaderModuleCreateInfo create_info{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,

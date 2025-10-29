@@ -1,6 +1,7 @@
 #pragma once
 #include "sf_core/defines.hpp"
 #include "sf_core/utility.hpp"
+#include <utility>
 
 namespace sf {
 
@@ -13,7 +14,6 @@ private:
 
         ~Storage() noexcept {}
     };
-
     enum struct Tag : u8 {
         ERROR,
         OK
@@ -38,14 +38,54 @@ public:
         , _tag{ rhs._tag }
     {}
 
+    ResultMultiError& operator=(const ResultMultiError<OkType, ErrorType>& rhs) noexcept
+    {
+        if (this == &rhs) {
+            return *this;
+        }
+        
+        _storage = rhs._storage;
+        _tag = rhs._tag;
+        return *this;
+    }
+
     ResultMultiError(ResultMultiError<OkType, ErrorType>&& rhs) noexcept
         : _storage{ std::move(rhs._storage) }
         , _tag{ rhs._tag }
     {}
 
+    ResultMultiError& operator=(ResultMultiError<OkType, ErrorType>&& rhs) noexcept
+    {
+        if (this == &rhs) {
+            return *this;
+        }
+        
+        _storage = std::move(rhs._storage);
+        _tag = rhs._tag;
+
+        rhs._storage = std::declval<ErrorType>();
+        rhs._tag = Tag::ERROR;
+        
+        return *this;
+    }
+
     ~ResultMultiError() noexcept {
         if (_tag == Tag::OK) {
             _storage.ok.~OkType();
+        }
+    }
+
+    friend bool operator==(ResultMultiError<OkType, ErrorType>& first, ResultMultiError<OkType, ErrorType>& sec) {
+        if (first._tag != sec._tag) {
+            return false;
+        } else if (first._tag == Tag::ERROR) {
+            return true;
+        } else {
+            if constexpr (std::equality_comparable<OkType>) {
+                return first._storage == sec._storage;
+            } else {
+                return true;
+            }
         }
     }
 
@@ -77,7 +117,7 @@ public:
         if (_tag == Tag::ERROR) {
             panic("Result is error!");
         }
-        return _storage.ok;
+        return std::move(_storage.ok);
     }
 
     ConstLRefOrValType<OkType> unwrap_or_default(ConstLRefOrValType<OkType> default_value) const noexcept {

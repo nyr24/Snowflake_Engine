@@ -75,13 +75,13 @@ public:
     static constexpr u32 MAX_ATTRIB_COUNT{ 3 };
     static constexpr u32 MAX_DEFAULT_TEXTURES{ 10 };
 
-    VulkanContext*                                                                context;
     VulkanLocalUniformBufferObject                                                local_ubo;
+    VulkanContext*                                                                context;
+    VulkanDescriptorSetLayout                                                     object_descriptor_layout;
+    VulkanDescriptorPool                                                          object_descriptor_pool;
     FixedArray<Texture*, MAX_DEFAULT_TEXTURES>                                    default_textures;
     FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>               attrib_descriptions;
-    VulkanDescriptorSetLayout                                                     object_descriptor_layout;
     FixedArray<ObjectShaderState, MAX_OBJECT_COUNT>                               object_shader_states;
-    VulkanDescriptorPool         object_descriptor_pool;
     VkShaderModule               shader_handle;
     VkPipeline                   pipeline_handle;
     VkPipelineLayout             pipeline_layout;

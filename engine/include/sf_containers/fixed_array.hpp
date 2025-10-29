@@ -56,6 +56,12 @@ public:
         return *this;
     }
 
+    FixedArray(std::string_view str) noexcept
+        : _count{static_cast<u32>(str.size())}
+    {
+        sf_mem_copy((void*)_buffer, (void*)(str.data()), sizeof(char) * _count);
+    }
+
     constexpr FixedArray(FixedArray<T, Capacity>&& rhs) noexcept
         : _count{ rhs._count }
     {

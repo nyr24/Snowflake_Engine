@@ -8,23 +8,4 @@ namespace sf {
     std::exit(1);
 }
 
-std::string_view extract_extension_from_file_path(std::string_view file_name) {
-    u32 last_dot_ind{0};
-    u32 curr{0};
-
-    while (curr < file_name.length()) {
-        if (file_name[curr] == '.') {
-            last_dot_ind = curr;
-        }
-        ++curr;
-    }
-
-    if (last_dot_ind == 0) {
-        LOG_ERROR("Invalid file_name: {}", file_name);
-        return "";
-    }
-
-    return std::string_view{ file_name.substr(last_dot_ind + 1) };
-}
-
 } // sf

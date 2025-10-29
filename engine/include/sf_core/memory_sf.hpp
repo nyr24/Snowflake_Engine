@@ -6,7 +6,6 @@
 
 namespace sf {
 
-// non-templated versions of memory functions (needed for void*)
 SF_EXPORT void* sf_mem_alloc(usize byte_size, u16 alignment = 0);
 SF_EXPORT void* sf_mem_realloc(void* ptr, usize byte_size);
 SF_EXPORT void  sf_mem_free(void* block, u16 alignment = 0);
@@ -19,6 +18,7 @@ SF_EXPORT bool  sf_str_cmp(const char* first, const char* second);
 
 u32 sf_calc_padding(void* address, u16 alignment);
 bool is_address_in_range(void* start, u32 total_size, void* addr);
+bool is_handle_in_range(void* start, u32 total_size, u32 handle);
 u32 ptr_diff(void* ptr1, void* ptr2);
 u32 turn_ptr_into_handle(void* ptr, void* start);
 u32 calc_padding_with_header(void* ptr, u16 alignment, u16 header_size);

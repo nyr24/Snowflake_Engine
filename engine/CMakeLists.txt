@@ -117,3 +117,10 @@ else ()
   target_link_libraries(${PROJECT_NAME} PRIVATE vulkan-1)
 endif()
 
+if (DEFINED SF_TESTS)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC SF_TESTS)
+endif()
+
+if (DEFINED SF_LIMIT_FRAME_COUNT)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC SF_LIMIT_FRAME_COUNT)
+endif()

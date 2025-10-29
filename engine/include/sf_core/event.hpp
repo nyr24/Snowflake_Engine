@@ -1,5 +1,8 @@
 #pragma once
 
+#include "sf_allocators/linear_allocator.hpp"
+#include "sf_containers/dynamic_array.hpp"
+#include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_containers/optional.hpp"
 
@@ -46,8 +49,25 @@ struct Event {
     OnEventFn   callback;
 };
 
-SF_EXPORT bool event_set_listener(u8 code, void* listener, OnEventFn on_event);
-SF_EXPORT bool event_unset_listener(u8 code, void* listener, OnEventFn on_event);
-SF_EXPORT bool event_execute_callbacks(u8 code, void* sender, Option<EventContext> context);
+struct EventSystemState {
+    static constexpr u32 MAX_EVENT_COUNT{50};
+    FixedArray<DynamicArray<Event, LinearAllocator, MAX_EVENT_COUNT>, static_cast<u32>(SystemEventCode::COUNT)> event_lists;
+
+    static consteval u32 get_memory_requirement() {
+        return sizeof(Event) * MAX_EVENT_COUNT * SystemEventCode::COUNT;
+    }
+    
+    static void create(LinearAllocator& system_allocator, EventSystemState& out_system);
+    ~EventSystemState() {
+        for (auto& list : event_lists) {
+            list.clear();
+        }
+    }
+};
+
+void event_system_init_internal_state(EventSystemState* state);
+SF_EXPORT bool event_system_add_listener(u8 code, void* listener, OnEventFn on_event);
+SF_EXPORT bool event_system_remove_listener(u8 code, void* listener, OnEventFn on_event);
+SF_EXPORT bool event_system_fire_event(u8 code, void* sender, Option<EventContext> context);
 
 } // sf

@@ -1,36 +1,48 @@
 #include "sf_core/application.hpp"
+#include "sf_allocators/general_purpose_allocator.hpp"
+#include "sf_allocators/linear_allocator.hpp"
+#include "sf_allocators/stack_allocator.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/game_types.hpp"
 #include "sf_containers/optional.hpp"
+#include "sf_platform/platform.hpp"
+#include "sf_vulkan/device.hpp"
+#include "sf_vulkan/material.hpp"
 #include "sf_vulkan/renderer.hpp"
+#include "sf_vulkan/texture.hpp"
 
 namespace sf {
 
-static ApplicationState application_state;
-static bool is_application_initialized{ false };
+static const u32 TEMP_ALLOCATOR_INIT_CAPACITY{ platform_get_mem_page_size() * 4 };
 
-bool application_create(sf::GameInstance* game_inst) {
-    if (is_application_initialized) {
-        LOG_ERROR("application create called more than once");
-        return false;
-    }
+static ApplicationState state;
+static GeneralPurposeAllocator gpa;
 
-    application_state.game_inst = game_inst;
+ApplicationState::ApplicationState()
+    : system_allocator(TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement() + EventSystemState::get_memory_requirement())
+    , temp_allocator(TEMP_ALLOCATOR_INIT_CAPACITY)
+{}
 
-    application_state.config = game_inst->app_config;
-    application_state.is_running = true;
-    application_state.is_suspended = false;
-    application_state.platform_state = sf::PlatformState{};
+void application_init_internal_state(const VulkanDevice& device) {
+    EventSystemState::create(state.system_allocator, state.event_system);
+    TextureSystemState::create(state.system_allocator, device, state.texture_system);
+    MaterialSystemState::create(state.system_allocator, state.material_system);
 
-    event_set_listener(SystemEventCode::APPLICATION_QUIT, nullptr, application_on_event);
-    event_set_listener(SystemEventCode::KEY_PRESSED, nullptr, application_on_key);
-    event_set_listener(SystemEventCode::KEY_RELEASED, nullptr, application_on_key);
-    event_set_listener(SystemEventCode::MOUSE_BUTTON_PRESSED, nullptr, application_on_mouse);
-    event_set_listener(SystemEventCode::MOUSE_BUTTON_RELEASED, nullptr, application_on_mouse);
+    event_system_init_internal_state(&state.event_system);
+    texture_system_init_internal_state(&state.texture_system);
+    material_system_init_internal_state(&state.material_system);
+}
 
-    bool start_success = application_state.platform_state.startup(application_state);
+bool application_create(GameInstance* game_inst) {
+    state.game_inst = game_inst;
+    state.config = game_inst->app_config;
+    state.is_running = true;
+    state.is_suspended = false;
+    state.platform_state = PlatformState{};
+
+    bool start_success = state.platform_state.startup(state);
 
     if (!start_success) {
         LOG_ERROR("Failed to startup the platform");
@@ -42,57 +54,72 @@ bool application_create(sf::GameInstance* game_inst) {
         return false;
     }
 
-    application_state.game_inst->resize(application_state.game_inst, application_state.config.width, application_state.config.height);
+    state.game_inst->resize(state.game_inst, state.config.window_width, state.config.window_height);
 
-    if (!renderer_init(game_inst->app_config, application_state.platform_state)) {
+    VulkanDevice* selected_device;
+    if (!renderer_init(game_inst->app_config, state.platform_state, selected_device)) {
+        return false;
+    }
+    if (!selected_device) {
         return false;
     }
 
-    is_application_initialized = true;
+    application_init_internal_state(*selected_device);
+
+    if (!renderer_post_init()) {
+        return false;
+    }
+
+    event_system_add_listener(SystemEventCode::APPLICATION_QUIT, nullptr, application_on_event);
+    event_system_add_listener(SystemEventCode::KEY_PRESSED, nullptr, application_on_key);
+    event_system_add_listener(SystemEventCode::KEY_RELEASED, nullptr, application_on_key);
+    event_system_add_listener(SystemEventCode::MOUSE_BUTTON_PRESSED, nullptr, application_on_mouse);
+    event_system_add_listener(SystemEventCode::MOUSE_BUTTON_RELEASED, nullptr, application_on_mouse);
+
     return true;
 }
 
 void application_run() {
-    application_state.clock.start();
+    state.clock.start();
 
-    while (application_state.is_running) {
-        if (!application_state.platform_state.poll_events(application_state)) {
-            application_state.is_running = false;
+    while (state.is_running) {
+        if (!state.platform_state.poll_events(state)) {
+            state.is_running = false;
         }
 
-        if (!application_state.is_suspended) {
-            f64 delta_time = application_state.clock.update_and_get_delta();
+        if (!state.is_suspended) {
+            f64 delta_time = state.clock.update_and_get_delta();
         #ifdef SF_LIMIT_FRAME_COUNT
             f64 frame_start_time = platform_get_abs_time();
         #endif
 
             if (!renderer_begin_frame(delta_time)) {
                 LOG_FATAL("Begin frame is failed, shutting down");
-                application_state.is_running = false;
-                break;  
-            }
-
-            if (!application_state.game_inst->update(application_state.game_inst, delta_time)) {
-                LOG_FATAL("Game update failed, shutting down");
-                application_state.is_running = false;
+                state.is_running = false;
                 break;
             }
 
-            if (!application_state.game_inst->render(application_state.game_inst, delta_time)) {
+            if (!state.game_inst->update(state.game_inst, delta_time)) {
+                LOG_FATAL("Game update failed, shutting down");
+                state.is_running = false;
+                break;
+            }
+
+            if (!state.game_inst->render(state.game_inst, delta_time)) {
                 LOG_FATAL("Game render failed, shutting down");
-                application_state.is_running = false;
+                state.is_running = false;
                 break;
             }
 
             // TODO: refactor packet creation
             RenderPacket packet;
             packet.delta_time = 0;
-            packet.elapsed_time = application_state.clock.elapsed_time;
+            packet.elapsed_time = state.clock.elapsed_time;
             renderer_draw_frame(packet);
 
         #ifdef SF_LIMIT_FRAME_COUNT
             f64 frame_elapsed_time = platform_get_abs_time() - frame_start_time;
-            f64 frame_remain_seconds = application_state.TARGET_FRAME_SECONDS - frame_elapsed_time;
+            f64 frame_remain_seconds = state.TARGET_FRAME_SECONDS - frame_elapsed_time;
 
             if (frame_remain_seconds > 0.0) {
                 u64 remaining_ms = frame_remain_seconds * 1000.0;
@@ -100,19 +127,19 @@ void application_run() {
             }
         #endif
 
-            application_state.frame_count++;
+            state.frame_count++;
             input_update(delta_time);
             renderer_end_frame(delta_time);
         }
     }
 
-    application_state.is_running = false;
+    state.is_running = false;
 }
 
 bool application_on_event(u8 code, void* sender, void* listener_inst, Option<EventContext> context) {
     switch (static_cast<SystemEventCode>(code)) {
         case SystemEventCode::APPLICATION_QUIT: {
-            application_state.is_running = false;
+            state.is_running = false;
             return true;
         } break;
         default: break;
@@ -132,7 +159,7 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, Option<Event
         u8 key_code = context.data.u8[0];
         switch (static_cast<Key>(key_code)) {
             case Key::ESCAPE: {
-                event_execute_callbacks(SystemEventCode::APPLICATION_QUIT, nullptr, {None::VALUE});
+                event_system_fire_event(SystemEventCode::APPLICATION_QUIT, nullptr, {None::VALUE});
                 return true;
             };
             default: {
@@ -174,6 +201,14 @@ bool application_on_mouse(u8 code, void* sender, void* listener_inst, Option<Eve
     }
 
     return false;
+}
+
+StackAllocator& application_get_temp_allocator() {
+    return state.temp_allocator;
+}
+
+GeneralPurposeAllocator& application_get_gpa() {
+    return gpa;
 }
 
 } // sf

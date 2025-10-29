@@ -1,7 +1,7 @@
 #pragma once
 
+#include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
-#include "sf_containers/dynamic_array.hpp"
 #include "sf_vulkan/image.hpp"
 #include <vulkan/vulkan_core.h>
 
@@ -11,11 +11,12 @@ struct VulkanDevice;
 
 struct VulkanSwapchain {
 public:
-    static constexpr u8 MAX_FRAMES_IN_FLIGHT = 2;
+    static constexpr u8 MAX_FRAMES_IN_FLIGHT{ 2 };
+    static constexpr u8 MAX_IMAGE_COUNT{ 10 };
 
+    FixedArray<VkImage, MAX_IMAGE_COUNT>        images;
+    FixedArray<VkImageView, MAX_IMAGE_COUNT>    views;
     VkSwapchainKHR                      handle;
-    DynamicArray<VkImage>               images;
-    DynamicArray<VkImageView>           views;
     VulkanImage                         depth_attachment;
     VkSurfaceFormatKHR                  image_format;
 
