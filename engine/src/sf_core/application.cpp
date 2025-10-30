@@ -12,6 +12,7 @@
 #include "sf_vulkan/material.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/texture.hpp"
+#include <GLFW/glfw3.h>
 
 namespace sf {
 
@@ -23,6 +24,7 @@ static GeneralPurposeAllocator gpa;
 ApplicationState::ApplicationState()
     : system_allocator{ TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement() + EventSystemState::get_memory_requirement() }
     , temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
+    , platform_state{}
 {}
 
 void application_init_internal_state(const VulkanDevice& device) {
@@ -40,11 +42,10 @@ bool application_create(GameInstance* game_inst) {
     state.config = game_inst->app_config;
     state.is_running = true;
     state.is_suspended = false;
-    state.platform_state = PlatformState{};
 
-    bool start_success = state.platform_state.startup(state);
+    bool platform_init_success = PlatformState::create(game_inst->app_config, state.platform_state);
 
-    if (!start_success) {
+    if (!platform_init_success) {
         LOG_ERROR("Failed to startup the platform");
         return false;
     }
@@ -82,10 +83,8 @@ bool application_create(GameInstance* game_inst) {
 void application_run() {
     state.clock.start();
 
-    while (state.is_running) {
-        if (!state.platform_state.poll_events(state)) {
-            state.is_running = false;
-        }
+    while (!glfwWindowShouldClose(state.platform_state.window) && state.is_running) {
+        glfwPollEvents();
 
         if (!state.is_suspended) {
             f64 delta_time = state.clock.update_and_get_delta();

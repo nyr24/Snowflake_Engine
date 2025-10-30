@@ -2,6 +2,7 @@
 #include "sf_containers/optional.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/application.hpp"
+#include "sf_core/constants.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
@@ -57,7 +58,7 @@ static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
 void create_debugger();
-bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions);
+bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& required_extensions);
 bool init_validation_layers(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_VALIDATION_LAYER_CAPACITY>& required_validation_layers);
 void init_synch_primitives(VulkanContext& context);
 void init_descriptor_set_layouts_and_sets(VulkanContext& context);
@@ -100,7 +101,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, Vul
         return false;
     }
 
-    platform_create_vk_surface(platform_state, vk_context);
+    // platform_create_vk_surface(platform_state, vk_context);
 
     if (!VulkanDevice::create(vk_context)) {
         return false;
@@ -374,8 +375,9 @@ bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
     create_info.pApplicationInfo = &vk_app_info;
 
     // Extensions
-    FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY> required_extensions;
+    FixedArray<const char*, VK_MAX_EXTENSION_COUNT> required_extensions;
     required_extensions.append(VK_KHR_SURFACE_EXTENSION_NAME);
+
     #ifdef SF_DEBUG
     required_extensions.append(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     #endif
@@ -427,8 +429,7 @@ void create_debugger() {
     sf_vk_check(func(vk_context.instance, &debug_create_info, nullptr, &vk_context.debug_messenger));
 }
 
-bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
-    platform_get_required_extensions(required_extensions);
+bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& required_extensions) {
 #ifdef SF_DEBUG
     // Log required extensions
     LOG_INFO("Required vulkan extensions: ");

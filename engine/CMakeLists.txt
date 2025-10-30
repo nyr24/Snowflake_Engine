@@ -4,14 +4,6 @@ project(${ENGINE_LIB_NAME} VERSION 0.1.0 LANGUAGES CXX)
 set(SRC_DIR ${ENGINE_DIR}/src)
 set(INCLUDE_DIR ${ENGINE_DIR}/include)
 set(STB_INCLUDE_DIR ${ENGINE_DIR}/lib/stb)
-set(SHADER_SRC_DIR ${ENGINE_DIR}/shaders)
-set(SHADER_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
-set(SHADER_COMPILER $ENV{VULKAN_SDK}/bin/slangc)
-set(SHADER_TARGET ${PROJECT_NAME}_shaders)
-
-file(GLOB_RECURSE VK-ENGINE-SRCS CONFIGURE_DEPENDS ${SRC_DIR}/*.cpp)
-file(GLOB_RECURSE VK-ENGINE-HEADERS CONFIGURE_DEPENDS ${INCLUDE_DIR}/*.hpp)
-file(GLOB_RECURSE VK-SHADER-SOURCES CONFIGURE_DEPENDS ${SHADER_SRC_DIR}/*.slang)
 
 # compile shaders
 function (add_shaders target)
@@ -69,8 +61,23 @@ function (add_shaders target)
   add_dependencies(${PROJECT_NAME} ${SHADER_TARGET})
 endfunction()
 
+# todo:
+# set(GLFW_DIST_DIR ${})
+
+set(SHADER_SRC_DIR ${ENGINE_DIR}/shaders)
+set(SHADER_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
+set(SHADER_COMPILER $ENV{VULKAN_SDK}/bin/slangc)
+set(SHADER_TARGET ${PROJECT_NAME}_shaders)
+
+file(GLOB_RECURSE VK-ENGINE-SRCS CONFIGURE_DEPENDS ${SRC_DIR}/*.cpp)
+file(GLOB_RECURSE VK-ENGINE-HEADERS CONFIGURE_DEPENDS ${INCLUDE_DIR}/*.hpp)
+file(GLOB_RECURSE VK-SHADER-SOURCES CONFIGURE_DEPENDS ${SHADER_SRC_DIR}/*.slang)
+
 # engine library
 add_library(${PROJECT_NAME} SHARED ${VK-ENGINE-SRCS} ${VK-ENGINE-HEADERS})
+
+# glfw
+# add_subdirectory(${GLFW_DIR})
 
 # shaders
 add_shaders(${PROJECT_NAME})
@@ -101,26 +108,27 @@ target_compile_definitions(
 )
 
 if (DEFINED SF_BUILD_WAYLAND)
-  target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include ${GLM_INCLUDE_DIR} ${STB_INCLUDE_DIR})
+  target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include ${GLM_INCLUDE_DIR} ${STB_INCLUDE_DIR} ${GLFW_INCLUDE_DIR})
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_WAYLAND)
   target_link_directories(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/lib)
-  target_link_libraries(${PROJECT_NAME} PRIVATE vulkan wayland-client wayland-cursor wayland-egl xkbcommon)
+  # TODO: remove glfw
+  target_link_libraries(${PROJECT_NAME} PRIVATE vulkan wayland-client wayland-cursor wayland-egl xkbcommon glfw)
 elseif (DEFINED SF_BUILD_X11)
-  target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include ${GLM_INCLUDE_DIR} ${STB_INCLUDE_DIR})
+  target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include ${GLM_INCLUDE_DIR} ${STB_INCLUDE_DIR}  ${GLFW_INCLUDE_DIR})
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_X11)
   target_link_directories(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/lib)
   target_link_libraries(${PROJECT_NAME} PRIVATE vulkan xcb xcb-xkb X11 X11-xcb)
 else ()
-  target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/Include ${GLM_INCLUDE_DIR} ${STB_INCLUDE_DIR})
+  target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/Include ${GLM_INCLUDE_DIR} ${STB_INCLUDE_DIR} ${GLFW_INCLUDE_DIR})
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_WINDOWS)
   target_link_directories(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/Lib)
   target_link_libraries(${PROJECT_NAME} PRIVATE vulkan-1)
 endif()
 
-if (DEFINED SF_TESTS)
+if (DEFINED SF_BUILD_TESTS)
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_TESTS)
 endif()
 
-if (DEFINED SF_LIMIT_FRAME_COUNT)
+if (DEFINED SF_BUILD_LIMIT_FRAME_COUNT)
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_LIMIT_FRAME_COUNT)
 endif()

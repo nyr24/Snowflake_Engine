@@ -45,12 +45,12 @@ for arg in "$@"; do
     ;;
   --limit_fps)
     echo "FPS limit option enabled"
-    CMAKE_OPTS+=" -DSF_LIMIT_FRAME_COUNT=1"
+    CMAKE_OPTS+=" -DSF_BUILD_LIMIT_FRAME_COUNT=1"
     X11_BUILD_FLAG_SPECIFIED=1
     ;;
   --test | -t)
     echo "Building tests..."
-    CMAKE_OPTS+=" -DSF_TESTS=1"
+    CMAKE_OPTS+=" -DSF_BUILD_TESTS=1"
     ;;
   --gcc)
     echo "Using gcc compiler"
