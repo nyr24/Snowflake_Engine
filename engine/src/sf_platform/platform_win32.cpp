@@ -217,7 +217,7 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, UINT msg, WPARAM w_param, LPAR
         return 1;
     case WM_CLOSE:
         // will be handled by the application
-        event_execute_callbacks(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
+        event_system_fire_event(static_cast<u8>(SystemEventCode::APPLICATION_QUIT), nullptr, nullptr);
         return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -233,7 +233,7 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, UINT msg, WPARAM w_param, LPAR
         context.data.u32[0] = width;
         context.data.u32[1] = height;
 
-        event_execute_callbacks(static_cast<u8>(SystemEventCode::RESIZED), nullptr, &context);
+        event_system_fire_event(static_cast<u8>(SystemEventCode::RESIZED), nullptr, &context);
     } break;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
