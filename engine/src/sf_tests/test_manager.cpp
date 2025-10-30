@@ -57,18 +57,20 @@ void fixed_array_test() {
 
 void stack_allocator_test() {
     TestCounter counter("Stack Allocator");
-    StackAllocator alloc{1024};
+    StackAllocator alloc{500};
 
     {
         DynamicArray<u8, StackAllocator> arr(&alloc);
-        arr.reserve(100);
-        expect(alloc.count() >= 100 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
-    }
+        arr.reserve(200);
+        expect(alloc.count() >= 200 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
 
-    {
-        DynamicArray<u64, StackAllocator> arr(&alloc);
-        arr.reserve(1025);
-        expect(alloc.count() >= 1024 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
+        DynamicArray<u8, StackAllocator> arr2(&alloc);
+        arr2.reserve(200);
+        expect(alloc.count() >= 400 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
+
+        DynamicArray<u8, StackAllocator> arr3(&alloc);
+        arr3.reserve(300);
+        expect(alloc.count() >= 700 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
     }
 }
 
@@ -85,6 +87,25 @@ void freelist_allocator_test() {
     list.free_handle(h3.unwrap_copy());
     list.free_handle(h2.unwrap_copy());
     list.free_handle(h4.unwrap_copy());
+}
+
+void linear_allocator_test() {
+    TestCounter counter("Linear Allocator");
+    LinearAllocator alloc{500};
+
+    {
+        DynamicArray<u8, LinearAllocator> arr(&alloc);
+        arr.reserve(200);
+        expect(alloc.count() >= 200 * sizeof(u8), counter);
+
+        DynamicArray<u8, LinearAllocator> arr2(&alloc);
+        arr2.reserve(200);
+        expect(alloc.count() >= 400 * sizeof(u8), counter);
+
+        DynamicArray<u8, LinearAllocator> arr3(&alloc);
+        arr3.reserve(300);
+        expect(alloc.count() >= 700 * sizeof(u8), counter);
+    }
 }
 
 void hashmap_test() {
@@ -104,9 +125,10 @@ void hashmap_test() {
 
 void TestManager::collect_all_tests() {
     module_tests.append(hashmap_test);
-    module_tests.append(fixed_array_test);
+    module_tests.append(linear_allocator_test);
     module_tests.append(stack_allocator_test);
     module_tests.append(freelist_allocator_test);
+    module_tests.append(fixed_array_test);
 }
 
 } // sf

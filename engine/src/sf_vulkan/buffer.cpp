@@ -70,7 +70,8 @@ void VulkanBuffer::destroy(const VulkanDevice& device) {
     }
 }
 
-bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, Mesh&& mesh, VulkanVertexIndexBuffer& out_buffer) {
+bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, Mesh&& mesh, LinearAllocator& render_system_allocator, VulkanVertexIndexBuffer& out_buffer) {
+    out_buffer.data.set_allocator(&render_system_allocator);
     out_buffer.data.resize(mesh.vertices.size_in_bytes() + mesh.indices.size_in_bytes());
     out_buffer.indeces_count = mesh.indices.count();
     out_buffer.indeces_offset = mesh.vertices.size_in_bytes(); 

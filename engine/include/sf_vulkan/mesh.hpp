@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sf_allocators/linear_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan_core.h>
@@ -17,13 +18,13 @@ struct Vertex {
 struct VulkanShaderPipeline;
 
 struct Mesh {
-    DynamicArray<Vertex>  vertices;
-    DynamicArray<u16>     indices;
+    DynamicArray<Vertex, LinearAllocator>  vertices;
+    DynamicArray<u16, LinearAllocator>     indices;
 
-    static Mesh get_cube_mesh();
+    static Mesh get_cube_mesh(LinearAllocator& allocator);
 private:
-    static DynamicArray<Vertex> define_cube_vertices();
-    static DynamicArray<u16> define_cube_indices();
+    static DynamicArray<Vertex, LinearAllocator> define_cube_vertices(LinearAllocator& allocator);
+    static DynamicArray<u16, LinearAllocator> define_cube_indices(LinearAllocator& allocator);
 };
 
 } // sf

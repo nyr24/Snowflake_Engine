@@ -10,8 +10,8 @@ bool create_game(sf::GameInstance* out_game) {
         .name = "SNOWFLAKE_GAME",
         .window_x = 0,
         .window_y = 0,
-        .window_width = 2560,
-        .window_height = 1440
+        .window_width = 1280,
+        .window_height = 920
     };
     out_game->init = init;
     out_game->update = update;

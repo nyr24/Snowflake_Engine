@@ -17,13 +17,13 @@ public:
     UpdateFn update;
     RenderFn render;
     ResizeFn resize;
-    LinearAllocator&  allocator;
+    LinearAllocator   allocator;
     ApplicationConfig app_config;
     u32 game_state_handle;
 
 public:
-    GameInstance(LinearAllocator& allocator)
-        : allocator{ allocator }
+    GameInstance(LinearAllocator&& allocator)
+        : allocator{ std::move(allocator) }
     {}
 
     ~GameInstance()

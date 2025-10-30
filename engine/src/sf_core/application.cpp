@@ -15,14 +15,14 @@
 
 namespace sf {
 
-static const u32 TEMP_ALLOCATOR_INIT_CAPACITY{ platform_get_mem_page_size() * 4 };
+static const u32 TEMP_ALLOCATOR_INIT_PAGES{ 16 };
 
 static ApplicationState state;
 static GeneralPurposeAllocator gpa;
 
 ApplicationState::ApplicationState()
-    : system_allocator(TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement() + EventSystemState::get_memory_requirement())
-    , temp_allocator(TEMP_ALLOCATOR_INIT_CAPACITY)
+    : system_allocator{ TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement() + EventSystemState::get_memory_requirement() }
+    , temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
 {}
 
 void application_init_internal_state(const VulkanDevice& device) {

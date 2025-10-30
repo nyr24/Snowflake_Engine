@@ -1,7 +1,6 @@
 #include "sf_vulkan/mesh.hpp"
-#include "sf_allocators/general_purpose_allocator.hpp"
+#include "sf_allocators/linear_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
-#include "sf_core/application.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <initializer_list>
@@ -52,9 +51,9 @@ VkVertexInputBindingDescription Vertex::get_binding_descr() {
 #define PURPLE  0.5f, 0.0f, 0.5f
 #define YELLOW  1.0f, 1.0f, 0.0f
 
-DynamicArray<Vertex> Mesh::define_cube_vertices() {
-    return std::tuple<GeneralPurposeAllocator*, std::initializer_list<Vertex>>{
-        &application_get_gpa(),
+DynamicArray<Vertex, LinearAllocator> Mesh::define_cube_vertices(LinearAllocator& allocator) {
+    return std::tuple<LinearAllocator*, std::initializer_list<Vertex>>{
+        &allocator,
         {
             // forward
             {{ POS_TLN }, { TEX_TL }},
@@ -95,9 +94,9 @@ DynamicArray<Vertex> Mesh::define_cube_vertices() {
     };
 }
 
-DynamicArray<u16> Mesh::define_cube_indices() {
-    return std::tuple<GeneralPurposeAllocator*, std::initializer_list<u16>>{
-        &application_get_gpa(),
+DynamicArray<u16, LinearAllocator> Mesh::define_cube_indices(LinearAllocator& allocator) {
+    return std::tuple<LinearAllocator*, std::initializer_list<u16>>{
+        &allocator,
         {
             0, 1, 2,        0, 2, 3,
             4, 6, 5,        4, 7, 6,
@@ -109,10 +108,10 @@ DynamicArray<u16> Mesh::define_cube_indices() {
     };
 }
 
-Mesh Mesh::get_cube_mesh() {
+Mesh Mesh::get_cube_mesh(LinearAllocator& allocator) {
     return {
-        .vertices = define_cube_vertices(),
-        .indices = define_cube_indices()
+        .vertices = define_cube_vertices(allocator),
+        .indices = define_cube_indices(allocator)
     };
 }
     

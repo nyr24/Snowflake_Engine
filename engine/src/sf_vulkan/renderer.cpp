@@ -42,6 +42,7 @@ static VulkanContext vk_context{};
 
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
+static constexpr u32 RENDER_SYSTEM_ALLOCATOR_INIT_PAGES{ 4 };
 static const char* MAIN_SHADER_FILE_NAME{"shader.spv"};
 
 struct ObjectRenderData {
@@ -81,6 +82,19 @@ static bool renderer_handle_mouse_move_event(u8 code, void* sender, void* listen
 static bool renderer_handle_key_press_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 static bool renderer_handle_mouse_wheel_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 
+VulkanContext::VulkanContext()
+    : curr_frame{0}
+    , render_system_allocator{ platform_get_mem_page_size() * RENDER_SYSTEM_ALLOCATOR_INIT_PAGES }
+{
+    graphics_command_buffers.resize_to_capacity();
+    transfer_command_buffers.resize_to_capacity();
+    image_available_semaphores.resize_to_capacity();
+    render_finished_semaphores.resize_to_capacity();
+    draw_fences.resize_to_capacity();
+    transfer_fences.resize_to_capacity();
+    global_descriptor_sets.resize_to_capacity();
+}
+
 bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, VulkanDevice* out_selected_device) {
     if (!create_instance(config, platform_state)) {
         return false;
@@ -109,7 +123,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, Vul
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::TRANSFER, vk_context.device.queue_family_info.transfer_family_index,
         static_cast<VkCommandPoolCreateFlagBits>(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT), vk_context.transfer_command_pool);
 
-    if (!VulkanVertexIndexBuffer::create(vk_context.device, Mesh::get_cube_mesh(), vk_context.vertex_index_buffer)) {
+    if (!VulkanVertexIndexBuffer::create(vk_context.device, Mesh::get_cube_mesh(vk_context.render_system_allocator), vk_context.render_system_allocator, vk_context.vertex_index_buffer)) {
        return false; 
     }
 
@@ -293,19 +307,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
             break;
     }
     return VK_FALSE;
-}
-
-VulkanContext::VulkanContext()
-    : curr_frame{0}
-    , render_system_allocator{ platform_get_mem_page_size() * 10 }
-{
-    graphics_command_buffers.resize_to_capacity();
-    transfer_command_buffers.resize_to_capacity();
-    image_available_semaphores.resize_to_capacity();
-    render_finished_semaphores.resize_to_capacity();
-    draw_fences.resize_to_capacity();
-    transfer_fences.resize_to_capacity();
-    global_descriptor_sets.resize_to_capacity();
 }
 
 VulkanContext::~VulkanContext() {
