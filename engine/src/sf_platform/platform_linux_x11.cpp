@@ -308,7 +308,7 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
 }
 
-void platform_get_required_extensions(FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
+void platform_get_required_extensions(FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& required_extensions) {
     required_extensions.append("VK_KHR_xcb_surface");
 }
 

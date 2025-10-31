@@ -196,7 +196,7 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(si.dwPageSize);
 }
 
-void platform_get_required_extensions(FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
+void platform_get_required_extensions(FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& required_extensions) {
     required_extensions.append("VK_KHR_win32_surface");
 }
 
@@ -230,10 +230,10 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, UINT msg, WPARAM w_param, LPAR
         u32 height = r.bottom - r.top;
 
         EventContext context;
-        context.data.u32[0] = width;
-        context.data.u32[1] = height;
+        context.data.u16[0] = static_cast<u16>(width);
+        context.data.u16[1] = static_cast<u16>(height);
 
-        event_execute_callbacks(static_cast<u8>(SystemEventCode::RESIZED), nullptr, &context);
+        event_system_fire_event(SystemEventCode::RESIZED, nullptr, &context);
     } break;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:

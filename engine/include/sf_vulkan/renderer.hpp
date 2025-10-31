@@ -61,7 +61,6 @@ public:
     u32                                   framebuffer_last_size_generation;
     u16                                   framebuffer_width;
     u16                                   framebuffer_height;
-    bool                                  recreating_swapchain;
 public:
     VulkanContext();
     ~VulkanContext();

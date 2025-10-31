@@ -53,7 +53,13 @@ concept SameTypes = std::same_as<std::remove_cv_t<std::remove_reference_t<First>
 template<typename T>
 T sf_clamp(ConstLRefOrValType<T> val, ConstLRefOrValType<T> min, ConstLRefOrValType<T> max) noexcept {
     SF_ASSERT_MSG(min <= max, "Min can't be bigger than max");
-    return (val < min ? min : val) > max ? max : val;
+    if (val < min) {
+        return min;
+    }
+    if (val > max) {
+        return max;
+    }
+    return val;
 }
 
 } // sf

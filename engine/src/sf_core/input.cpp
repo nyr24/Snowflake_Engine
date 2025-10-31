@@ -1,9 +1,9 @@
-#include "sf_core/logger.hpp"
-#include "sf_platform/defines.hpp"
 #include "sf_core/clock.hpp"
+#include "sf_platform/defines.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/event.hpp"
+#include "sf_platform/glfw3.h"
 
 namespace sf {
 
@@ -24,7 +24,7 @@ struct KeyRepeatTimer {
 
 // down = true, up = false
 struct KeyboardState {
-    bool keys[static_cast<u64>(Key::COUNT)];
+    bool keys[static_cast<u32>(GLFW_KEY_LAST)];
 };
 
 struct MouseState {
@@ -41,7 +41,7 @@ struct InputState {
     MouseDelta      mouse_delta;
 #ifdef SF_PLATFORM_WAYLAND
     KeyRepeatGlobalState key_repeat_state;
-    KeyRepeatTimer       key_repeat_timers[static_cast<u8>(Key::COUNT)];
+    KeyRepeatTimer       key_repeat_timers[static_cast<u32>(GLFW_KEY_LAST)];
 #endif
 };
 
@@ -53,7 +53,7 @@ void input_update(f64 delta_time) {
 
 // repeat key event for wayland
 #ifdef SF_PLATFORM_WAYLAND
-    for (u8 i{0}; i < static_cast<u8>(Key::COUNT); ++i) {
+    for (i32 i{0}; i < GLFW_KEY_LAST; ++i) {
         if (state.kb_prev.keys[i]) {
             KeyRepeatTimer& timer = state.key_repeat_timers[i];
             if (!timer.clock.is_running()) {
@@ -70,7 +70,7 @@ void input_update(f64 delta_time) {
                 }
             } else {
                 if (timer.clock.elapsed_time * 1000 > state.key_repeat_state.rate) {
-                    input_process_key(static_cast<Key>(i), true);
+                    input_process_key(i, true);
                     timer.clock.restart();
                 }
             }
@@ -86,28 +86,26 @@ void input_update(f64 delta_time) {
 }
 
 // keyboard input
-bool input_is_key_down(Key key) {
-    return state.kb_curr.keys[static_cast<u8>(key)];
+bool input_is_key_down(i32 key) {
+    return state.kb_curr.keys[key];
 }
 
-bool input_is_key_up(Key key) {
-    return !state.kb_curr.keys[static_cast<u8>(key)];
+bool input_is_key_up(i32 key) {
+    return !state.kb_curr.keys[key];
 }
 
-bool input_was_key_down(Key key) {
-    return state.kb_prev.keys[static_cast<u8>(key)];
+bool input_was_key_down(i32 key) {
+    return state.kb_prev.keys[key];
 }
 
-bool input_was_key_up(Key key) {
-    return !state.kb_prev.keys[static_cast<u8>(key)];
+bool input_was_key_up(i32 key) {
+    return !state.kb_prev.keys[key];
 }
 
-void input_process_key(Key key, bool is_pressed) {
-    u8 ind{ static_cast<u8>(key) };
-
-    state.kb_curr.keys[ind] = is_pressed;
+void input_process_key(i32 key, bool is_pressed) {
+    state.kb_curr.keys[key] = is_pressed;
     EventContext context;
-    context.data.u8[0] = ind;
+    context.data.u16[0] = static_cast<u16>(key);
     event_system_fire_event(static_cast<u8>(is_pressed ? SystemEventCode::KEY_PRESSED : SystemEventCode::KEY_RELEASED), nullptr, {context});
 }
 

@@ -1,3 +1,4 @@
+#include "sf_core/constants.hpp"
 #include "sf_platform/defines.hpp"
 
 #if defined(SF_PLATFORM_LINUX) && defined(SF_PLATFORM_WAYLAND)
@@ -780,9 +781,9 @@ u32 platform_get_mem_page_size() {
     return static_cast<u32>(sysconf(_SC_PAGESIZE));
 }
 
-// void platform_get_required_extensions(FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
-//     required_extensions.append("VK_KHR_wayland_surface");
-// }
+void platform_get_required_extensions(FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& required_extensions) {
+    required_extensions.append("VK_KHR_wayland_surface");
+}
 
 // void platform_create_vk_surface(PlatformState& plat_state, VulkanContext& context) {
 //     WaylandInternState* state = static_cast<WaylandInternState*>(plat_state.internal_state);

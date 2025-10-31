@@ -12,7 +12,7 @@
 #include "sf_vulkan/material.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/texture.hpp"
-#include <GLFW/glfw3.h>
+#include "sf_platform/glfw3.h"
 
 namespace sf {
 
@@ -59,23 +59,26 @@ bool application_create(GameInstance* game_inst) {
 
     VulkanDevice* selected_device;
     if (!renderer_init(game_inst->app_config, state.platform_state, selected_device)) {
+        LOG_FATAL("Renderer failed to initialize");
         return false;
     }
     if (!selected_device) {
+        LOG_FATAL("Appropriate device was not found");
         return false;
     }
 
     application_init_internal_state(*selected_device);
 
     if (!renderer_post_init()) {
+        LOG_FATAL("Renderer failed to post-initialize");
         return false;
     }
 
     event_system_add_listener(SystemEventCode::APPLICATION_QUIT, nullptr, application_on_event);
     event_system_add_listener(SystemEventCode::KEY_PRESSED, nullptr, application_on_key);
-    event_system_add_listener(SystemEventCode::KEY_RELEASED, nullptr, application_on_key);
-    event_system_add_listener(SystemEventCode::MOUSE_BUTTON_PRESSED, nullptr, application_on_mouse);
-    event_system_add_listener(SystemEventCode::MOUSE_BUTTON_RELEASED, nullptr, application_on_mouse);
+    // event_system_add_listener(SystemEventCode::KEY_RELEASED, nullptr, application_on_key);
+    // event_system_add_listener(SystemEventCode::MOUSE_BUTTON_PRESSED, nullptr, application_on_mouse);
+    // event_system_add_listener(SystemEventCode::MOUSE_BUTTON_RELEASED, nullptr, application_on_mouse);
 
     return true;
 }
@@ -93,9 +96,8 @@ void application_run() {
         #endif
 
             if (!renderer_begin_frame(delta_time)) {
-                LOG_FATAL("Begin frame is failed, shutting down");
-                state.is_running = false;
-                break;
+                LOG_INFO("Frame is skipped");
+                continue;
             }
 
             if (!state.game_inst->update(state.game_inst, delta_time)) {
@@ -155,9 +157,9 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, Option<Event
     EventContext& context{ maybe_context.unwrap() };
 
     if (code == static_cast<u8>(SystemEventCode::KEY_PRESSED)) {
-        u8 key_code = context.data.u8[0];
-        switch (static_cast<Key>(key_code)) {
-            case Key::ESCAPE: {
+        u16 key_code = context.data.u16[0];
+        switch (key_code) {
+            case GLFW_KEY_ESCAPE: {
                 event_system_fire_event(SystemEventCode::APPLICATION_QUIT, nullptr, {None::VALUE});
                 return true;
             };
@@ -165,42 +167,43 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, Option<Event
                 // LOG_DEBUG("Key '{}' was pressed", (char)key_code);
             } break;
         }
-    } else if (code == static_cast<u8>(SystemEventCode::KEY_RELEASED)) {
-        u8 key_code = context.data.u8[0];
-        switch (static_cast<Key>(key_code)) {
-            default: {
-                // LOG_DEBUG("Key '{}' was released", (char)key_code);
-            } break;
-        }
     }
+    // else if (code == static_cast<u8>(SystemEventCode::KEY_RELEASED)) {
+    //     u16 key_code = context.data.u16[0];
+    //     switch (key_code) {
+    //         default: {
+    //             LOG_DEBUG("Key '{}' was released", (char)key_code);
+    //         } break;
+    //     }
+    // }
 
     return false;
 }
 
-bool application_on_mouse(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
-    if (maybe_context.is_none()) {
-        return false;
-    }
+// bool application_on_mouse(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
+//     if (maybe_context.is_none()) {
+//         return false;
+//     }
 
-    EventContext& context{ maybe_context.unwrap() };
+//     EventContext& context{ maybe_context.unwrap() };
 
-    u8 mouse_btn = context.data.u8[0];
-    if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_PRESSED)) {
-        switch (static_cast<MouseButton>(mouse_btn)) {
-            default: {
-                LOG_DEBUG("Mouse btn '{}' was pressed", mouse_btn);
-            } break;
-        }
-    } else if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_RELEASED)) {
-        switch (static_cast<MouseButton>(mouse_btn)) {
-            default: {
-                LOG_DEBUG("Mouse btn '{}' was released", mouse_btn);
-            } break;
-        }
-    }
+    // u8 mouse_btn = context.data.u8[0];
+    // if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_PRESSED)) {
+    //     switch (static_cast<MouseButton>(mouse_btn)) {
+    //         default: {
+    //             LOG_DEBUG("Mouse btn '{}' was pressed", mouse_btn);
+    //         } break;
+    //     }
+    // } else if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_RELEASED)) {
+    //     switch (static_cast<MouseButton>(mouse_btn)) {
+    //         default: {
+    //             LOG_DEBUG("Mouse btn '{}' was released", mouse_btn);
+    //         } break;
+    //     }
+    // }
 
-    return false;
-}
+//     return false;
+// }
 
 StackAllocator& application_get_temp_allocator() {
     return state.temp_allocator;

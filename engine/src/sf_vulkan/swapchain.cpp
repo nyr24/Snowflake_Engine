@@ -25,8 +25,10 @@ bool VulkanSwapchain::recreate(
     u16 width,
     u16 height
 ) {
+    is_recreating = true;
     vkDeviceWaitIdle(device.logical_device);
     destroy(device);
+    is_recreating = false;
     return create_inner(device, surface, width, height, *this);
 }
 
@@ -195,7 +197,7 @@ bool VulkanSwapchain::create_inner(
 
     if (!device.detect_depth_format()) {
         device.depth_format = VK_FORMAT_UNDEFINED;
-        LOG_FATAL("Failed to find a supported format");
+        LOG_WARN("Failed to find a supported format");
     }
 
     // Create depth image and its view.

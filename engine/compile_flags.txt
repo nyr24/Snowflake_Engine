@@ -1,7 +1,6 @@
 -Iinclude
 -Ilib/glm
 -Ilib/stb
--Ilib/glfw/include
 -std=c++20
 -DSF_DEBUG
 -DSF_ASSERTS_ENABLED
