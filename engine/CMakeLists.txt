@@ -92,6 +92,22 @@ target_compile_options(
   >
 )
 
+if (DEFINED ENV{SF_SANITIZE})
+target_compile_options(
+  ${PROJECT_NAME}
+  PUBLIC
+  -fsanitize=undefined
+  -fsanitize=address
+)
+
+target_link_options(
+  ${PROJECT_NAME}
+  PUBLIC
+  -fsanitize=undefined
+  -fsanitize=address
+)
+endif()
+
 target_compile_definitions(
   ${PROJECT_NAME}
   PUBLIC

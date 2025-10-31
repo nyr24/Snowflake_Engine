@@ -16,14 +16,12 @@ struct VulkanContext;
 struct PlatformState {
 public:
     GLFWwindow*            window;
-    GLFWframebuffersizefun resize_callback;
     GLFWkeyfun             key_callback;
     GLFWcursorposfun       mouse_move_callback;
     GLFWmousebuttonfun     mouse_btn_callback;
     GLFWscrollfun          mouse_wheel_callback;
 public:
     static bool create(const ApplicationConfig& config, PlatformState& out_state);
-    // void get_required_extensions(FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& out_required_extensions);
     void create_vk_surface(VulkanContext& context);
     void attach_event_callbacks();
 

@@ -101,7 +101,7 @@ struct VulkanRenderer {
     f64                                delta_time;
 };
 
-bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, VulkanDevice* out_seleted_device);
+VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_state);
 bool renderer_post_init();
 bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 bool renderer_begin_frame(f64 delta_time);

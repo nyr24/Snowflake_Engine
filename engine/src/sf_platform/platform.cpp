@@ -37,10 +37,8 @@ bool PlatformState::create(const ApplicationConfig& config, PlatformState& out_s
 
     out_state.attach_event_callbacks();
 
-    SF_ASSERT_MSG(out_state.key_callback && out_state.mouse_move_callback && out_state.mouse_btn_callback
-        && /*out_state.resize_callback && */ out_state.mouse_wheel_callback, "Callbacks should be set");
+    SF_ASSERT_MSG(out_state.key_callback && out_state.mouse_move_callback && out_state.mouse_btn_callback && out_state.mouse_wheel_callback, "Callbacks should be set");
 
-    // glfwSetFramebufferSizeCallback(out_state.window, out_state.resize_callback);
     glfwSetKeyCallback(out_state.window, out_state.key_callback);
     glfwSetMouseButtonCallback(out_state.window, out_state.mouse_btn_callback);
     glfwSetCursorPosCallback(out_state.window, out_state.mouse_move_callback);
@@ -51,7 +49,6 @@ bool PlatformState::create(const ApplicationConfig& config, PlatformState& out_s
 }
 
 void PlatformState::attach_event_callbacks() {
-    // resize_callback = &platform_resize_callback;
     key_callback = &platform_key_callback;
     mouse_move_callback = &platform_mouse_move_callback;
     mouse_btn_callback = &platform_mouse_btn_callback;
@@ -61,15 +58,6 @@ void PlatformState::attach_event_callbacks() {
 // void platform_set_glfw_user_state(GLFWwindow* window, GameState *game_state) {
 //     glfwSetWindowUserPointer(window, game_state);
 // }
-
-static void platform_resize_callback(GLFWwindow* window, i32 width, i32 height)
-{
-    // LOG_INFO("RESIZE EVENT: width: {}, height: {}", width, height);
-    // EventContext context;
-    // context.data.u16[0] = static_cast<u16>(width);
-    // context.data.u16[1] = static_cast<u16>(height);
-    // event_system_fire_event(SystemEventCode::RESIZED, nullptr, {context});
-}
 
 static void platform_key_callback(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mode)
 {

@@ -24,7 +24,6 @@ static GeneralPurposeAllocator gpa;
 ApplicationState::ApplicationState()
     : system_allocator{ TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement() + EventSystemState::get_memory_requirement() }
     , temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
-    , platform_state{}
 {}
 
 void application_init_internal_state(const VulkanDevice& device) {
@@ -57,17 +56,13 @@ bool application_create(GameInstance* game_inst) {
 
     state.game_inst->resize(state.game_inst, state.config.window_width, state.config.window_height);
 
-    VulkanDevice* selected_device;
-    if (!renderer_init(game_inst->app_config, state.platform_state, selected_device)) {
+    VulkanDevice* device = renderer_init(game_inst->app_config, state.platform_state);
+    if (!device) {
         LOG_FATAL("Renderer failed to initialize");
         return false;
     }
-    if (!selected_device) {
-        LOG_FATAL("Appropriate device was not found");
-        return false;
-    }
 
-    application_init_internal_state(*selected_device);
+    application_init_internal_state(*device);
 
     if (!renderer_post_init()) {
         LOG_FATAL("Renderer failed to post-initialize");
@@ -76,9 +71,6 @@ bool application_create(GameInstance* game_inst) {
 
     event_system_add_listener(SystemEventCode::APPLICATION_QUIT, nullptr, application_on_event);
     event_system_add_listener(SystemEventCode::KEY_PRESSED, nullptr, application_on_key);
-    // event_system_add_listener(SystemEventCode::KEY_RELEASED, nullptr, application_on_key);
-    // event_system_add_listener(SystemEventCode::MOUSE_BUTTON_PRESSED, nullptr, application_on_mouse);
-    // event_system_add_listener(SystemEventCode::MOUSE_BUTTON_RELEASED, nullptr, application_on_mouse);
 
     return true;
 }
@@ -129,7 +121,7 @@ void application_run() {
         #endif
 
             state.frame_count++;
-            input_update(delta_time);
+            input_update();
             renderer_end_frame(delta_time);
         }
     }
@@ -179,31 +171,6 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, Option<Event
 
     return false;
 }
-
-// bool application_on_mouse(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
-//     if (maybe_context.is_none()) {
-//         return false;
-//     }
-
-//     EventContext& context{ maybe_context.unwrap() };
-
-    // u8 mouse_btn = context.data.u8[0];
-    // if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_PRESSED)) {
-    //     switch (static_cast<MouseButton>(mouse_btn)) {
-    //         default: {
-    //             LOG_DEBUG("Mouse btn '{}' was pressed", mouse_btn);
-    //         } break;
-    //     }
-    // } else if (code == static_cast<u8>(SystemEventCode::MOUSE_BUTTON_RELEASED)) {
-    //     switch (static_cast<MouseButton>(mouse_btn)) {
-    //         default: {
-    //             LOG_DEBUG("Mouse btn '{}' was released", mouse_btn);
-    //         } break;
-    //     }
-    // }
-
-//     return false;
-// }
 
 StackAllocator& application_get_temp_allocator() {
     return state.temp_allocator;

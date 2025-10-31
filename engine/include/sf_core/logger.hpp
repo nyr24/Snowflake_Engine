@@ -1,16 +1,17 @@
 #pragma once
 
 #include <format>
-#include <array>
+#include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
 
 #define LOG_WARN_ENABLED 1
-#define LOG_INFO_ENABLED 1
 
 #if SF_RELEASE == 1
+#define LOG_INFO_ENABLED 0
 #define LOG_DEBUG_ENABLED 0
 #define LOG_TRACE_ENABLED 0
 #else
+#define LOG_INFO_ENABLED 1
 #define LOG_DEBUG_ENABLED 1
 #define LOG_TRACE_ENABLED 1
 #endif
@@ -29,7 +30,7 @@ enum struct LogLevel : u8 {
     COUNT
 };
 
-constexpr std::array<const i8*, 6> log_level_as_str = {
+const FixedArray<const char*, 6> log_level_as_str = {
     "[FATAL]: ",
     "[ERROR]: ",
     "[WARN]: ",
@@ -38,12 +39,12 @@ constexpr std::array<const i8*, 6> log_level_as_str = {
     "[TRACE]: ",
 };
 
-constexpr u16 OUTPUT_PRINT_BUFFER_CAPACITY{ 2056 };
+static constexpr u16 OUTPUT_PRINT_BUFFER_CAPACITY{ 2056 };
 
 template<typename... Args>
 SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, Args&&... args) {
     char message_buff1[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
-    auto write_res1 = std::format_to_n(message_buff1, OUTPUT_PRINT_BUFFER_CAPACITY, fmt, std::forward<Args>(args)...);
+    std::format_to_n(message_buff1, OUTPUT_PRINT_BUFFER_CAPACITY, fmt, std::forward<Args>(args)...);
 
     char message_buff2[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
     auto write_res2 = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "{}{}\n", log_level_as_str[static_cast<usize>(log_level)], const_cast<const char*>(message_buff1));

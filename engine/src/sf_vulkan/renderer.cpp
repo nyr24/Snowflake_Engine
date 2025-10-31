@@ -45,7 +45,7 @@ static VulkanContext vk_context{};
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
 static constexpr u32 RENDER_SYSTEM_ALLOCATOR_INIT_PAGES{ 4 };
-static const char* MAIN_SHADER_FILE_NAME{"shader.spv"};
+static const char*   MAIN_SHADER_FILE_NAME{"shader.spv"};
 
 struct ObjectRenderData {
     Texture*    texture;  
@@ -53,7 +53,7 @@ struct ObjectRenderData {
 };
 
 static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_create_configs{
-    {"brick_wall.jpg"}, {"asphalt.jpg"}, {"grass.jpg"}, {"painting.jpg"}, {"fabric_suit.jpg"}, {"mickey_mouse.jpg"}
+    {"mickey_mouse.jpg"}, {"brick_wall.jpg"}, {"asphalt.jpg"}, {"grass.jpg"}, {"painting.jpg"}, {"fabric_suit.jpg"}
 }; 
 static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
 
@@ -97,31 +97,30 @@ VulkanContext::VulkanContext()
     global_descriptor_sets.resize_to_capacity();
 }
 
-bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, VulkanDevice* out_selected_device) {
+// returns poitnter to static variable
+VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     if (!create_instance(config, platform_state)) {
         LOG_FATAL("Failed to create vk_instance");
-        return false;
+        return nullptr;
     }
 
     platform_state.create_vk_surface(vk_context);
 
     if (!VulkanDevice::create(vk_context)) {
         LOG_FATAL("Failed to create vk_device");
-        return false;
+        return nullptr;
     }
 
-    out_selected_device = &vk_context.device;
-    
     // Global descriptors
     if (!VulkanGlobalUniformBufferObject::create(vk_context.device, vk_renderer.global_ubo)) {
         LOG_FATAL("Failed to create uniform buffer object");
-        return false;
+        return nullptr;
     }
     init_global_descriptors(vk_context.device);
 
     if (!VulkanSwapchain::create(vk_context.device, vk_context.surface, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain)) {
         LOG_FATAL("Failed to create swapchain");
-        return false;
+        return nullptr;
     }
 
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::GRAPHICS, vk_context.device.queue_family_info.graphics_family_index,
@@ -131,7 +130,7 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, Vul
 
     if (!VulkanVertexIndexBuffer::create(vk_context.device, Mesh::get_cube_mesh(vk_context.render_system_allocator), vk_context.render_system_allocator, vk_context.vertex_index_buffer)) {
         LOG_FATAL("Failed to create vertex buffer");
-        return false; 
+        return nullptr;
     }
 
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {vk_context.graphics_command_buffers.data(), vk_context.graphics_command_buffers.capacity()}, true);
@@ -139,8 +138,8 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, Vul
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.transfer_command_pool.handle, {vk_context.transfer_command_buffers.data(), vk_context.transfer_command_buffers.capacity()}, true);
     
     init_synch_primitives(vk_context);
-
-    return true;
+    
+    return &vk_context.device;
 }
 
 // NOTE: texture, material, event systems should be available at the moment of call
@@ -394,21 +393,21 @@ bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
     }
 
     // Layers
-    #ifdef SF_DEBUG
+#ifdef SF_DEBUG
     FixedArray<const char*, 1> required_validation_layers;
     required_validation_layers.append("VK_LAYER_KHRONOS_validation");
 
     if (!init_validation_layers(create_info, required_validation_layers)) {
         return false;
     }
-    #endif
+#endif
 
     // TODO: custom allocator
     sf_vk_check(vkCreateInstance(&create_info, nullptr, &vk_context.instance));
 
-    #ifdef SF_DEBUG
+#ifdef SF_DEBUG
     create_debugger();
-    #endif
+#endif
 
     vk_context.framebuffer_width = config.window_width;
     vk_context.framebuffer_height = config.window_height;

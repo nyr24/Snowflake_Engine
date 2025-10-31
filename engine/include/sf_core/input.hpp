@@ -26,7 +26,7 @@ struct MouseDelta {
     f32 y;    
 };
 
-void input_update(f64 delta_time);
+void input_update();
 
 // keyboard input
 SF_EXPORT bool input_is_key_down(i32 key);

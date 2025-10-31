@@ -32,6 +32,10 @@ for arg in "$@"; do
     PLATFORM="wl"
     WAYLAND_BUILD_FLAG_SPECIFIED=1
     ;;
+  -san | --sanitize)
+    echo "Building with sanitizer"
+    CMAKE_OPTS+=" -DSF_SANITIZE=1"
+    ;;
   -x11 | --x11)
     if [ $WAYLAND_BUILD_FLAG_SPECIFIED -eq 1 ]; then
       echo "[Error]: can't build for x11 and wayland build simultaneously, exiting"

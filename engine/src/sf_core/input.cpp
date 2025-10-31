@@ -47,7 +47,7 @@ struct InputState {
 
 static InputState state;
 
-void input_update(f64 delta_time) {
+void input_update() {
     sf_mem_copy(&state.kb_prev, &state.kb_curr, sizeof(KeyboardState));
     sf_mem_copy(&state.mouse_prev, &state.mouse_curr, sizeof(MouseState));
 

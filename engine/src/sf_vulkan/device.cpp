@@ -317,10 +317,10 @@ bool VulkanDevice::meet_requirements(
         out_queue_family_info.transfer_family_index
     );
 
-    bool device_meets_requirements = (!requirements_has_graphics(requirements.flags) || requirements_has_graphics(requirements.flags) && out_queue_family_info.graphics_family_index != 255)
-        && (!requirements_has_compute(requirements.flags) || requirements_has_compute(requirements.flags) && out_queue_family_info.compute_family_index != 255)
-        && (!requirements_has_transfer(requirements.flags) || requirements_has_transfer(requirements.flags) && out_queue_family_info.transfer_family_index != 255)
-        && (!requirements_has_present(requirements.flags) || requirements_has_present(requirements.flags) && out_queue_family_info.present_family_index != 255);
+    bool device_meets_requirements = (!requirements_has_graphics(requirements.flags) || (requirements_has_graphics(requirements.flags) && out_queue_family_info.graphics_family_index != 255))
+        && (!requirements_has_compute(requirements.flags) || (requirements_has_compute(requirements.flags) && out_queue_family_info.compute_family_index != 255))
+        && (!requirements_has_transfer(requirements.flags) || (requirements_has_transfer(requirements.flags) && out_queue_family_info.transfer_family_index != 255))
+        && (!requirements_has_present(requirements.flags) || (requirements_has_present(requirements.flags) && out_queue_family_info.present_family_index != 255));
 
     if (!device_meets_requirements) {
         return false;
