@@ -91,16 +91,16 @@ bool Texture::load_from_disk(std::string_view file_name) {
 
     // check for transparency for png images
     if (format == ImageFormat::PNG) {
-        bool has_transparency{false};
+        bool texture_has_transparency{false};
 
         for (u32 i{0}; i < size; i += 4) {
             if (pixels[i + 3] < 255) {
-                has_transparency = true;
+                texture_has_transparency = true;
                 break;
             }
         }
 
-        has_transparency = has_transparency;
+        has_transparency = texture_has_transparency;
     } else {
         has_transparency = false;
     }

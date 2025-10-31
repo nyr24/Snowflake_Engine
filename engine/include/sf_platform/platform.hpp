@@ -1,41 +1,40 @@
 #pragma once
 
-#include "sf_core/defines.hpp"
 #include "sf_containers/fixed_array.hpp"
+#include "sf_core/constants.hpp"
+#include "sf_core/defines.hpp"
 #include <vulkan/vulkan_core.h>
 
+#define GLFW_INCLUDE_VULKAN
+#include "sf_platform/glfw3.h"
+
 namespace sf {
-struct ApplicationState;
+
+struct ApplicationConfig;
+struct VulkanContext;
 
 struct PlatformState {
 public:
-    void* internal_state;
-
+    GLFWwindow*            window;
+    GLFWkeyfun             key_callback;
+    GLFWcursorposfun       mouse_move_callback;
+    GLFWmousebuttonfun     mouse_btn_callback;
+    GLFWscrollfun          mouse_wheel_callback;
 public:
-    PlatformState();
-    PlatformState(PlatformState&& rhs) noexcept;
-    PlatformState& operator=(PlatformState&& rhs) noexcept;
-    PlatformState(const PlatformState& rhs) = delete;
-    PlatformState& operator=(const PlatformState& rhs) = delete;
-    ~PlatformState();
+    static bool create(const ApplicationConfig& config, PlatformState& out_state);
+    void create_vk_surface(VulkanContext& context);
+    void attach_event_callbacks();
 
-    bool startup(ApplicationState& app_state);
-    bool poll_events(ApplicationState& app_state);
+    PlatformState() = default;
+    ~PlatformState();
 };
 
-struct PlatformState;
-struct VulkanContext;
-
-// non-templated versions of memory functions (needed for void*)
 void*   platform_mem_alloc(u64 byte_size, u16 alignment);
 u32     platform_get_mem_page_size();
 void    platform_console_write(char* message_buff, u16 written_count, u8 color);
 void    platform_console_write_error(char* message_buff, u16 written_count, u8 color);
 f64     platform_get_abs_time();
 void    platform_sleep(u64 ms);
-
-static constexpr u32 REQUIRED_EXTENSION_CAPACITY = 5;
-void    platform_get_required_extensions(FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions);
-void    platform_create_vk_surface(PlatformState& plat_state, VulkanContext& context);
+void    platform_get_required_extensions(FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& required_extensions);
 
 } // sf

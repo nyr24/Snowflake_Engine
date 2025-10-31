@@ -2,7 +2,6 @@
 #include "sf_core/defines.hpp"
 #include "sf_core/utility.hpp"
 #include <concepts>
-#include <numeric>
 #include <utility>
 
 namespace sf {
@@ -50,7 +49,7 @@ public:
         if (this == &rhs) {
             return *this;
         }
-        
+
         _storage = rhs._storage;
         _tag = rhs._tag;
         return *this;
@@ -66,13 +65,13 @@ public:
         if (this == &rhs) {
             return *this;
         }
-        
+
         _storage = std::move(rhs._storage);
         _tag = rhs._tag;
 
         rhs._storage = None::VALUE;
         rhs._tag = Tag::NONE;
-        
+
         return *this;
     }
 
@@ -139,7 +138,7 @@ public:
         _tag = Tag::NONE;
         _storage.none = None::VALUE;
     }
- 
+
     void set_some(RRefOrValType<Some> some_val) noexcept {
         _tag = Tag::SOME;
         _storage.some = std::move(some_val);

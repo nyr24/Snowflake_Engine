@@ -193,9 +193,11 @@ bool VulkanDevice::select(VulkanContext& context, FixedArray<const char*, DEVICE
                 VK_VERSION_PATCH(physical_device_properties.apiVersion)
             );
 
+        #endif
             VkPhysicalDeviceMemoryProperties physical_device_memory_props;
             vkGetPhysicalDeviceMemoryProperties(physical_devices[i], &physical_device_memory_props);
 
+        #ifdef SF_DEBUG
             // Memory information
             for (u32 j = 0; j < physical_device_memory_props.memoryHeapCount; ++j) {
                 f32 memory_size_gib = ((static_cast<f32>(physical_device_memory_props.memoryHeaps[j].size)) / 1024.0f / 1024.0f / 1024.0f);
@@ -315,10 +317,10 @@ bool VulkanDevice::meet_requirements(
         out_queue_family_info.transfer_family_index
     );
 
-    bool device_meets_requirements = (!requirements_has_graphics(requirements.flags) || requirements_has_graphics(requirements.flags) && out_queue_family_info.graphics_family_index != 255)
-        && (!requirements_has_compute(requirements.flags) || requirements_has_compute(requirements.flags) && out_queue_family_info.compute_family_index != 255)
-        && (!requirements_has_transfer(requirements.flags) || requirements_has_transfer(requirements.flags) && out_queue_family_info.transfer_family_index != 255)
-        && (!requirements_has_present(requirements.flags) || requirements_has_present(requirements.flags) && out_queue_family_info.present_family_index != 255);
+    bool device_meets_requirements = (!requirements_has_graphics(requirements.flags) || (requirements_has_graphics(requirements.flags) && out_queue_family_info.graphics_family_index != 255))
+        && (!requirements_has_compute(requirements.flags) || (requirements_has_compute(requirements.flags) && out_queue_family_info.compute_family_index != 255))
+        && (!requirements_has_transfer(requirements.flags) || (requirements_has_transfer(requirements.flags) && out_queue_family_info.transfer_family_index != 255))
+        && (!requirements_has_present(requirements.flags) || (requirements_has_present(requirements.flags) && out_queue_family_info.present_family_index != 255));
 
     if (!device_meets_requirements) {
         return false;

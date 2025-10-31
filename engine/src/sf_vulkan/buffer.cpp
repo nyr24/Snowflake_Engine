@@ -1,7 +1,7 @@
 #include "sf_vulkan/buffer.hpp"
 #include "sf_containers/dynamic_array.hpp"
+#include "sf_core/logger.hpp"
 #include "sf_core/memory_sf.hpp"
-#include "sf_core/utility.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/pipeline.hpp"
@@ -31,7 +31,8 @@ void VulkanBuffer::create(
     Option<u32> memory_index = device.find_memory_index(out_buffer.memory.requirements.memoryTypeBits, memory_properties);
 
     if (memory_index.is_none()) {
-        panic("Memory index for vertex buffer was not found");
+        LOG_ERROR("Memory index for vertex buffer was not found");
+        return;
     }
 
     VkMemoryAllocateInfo alloc_info{
@@ -177,7 +178,10 @@ void VulkanLocalUniformBufferObject::update(u32 offset, glm::vec4 diffuse_color)
 
 void VulkanLocalUniformBufferObject::destroy(const VulkanDevice& device) {
     buffer.destroy(device);
-    vkUnmapMemory(device.logical_device, buffer.memory.handle);
+    if (buffer.memory.handle) {
+        vkUnmapMemory(device.logical_device, buffer.memory.handle);
+        buffer.memory.handle = nullptr;
+    }
 }
 
 } // sf

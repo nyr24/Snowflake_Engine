@@ -7,7 +7,6 @@
 #include "sf_core/application.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/event.hpp"
-#include "sf_core/input.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/io.hpp"
 #include "sf_core/logger.hpp"
@@ -21,8 +20,6 @@
 #include <filesystem>
 #include <span>
 
-namespace fs = std::filesystem;
-
 namespace sf {
 
 VulkanShaderPipeline::VulkanShaderPipeline()
@@ -32,7 +29,6 @@ VulkanShaderPipeline::VulkanShaderPipeline()
     for (auto& state : object_shader_states) {
         state.descriptor_sets.resize_to_capacity();
         state.descriptor_states.resize_to_capacity();
-
          for (auto& state : state.descriptor_states) {
              state.generations.resize_to_capacity();
          }
@@ -369,13 +365,13 @@ bool VulkanShaderPipeline::handle_swap_default_texture(u8 code, void* sender, vo
     EventContext& context{ maybe_context.unwrap() };
 
     VulkanShaderPipeline* pipeline{ static_cast<VulkanShaderPipeline*>(listener_inst) };
-    Key key_pressed{context.data.u8[0]};
-    
-    switch (key_pressed) {
-        case Key::LEFT: {
+    u16 key = context.data.u16[0];
+
+    switch (key) {
+        case GLFW_KEY_LEFT: {
             pipeline->default_texture_index = pipeline->default_texture_index == 0 ? (pipeline->default_textures.count() - 1) : pipeline->default_texture_index - 1;
         } break;
-        case Key::RIGHT: {
+        case GLFW_KEY_RIGHT: {
             pipeline->default_texture_index = (pipeline->default_texture_index + 1) > (pipeline->default_textures.count() - 1) ? 0 : pipeline->default_texture_index + 1;
         } break;
         default: return false;

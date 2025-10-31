@@ -13,6 +13,7 @@ BUILD_TYPE="debug"
 # win32 | wl | x11
 PLATFORM="win32"
 COMPILER="clang++"
+BUILD_TESTS=0;
 
 for arg in "$@"; do
   case "$arg" in
@@ -31,6 +32,10 @@ for arg in "$@"; do
     PLATFORM="wl"
     WAYLAND_BUILD_FLAG_SPECIFIED=1
     ;;
+  -san | --sanitize)
+    echo "Building with sanitizer"
+    CMAKE_OPTS+=" -DSF_SANITIZE=1"
+    ;;
   -x11 | --x11)
     if [ $WAYLAND_BUILD_FLAG_SPECIFIED -eq 1 ]; then
       echo "[Error]: can't build for x11 and wayland build simultaneously, exiting"
@@ -45,12 +50,11 @@ for arg in "$@"; do
     ;;
   --limit_fps)
     echo "FPS limit option enabled"
-    CMAKE_OPTS+=" -DSF_LIMIT_FRAME_COUNT=1"
+    CMAKE_OPTS+=" -DSF_BUILD_LIMIT_FRAME_COUNT=1"
     X11_BUILD_FLAG_SPECIFIED=1
     ;;
   --test | -t)
-    echo "Building tests..."
-    CMAKE_OPTS+=" -DSF_TESTS=1"
+    BUILD_TESTS=1
     ;;
   --gcc)
     echo "Using gcc compiler"
@@ -63,16 +67,23 @@ for arg in "$@"; do
 done
 
 if [ $PLATFORM == "win32" ]; then
-    CMAKE_OPTS+=" -DSF_BUILD_WINDOWS=1"
-    echo "Building for windows..."
+  CMAKE_OPTS+=" -DSF_BUILD_WINDOWS=1"
+  echo "Building for windows..."
 elif [ $PLATFORM == "wl" ]; then
-    CMAKE_OPTS+=" -DSF_BUILD_WAYLAND=1"
-    WAYLAND_BUILD_FLAG_SPECIFIED=1
-    echo "Building for linux (wayland)..."
+  CMAKE_OPTS+=" -DSF_BUILD_WAYLAND=1"
+  WAYLAND_BUILD_FLAG_SPECIFIED=1
+  echo "Building for linux (wayland)..."
 else
-    CMAKE_OPTS+=" -DSF_BUILD_X11=1"
-    X11_BUILD_FLAG_SPECIFIED=1
-    echo "Building for linux (x11)..."
+  CMAKE_OPTS+=" -DSF_BUILD_X11=1"
+  X11_BUILD_FLAG_SPECIFIED=1
+  echo "Building for linux (x11)..."
+fi
+
+if [ $BUILD_TESTS -eq 1 ]; then
+  CMAKE_OPTS+=" -DSF_BUILD_TESTS=1"
+  echo "Building tests..."
+else
+  CMAKE_OPTS+=" -DSF_BUILD_TESTS=0"
 fi
 
 if [ $WAYLAND_BUILD_FLAG_SPECIFIED -eq 1 && $X11_BUILD_FLAG_SPECIFIED -eq 1 ]; then

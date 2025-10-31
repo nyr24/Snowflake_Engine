@@ -19,6 +19,7 @@ public:
     VkSwapchainKHR                      handle;
     VulkanImage                         depth_attachment;
     VkSurfaceFormatKHR                  image_format;
+    bool                                is_recreating;
 
 public:
     static bool create(

@@ -2,6 +2,7 @@
 #include "sf_containers/optional.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/application.hpp"
+#include "sf_core/constants.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
@@ -21,6 +22,7 @@
 #include "sf_containers/fixed_array.hpp"
 #include "sf_vulkan/mesh.hpp"
 #include "sf_vulkan/buffer.hpp"
+#include "sf_platform/glfw3.h"
 // #include "sf_vulkan/allocator.hpp"
 // #include "sf_allocators/free_list_allocator.hpp"
 // #include <list>
@@ -43,7 +45,7 @@ static VulkanContext vk_context{};
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
 static constexpr u32 RENDER_SYSTEM_ALLOCATOR_INIT_PAGES{ 4 };
-static const char* MAIN_SHADER_FILE_NAME{"shader.spv"};
+static const char*   MAIN_SHADER_FILE_NAME{"shader.spv"};
 
 struct ObjectRenderData {
     Texture*    texture;  
@@ -51,13 +53,13 @@ struct ObjectRenderData {
 };
 
 static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_create_configs{
-    {"brick_wall.jpg"}, {"asphalt.jpg"}, {"grass.jpg"}, {"painting.jpg"}, {"fabric_suit.jpg"}, {"mickey_mouse.jpg"}
+    {"mickey_mouse.jpg"}, {"brick_wall.jpg"}, {"asphalt.jpg"}, {"grass.jpg"}, {"painting.jpg"}, {"fabric_suit.jpg"}
 }; 
 static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
 void create_debugger();
-bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions);
+bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& required_extensions);
 bool init_validation_layers(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_VALIDATION_LAYER_CAPACITY>& required_validation_layers);
 void init_synch_primitives(VulkanContext& context);
 void init_descriptor_set_layouts_and_sets(VulkanContext& context);
@@ -95,27 +97,30 @@ VulkanContext::VulkanContext()
     global_descriptor_sets.resize_to_capacity();
 }
 
-bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, VulkanDevice* out_selected_device) {
+// returns poitnter to static variable
+VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_state) {
     if (!create_instance(config, platform_state)) {
-        return false;
+        LOG_FATAL("Failed to create vk_instance");
+        return nullptr;
     }
 
-    platform_create_vk_surface(platform_state, vk_context);
+    platform_state.create_vk_surface(vk_context);
 
     if (!VulkanDevice::create(vk_context)) {
-        return false;
+        LOG_FATAL("Failed to create vk_device");
+        return nullptr;
     }
 
-    out_selected_device = &vk_context.device;
-    
     // Global descriptors
     if (!VulkanGlobalUniformBufferObject::create(vk_context.device, vk_renderer.global_ubo)) {
-        return false;
+        LOG_FATAL("Failed to create uniform buffer object");
+        return nullptr;
     }
     init_global_descriptors(vk_context.device);
 
     if (!VulkanSwapchain::create(vk_context.device, vk_context.surface, vk_context.framebuffer_width, vk_context.framebuffer_height, vk_context.swapchain)) {
-        return false;
+        LOG_FATAL("Failed to create swapchain");
+        return nullptr;
     }
 
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::GRAPHICS, vk_context.device.queue_family_info.graphics_family_index,
@@ -124,7 +129,8 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, Vul
         static_cast<VkCommandPoolCreateFlagBits>(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT), vk_context.transfer_command_pool);
 
     if (!VulkanVertexIndexBuffer::create(vk_context.device, Mesh::get_cube_mesh(vk_context.render_system_allocator), vk_context.render_system_allocator, vk_context.vertex_index_buffer)) {
-       return false; 
+        LOG_FATAL("Failed to create vertex buffer");
+        return nullptr;
     }
 
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {vk_context.graphics_command_buffers.data(), vk_context.graphics_command_buffers.capacity()}, true);
@@ -132,8 +138,8 @@ bool renderer_init(ApplicationConfig& config, PlatformState& platform_state, Vul
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.transfer_command_pool.handle, {vk_context.transfer_command_buffers.data(), vk_context.transfer_command_buffers.capacity()}, true);
     
     init_synch_primitives(vk_context);
-
-    return true;
+    
+    return &vk_context.device;
 }
 
 // NOTE: texture, material, event systems should be available at the moment of call
@@ -165,8 +171,8 @@ bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<Event
 
     EventContext& context{ maybe_context.unwrap() };
 
-    vk_context.framebuffer_width = static_cast<u16>(context.data.u16[0]);
-    vk_context.framebuffer_height = static_cast<u16>(context.data.u16[1]);
+    vk_context.framebuffer_width = context.data.u16[0];
+    vk_context.framebuffer_height = context.data.u16[1];
     vk_context.framebuffer_size_generation++;
 
     return true;
@@ -177,15 +183,13 @@ bool renderer_begin_frame(f64 delta_time) {
     
     vkQueueWaitIdle(vk_context.device.present_queue);
 
-    if (vk_context.recreating_swapchain) {
+    if (vk_context.swapchain.is_recreating) {
         return false;
     }
 
     if (vk_context.framebuffer_last_size_generation != vk_context.framebuffer_size_generation) {
-        vk_context.recreating_swapchain = true;
         vkDeviceWaitIdle(vk_context.device.logical_device);
         vk_context.swapchain.recreate(vk_context.device, vk_context.surface, vk_context.framebuffer_width, vk_context.framebuffer_height);
-        vk_context.recreating_swapchain = false;
         vk_context.framebuffer_last_size_generation = vk_context.framebuffer_size_generation;
         return false;
     }
@@ -347,10 +351,12 @@ VulkanContext::~VulkanContext() {
         surface = nullptr;
     }
 
+#ifdef SF_DEBUG
     if (debug_messenger) {
         PFN_vkDestroyDebugUtilsMessengerEXT debug_destroy_fn = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
         debug_destroy_fn(instance, debug_messenger, &allocator);
     }
+#endif
 
     if (instance) {
         vkDestroyInstance(instance, &allocator);
@@ -374,8 +380,10 @@ bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
     create_info.pApplicationInfo = &vk_app_info;
 
     // Extensions
-    FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY> required_extensions;
+    FixedArray<const char*, VK_MAX_EXTENSION_COUNT> required_extensions;
     required_extensions.append(VK_KHR_SURFACE_EXTENSION_NAME);
+    platform_get_required_extensions(required_extensions);
+
     #ifdef SF_DEBUG
     required_extensions.append(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     #endif
@@ -385,21 +393,21 @@ bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
     }
 
     // Layers
-    #ifdef SF_DEBUG
+#ifdef SF_DEBUG
     FixedArray<const char*, 1> required_validation_layers;
     required_validation_layers.append("VK_LAYER_KHRONOS_validation");
 
     if (!init_validation_layers(create_info, required_validation_layers)) {
         return false;
     }
-    #endif
+#endif
 
     // TODO: custom allocator
     sf_vk_check(vkCreateInstance(&create_info, nullptr, &vk_context.instance));
 
-    #ifdef SF_DEBUG
+#ifdef SF_DEBUG
     create_debugger();
-    #endif
+#endif
 
     vk_context.framebuffer_width = config.window_width;
     vk_context.framebuffer_height = config.window_height;
@@ -408,6 +416,7 @@ bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
 }
 
 void create_debugger() {
+#ifdef SF_DEBUG
     u32 log_severity =  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
                         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
                         VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
@@ -425,10 +434,10 @@ void create_debugger() {
 
     // TODO: custom allocator
     sf_vk_check(func(vk_context.instance, &debug_create_info, nullptr, &vk_context.debug_messenger));
+#endif
 }
 
-bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, REQUIRED_EXTENSION_CAPACITY>& required_extensions) {
-    platform_get_required_extensions(required_extensions);
+bool init_extensions(VkInstanceCreateInfo& create_info, FixedArray<const char*, VK_MAX_EXTENSION_COUNT>& required_extensions) {
 #ifdef SF_DEBUG
     // Log required extensions
     LOG_INFO("Required vulkan extensions: ");
@@ -623,21 +632,21 @@ void Camera::update_vectors() {
 
 static bool renderer_handle_key_press_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context)  {
     SF_ASSERT_MSG(maybe_context.is_some(), "Event context should be available");
-    Key key{ maybe_context.unwrap().data.u8[0] };
+    u16 key{ maybe_context.unwrap().data.u16[0] };
     Camera& camera{ vk_renderer.camera };
     const f32 velocity = camera.speed * static_cast<f32>(vk_renderer.delta_time);
 
     switch (key) {
-        case Key::W: {
+        case GLFW_KEY_W: {
             camera.pos += camera.target * velocity;
         } break;
-        case Key::S: {
+        case GLFW_KEY_S: {
             camera.pos -= camera.target * velocity;
         } break;
-        case Key::A: {
+        case GLFW_KEY_A: {
             camera.pos -= camera.right * velocity;
         } break;
-        case Key::D: {
+        case GLFW_KEY_D: {
             camera.pos += camera.right * velocity;
         } break;
         default: break;
@@ -720,14 +729,14 @@ static void update_global_descriptors(const VulkanDevice& device) {
 }
 
 static void shader_update_object_state(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
-    // glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 1.0f)) };
-    glm::mat4 identity(1.0f);
+    glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 1.0f)) };
+    // glm::mat4 identity(1.0f);
 
     for (u32 i{0}; i < object_render_data.count(); ++i) {
         GeometryRenderData render_data{};
         // glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(1.50f, 0.00f, 0.00f)) };
-        // render_data.model = { rotate_mat };
-        render_data.model = { identity };
+        render_data.model = { rotate_mat };
+        // render_data.model = { identity };
         render_data.id = object_render_data[i].id;
         render_data.textures[0] = object_render_data[i].texture;
         shader.update_object_state(vk_context, render_data);

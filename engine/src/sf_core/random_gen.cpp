@@ -12,7 +12,6 @@ RandomGenerator::RandomGenerator(i32 min, i32 max)
 }
 
 i32 RandomGenerator::gen() {
-    const u32 sz = sizeof(RandomGenerator);
     return distr(mt);
 }
 
