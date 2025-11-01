@@ -2,12 +2,10 @@
 
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/optional.hpp"
-#include "sf_containers/result.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/texture.hpp"
-#include "sf_containers/result.hpp"
 #include <filesystem>
 #include <span>
 #include <vulkan/vulkan_core.h>
@@ -73,7 +71,7 @@ struct EventContext;
 struct VulkanShaderPipeline {
 public:
     static constexpr u32 MAX_ATTRIB_COUNT{ 3 };
-    static constexpr u32 MAX_DEFAULT_TEXTURES{ 10 };
+    static constexpr u32 MAX_DEFAULT_TEXTURES{ 20 };
 
     VulkanLocalUniformBufferObject                                                local_ubo;
     VulkanContext*                                                                context;
@@ -108,7 +106,7 @@ public:
     void bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_frame);
     void bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame);
     void update_object_state(VulkanContext& context, GeometryRenderData& render_data);
-    Result<u32> acquire_resouces(const VulkanDevice& device);
+    u32  acquire_resouces(const VulkanDevice& device);
     void release_resouces(const VulkanDevice& device, u32 object_id);
     static bool handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> context);
 private:

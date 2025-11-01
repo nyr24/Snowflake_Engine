@@ -1,7 +1,6 @@
 #include "sf_allocators/general_purpose_allocator.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/defines.hpp"
-#include "sf_containers/optional.hpp"
 #include "sf_core/memory_sf.hpp"
 
 namespace sf {
@@ -18,7 +17,7 @@ void* GeneralPurposeAllocator::reallocate(void* addr, u32 new_size, u16 alignmen
     return sf_mem_realloc(addr, new_size);
 }
 
-Option<usize> GeneralPurposeAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
+usize GeneralPurposeAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
     if (handle == INVALID_ALLOC_HANDLE) {
         return allocate_handle(new_size, alignment);    
     }

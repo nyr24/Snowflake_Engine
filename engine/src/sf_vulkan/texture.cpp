@@ -31,8 +31,6 @@ bool Texture::load(
     TextureInputConfig config
 )
 {
-    // out_texture.auto_release = config.auto_release;
-
     if (out_texture.state == TextureState::NOT_LOADED) {
         if (!out_texture.load_from_disk(config.file_name)) {
             return false;
@@ -57,9 +55,9 @@ bool Texture::load(
     
 bool Texture::load_from_disk(std::string_view file_name) {
 #ifdef SF_DEBUG
-    fs::path texture_path = fs::current_path() / "build" / "debug/engine/textures/" / file_name;
+    fs::path texture_path = fs::current_path() / "build" / "debug/engine/assets/" / file_name;
 #else
-    fs::path texture_path = fs::current_path() / "build" / "debug/engine/textures/" / file_name;
+    fs::path texture_path = fs::current_path() / "build" / "debug/engine/assets/" / file_name;
 #endif
 
     // detect format
@@ -214,6 +212,12 @@ void TextureSystemState::create(LinearAllocator& allocator, const VulkanDevice& 
     out_system.texture_lookup_table.set_allocator(&allocator);
     out_system.texture_lookup_table.reserve(MAX_TEXTURE_AMOUNT);
     out_system.device = &device;
+
+    for (auto& t : out_system.textures) {
+        t.id = INVALID_ID;
+        t.generation = INVALID_ID;
+        t.state = TextureState::NOT_LOADED;
+    }
 }
 
 TextureSystemState::~TextureSystemState()
@@ -238,7 +242,7 @@ static bool load_texture_and_put_into_table(const VulkanDevice& device, VulkanCo
 
     auto& textures{ state_ptr->textures };
     u32 handle{0};
-    
+
     for (u32 i{0}; i < textures.capacity(); ++i) {
         if (textures[i].id == INVALID_ID) {
             if (i >= textures.count()) {
@@ -246,7 +250,13 @@ static bool load_texture_and_put_into_table(const VulkanDevice& device, VulkanCo
             }
             textures[i] = new_texture;
             handle = i;
+            break;
         }
+    }
+
+    if (handle >= textures.capacity()) {
+        LOG_ERROR("Not enough space to load texture: {}", config.file_name);
+        return false;
     }
 
     std::string_view texture_name{ strip_extension_from_file_path(config.file_name) };

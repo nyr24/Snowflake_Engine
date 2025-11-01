@@ -82,13 +82,13 @@ namespace sf {
         return allocate(new_size, alignment);
     }
 
-    Option<usize> LinearAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
+    usize LinearAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
         if (handle == INVALID_ALLOC_HANDLE) {
             return allocate_handle(new_size, alignment);;
         }
         
         if (!is_handle_in_range(_buffer, _capacity, handle)) {
-            return {None::VALUE};
+            return INVALID_ALLOC_HANDLE;
         }
 
         return allocate_handle(new_size, alignment);

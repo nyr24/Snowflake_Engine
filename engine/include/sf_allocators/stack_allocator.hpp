@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sf_core/defines.hpp"
-#include "sf_containers/optional.hpp"
 
 namespace sf {
 
@@ -28,7 +27,7 @@ public:
     void* allocate(u32 size, u16 alignment) noexcept;
     usize allocate_handle(u32 size, u16 alignment) noexcept;
     void* reallocate(void* addr, u32 new_size, u16 alignment) noexcept;
-    Option<usize> reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept;
+    usize reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept;
     void clear() noexcept;
     void free(void* addr) noexcept;
     void free_handle(usize handle) noexcept;

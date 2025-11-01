@@ -326,7 +326,7 @@ void VulkanShaderPipeline::bind_object_descriptor_sets(VulkanCommandBuffer& cmd_
     );
 }
 
-Result<u32> VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
+u32 VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
     u32 object_id{ object_id_counter };
     ++object_id_counter;
 
@@ -342,7 +342,7 @@ Result<u32> VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
     layouts.fill(object_descriptor_layout.handle);
 
     object_descriptor_pool.allocate_sets(device, object_state.descriptor_sets.count(), layouts.data(), object_state.descriptor_sets.data());
-    return {object_id};
+    return object_id;
 }
 
 void VulkanShaderPipeline::release_resouces(const VulkanDevice& device, u32 object_id) {

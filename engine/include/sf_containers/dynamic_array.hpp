@@ -459,12 +459,12 @@ private:
         }
         
         if (new_capacity > _capacity) {
-            Option<usize> maybe_handle = _allocator->reallocate_handle(_data, new_capacity * sizeof(T), alignof(T));
-            if (maybe_handle.is_none()) {
+            usize maybe_handle = _allocator->reallocate_handle(_data, new_capacity * sizeof(T), alignof(T));
+            if (maybe_handle == INVALID_ALLOC_HANDLE) {
                 LOG_ERROR("Allocator return invalid handle - DynamicArray: resize_internal");
                 return false;
             }
-            _data = maybe_handle.unwrap_copy();
+            _data = maybe_handle;
             _capacity = new_capacity;
         } else if (new_capacity < _capacity) {
             if (new_capacity < _count) {

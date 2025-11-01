@@ -1,5 +1,4 @@
 #include "sf_allocators/stack_allocator.hpp"
-#include "sf_containers/optional.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/memory_sf.hpp"
 #include <algorithm>
@@ -129,19 +128,19 @@ void* StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment) noexce
     }
 }
 
-Option<usize> StackAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept
+usize StackAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept
 {
     if (handle == INVALID_ALLOC_HANDLE) {
         void* addr = allocate(new_size, alignment);
         if (!addr) {
-            return {None::VALUE};
+            return INVALID_ALLOC_HANDLE;
         }
         return turn_ptr_into_handle(addr, _buffer);
     }
     
     void* addr = reallocate(turn_handle_into_ptr(handle, _buffer), new_size, alignment);
     if (!addr) {
-        return {None::VALUE};
+        return INVALID_ALLOC_HANDLE;
     }
     
     return turn_ptr_into_handle(addr, _buffer);

@@ -388,13 +388,13 @@ private:
             new_capacity = grow_factor_capacity;
         }
 
-        Option<usize> maybe_handle = _allocator->reallocate_handle(_data, new_capacity * sizeof(Bucket), alignof(Bucket));
-        if (maybe_handle.is_none()) {
+        usize maybe_handle = _allocator->reallocate_handle(_data, new_capacity * sizeof(Bucket), alignof(Bucket));
+        if (maybe_handle == INVALID_ALLOC_HANDLE) {
             LOG_ERROR("Failed to realloc handle: HashMap :: resize");
             return;
         }
         
-        usize new_data = maybe_handle.unwrap_copy();
+        usize new_data = maybe_handle;
         init_data_empty(new_data, new_capacity);
 
         Bucket* data_ptr{ handle_to_ptr(new_data) };

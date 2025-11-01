@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sf_containers/optional.hpp"
+#include "sf_core/constants.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/memory_sf.hpp"
 
@@ -39,7 +39,7 @@ public:
     usize allocate_handle(u32 size, u16 alignment) noexcept;
     void* get_mem_with_handle(usize handle) noexcept;
     void* reallocate(void* addr, u32 new_size, u16 alignment) noexcept;
-    Option<usize> reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept;
+    usize reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept;
     void free(void* ptr) noexcept;
     void free_handle(usize handle) noexcept;
     void clear() noexcept;
@@ -158,9 +158,9 @@ void* FreeList<Config>::reallocate(void* addr, u32 new_size, u16 alignment) noex
 }
 
 template<FreeListConfig Config>
-Option<usize> FreeList<Config>::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
+usize FreeList<Config>::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
     if (!is_handle_in_range(_buffer, _capacity, handle)) {
-        return {None::VALUE};
+        return INVALID_ALLOC_HANDLE;
     }
 
     free_handle(handle);

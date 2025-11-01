@@ -53,7 +53,8 @@ struct ObjectRenderData {
 };
 
 static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_create_configs{
-    {"mickey_mouse.jpg"}, {"brick_wall.jpg"}, {"asphalt.jpg"}, {"grass.jpg"}, {"painting.jpg"}, {"fabric_suit.jpg"}
+    {"grass.jpg"}, {"liquid_1.jpg"}, {"liquid_2.jpg"}, {"metal.jpg"}, {"painting.jpg"}, {"rock_wall.jpg"},
+    {"soil.jpg"}, {"water.jpg"}, {"stones.jpg"}, {"tree.jpg"}, {"sand.jpg"}
 }; 
 static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
 
@@ -571,10 +572,12 @@ static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBu
 
     // texture_system_get_texture(device, cmd_buffer, {"grass.jpg"});
 
-    object_render_data.append({
-        .texture = nullptr,
-        .id = maybe_resource_id.unwrap_copy()
-    });
+    for (u32 i{0}; i < 4; ++i) {
+        object_render_data.append({
+            .texture = nullptr,
+            .id = maybe_resource_id.unwrap_copy()
+        });
+    }
 
     return true;
 }
@@ -734,8 +737,8 @@ static void shader_update_object_state(VulkanShaderPipeline& shader, VulkanComma
 
     for (u32 i{0}; i < object_render_data.count(); ++i) {
         GeometryRenderData render_data{};
-        // glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(1.50f, 0.00f, 0.00f)) };
-        render_data.model = { rotate_mat };
+        glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(0.25f * i, 0.25f * i, 0.25f * i)) };
+        render_data.model = { translate_mat * rotate_mat };
         // render_data.model = { identity };
         render_data.id = object_render_data[i].id;
         render_data.textures[0] = object_render_data[i].texture;

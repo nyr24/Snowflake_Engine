@@ -2,6 +2,8 @@
 
 DEBUG_BUILD_DIR="build/debug/"
 RELEASE_BUILD_DIR="build/release/"
+ASSETS_SRC_DIR="engine/assets/"
+ASSETS_EXTENSIONS="jpg png bmp"
 
 BUILD_RELEASE=0
 X11_BUILD_FLAG_SPECIFIED=0;
@@ -14,6 +16,7 @@ BUILD_TYPE="debug"
 PLATFORM="win32"
 COMPILER="clang++"
 BUILD_TESTS=0;
+COPY_ASSETS=0;
 
 for arg in "$@"; do
   case "$arg" in
@@ -60,6 +63,10 @@ for arg in "$@"; do
     echo "Using gcc compiler"
     COMPILER="g++"
     ;;
+  -as | --assets)
+    echo "Copying assets"
+    COPY_ASSETS=1
+    ;;
   *)
     echo "Unknown argument: $arg"
     ;;
@@ -97,11 +104,25 @@ CMAKE_OPTS+=" -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
 
 if [ $BUILD_TYPE == "debug" ]; then
   echo "Building in debug mode"
+  # assets
+  if [ $COPY_ASSETS -eq 1 ]; then
+    [ -d "$DEBUG_BUILD_DIR/engine/assets" ] || mkdir "$DEBUG_BUILD_DIR/engine/assets"
+    for EXT in $ASSETS_EXTENSIONS; do
+      cp "$ASSETS_SRC_DIR"*."$EXT" "$DEBUG_BUILD_DIR"/engine/assets
+    done
+  fi
   [ -d "$DEBUG_BUILD_DIR" ] || mkdir "$DEBUG_BUILD_DIR"
   cd "$DEBUG_BUILD_DIR"
   cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
 else
   echo "Building in release mode"
+  if [ $COPY_ASSETS -eq 1 ]; then
+    # assets
+    [ -d "$RELEASE_BUILD_DIR/engine/assets" ] || mkdir "$RELEASE_BUILD_DIR/engine/assets"
+    for EXT in "$ASSETS_EXTENSIONS"; do
+      cp "$ASSETS_SRC_DIR"*."$EXT" "$RELEASE_BUILD_DIR"/engine/assets
+    done
+  fi
   [ -d "$RELEASE_BUILD_DIR" ] || mkdir "$RELEASE_BUILD_DIR"
   cd "$RELEASE_BUILD_DIR"
   cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
