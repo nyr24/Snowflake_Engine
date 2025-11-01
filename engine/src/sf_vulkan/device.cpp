@@ -39,12 +39,14 @@ bool VulkanDevice::create(VulkanContext& context) {
     u8 index = 0;
     indices[index++] = context.device.queue_family_info.graphics_family_index;
     if (!present_shares_graphics_queue) {
-        indices[index++] = context.device.queue_family_info.present_family_index; }
+        indices[index++] = context.device.queue_family_info.present_family_index;
+    }
     if (!transfer_shares_other_queues) {
         indices[index++] = context.device.queue_family_info.transfer_family_index;
     }
 
     FixedArray<VkDeviceQueueCreateInfo, MAX_INDEX_COUNT> queue_create_infos(index_count);
+    f32 queue_priority = 1.0f;
 
     for (u32 i = 0; i < index_count; ++i) {
         queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -55,7 +57,6 @@ bool VulkanDevice::create(VulkanContext& context) {
         }
         queue_create_infos[i].flags = 0;
         queue_create_infos[i].pNext = 0;
-        f32 queue_priority = 1.0f;
         queue_create_infos[i].pQueuePriorities = &queue_priority;
     }
 

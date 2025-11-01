@@ -161,10 +161,10 @@ void VulkanGlobalUniformBufferObject::destroy(const VulkanDevice& device) {
 
 bool VulkanLocalUniformBufferObject::create(const VulkanDevice& device, VulkanLocalUniformBufferObject& out_local_ubo) {
     VulkanBuffer::create(device, sizeof(LocalUniformObject) * MAX_OBJECT_COUNT, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+        VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
         out_local_ubo.buffer
     );  
-    if (vkMapMemory(device.logical_device, out_local_ubo.buffer.memory.handle, 0, sizeof(LocalUniformObject), 0, &out_local_ubo.mapped_memory) != VK_SUCCESS) {
+    if (vkMapMemory(device.logical_device, out_local_ubo.buffer.memory.handle, 0, sizeof(LocalUniformObject) * MAX_OBJECT_COUNT, 0, &out_local_ubo.mapped_memory) != VK_SUCCESS) {
         return false;
     }
 

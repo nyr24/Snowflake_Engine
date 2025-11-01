@@ -80,6 +80,7 @@ add_library(${PROJECT_NAME} SHARED ${VK-ENGINE-SRCS} ${VK-ENGINE-HEADERS})
 # shaders
 add_shaders(${PROJECT_NAME})
 
+# NOTE: TEMP
 target_compile_options(
   ${PROJECT_NAME}
   PUBLIC
@@ -88,11 +89,13 @@ target_compile_options(
     -O0
   >
   $<$<CONFIG:Release>:
+    # -g
+    # -O1
     -O2
   >
 )
 
-if (DEFINED ENV{SF_SANITIZE})
+if (DEFINED SF_SANITIZE)
 target_compile_options(
   ${PROJECT_NAME}
   PUBLIC
