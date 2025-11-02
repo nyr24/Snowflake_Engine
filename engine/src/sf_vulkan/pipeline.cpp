@@ -326,6 +326,7 @@ void VulkanShaderPipeline::bind_object_descriptor_sets(VulkanCommandBuffer& cmd_
     );
 }
 
+// TODO + THINK: allocate all sets for all objects at once, store in 1 buffer
 u32 VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
     u32 object_id{ object_id_counter };
     ++object_id_counter;

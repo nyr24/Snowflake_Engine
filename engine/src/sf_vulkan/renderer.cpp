@@ -45,6 +45,7 @@ static VulkanContext vk_context{};
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
 static constexpr u32 RENDER_SYSTEM_ALLOCATOR_INIT_PAGES{ 4 };
+static constexpr u32 OBJECT_RENDER_COUNT{ 100 };
 static const char*   MAIN_SHADER_FILE_NAME{"shader.spv"};
 
 struct ObjectRenderData {
@@ -77,7 +78,7 @@ static bool create_main_shader_pipeline(std::span<const TextureInputConfig> text
 static bool create_initial_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer);
 static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline);
 static void update_global_state();
-static void shader_update_object_state(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
+static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
 static void init_global_descriptors(const VulkanDevice& device);
 static void update_global_descriptors(const VulkanDevice& device);
 static void renderer_update_global_state();
@@ -241,10 +242,12 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     curr_graphics_buffer.begin_recording(0);
     vk_context.pipeline.bind(curr_graphics_buffer, vk_context.curr_frame);
     renderer_update_global_state();
-    shader_update_object_state(vk_context.pipeline, curr_graphics_buffer, packet.elapsed_time);
-    vk_context.vertex_index_buffer.bind(curr_graphics_buffer);
     curr_graphics_buffer.begin_rendering(vk_context);
-    vk_context.vertex_index_buffer.draw(curr_graphics_buffer);
+    vk_context.vertex_index_buffer.bind(curr_graphics_buffer);
+
+    // NOTE: DRAW call
+    draw_objects(vk_context.pipeline, curr_graphics_buffer, packet.elapsed_time);
+
     curr_graphics_buffer.end_rendering(vk_context);
     curr_graphics_buffer.end_recording();
     
@@ -565,14 +568,13 @@ static bool create_initial_textures(const VulkanDevice& device, VulkanCommandBuf
 }
 
 static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline) {
-    Result<u32> maybe_resource_id = pipeline.acquire_resouces(vk_context.device);
-    if (maybe_resource_id.is_err()) {
-        return false;
-    }
-
-    // texture_system_get_texture(device, cmd_buffer, {"grass.jpg"});
-
-    for (u32 i{0}; i < 4; ++i) {
+    SF_ASSERT_MSG(OBJECT_RENDER_COUNT <= MAX_OBJECT_COUNT, "Should not exceed max object count");
+    
+    for (u32 i{0}; i < OBJECT_RENDER_COUNT; ++i) {
+        Result<u32> maybe_resource_id = pipeline.acquire_resouces(vk_context.device);
+        if (maybe_resource_id.is_err()) {
+            continue;
+        }
         object_render_data.append({
             .texture = nullptr,
             .id = maybe_resource_id.unwrap_copy()
@@ -731,18 +733,20 @@ static void update_global_descriptors(const VulkanDevice& device) {
     }
 }
 
-static void shader_update_object_state(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
+static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
     glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 1.0f)) };
-    // glm::mat4 identity(1.0f);
 
     for (u32 i{0}; i < object_render_data.count(); ++i) {
         GeometryRenderData render_data{};
-        glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(0.25f * i, 0.25f * i, 0.25f * i)) };
+        f32 mult_x = ((i & 0b1) == 0b1) ? -0.5f : 0.5f;
+        f32 mult_y = ((i & 0b10) == 0b10) ? -0.5f : 0.5f;
+        f32 mult_z = ((i & 0b10) == 0b10) ? -0.5f : 0.5f;
+        glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(mult_x * i, mult_y * i, mult_z * i)) };
         render_data.model = { translate_mat * rotate_mat };
-        // render_data.model = { identity };
         render_data.id = object_render_data[i].id;
         render_data.textures[0] = object_render_data[i].texture;
         shader.update_object_state(vk_context, render_data);
+        vk_context.vertex_index_buffer.draw(cmd_buffer);
     }
 }
 

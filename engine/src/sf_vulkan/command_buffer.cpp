@@ -1,5 +1,4 @@
 #include "sf_vulkan/command_buffer.hpp"
-#include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/optional.hpp"
 #include "sf_core/logger.hpp"

@@ -11,14 +11,27 @@
 #endif
 
 namespace sf {
-SF_EXPORT void report_assertion_failure(const char* expression, const char* message, const char* file, i32 line);
-}
 
+SF_EXPORT void report_assertion_failure(const char* expression, const char* message, const char* file, i32 line);
+
+} // sf
+
+
+// #define SF_ASSERT_MSG(expr, msg)                                                \
+//     {                                                                           \
+//         if (expr) {                                                             \
+//         } else {                                                                \
+//             sf::report_assertion_failure(#expr, #msg, __FILE__, __LINE__); \
+//             DEBUG_BREAK();                                                      \
+//         }                                                                       \
+//     }                                                                           \
+
+#ifdef SF_DEBUG
 #define SF_ASSERT(expr)                                                         \
     {                                                                           \
         if (expr) {                                                             \
         } else {                                                                \
-            sf::report_assertion_failure(#expr, "", __FILE__, __LINE__);   \
+            sf::report_assertion_failure(#expr, "", __FILE__, __LINE__);        \
             DEBUG_BREAK();                                                      \
         }                                                                       \
     }                                                                           \
@@ -27,23 +40,14 @@ SF_EXPORT void report_assertion_failure(const char* expression, const char* mess
     {                                                                           \
         if (expr) {                                                             \
         } else {                                                                \
-            sf::report_assertion_failure(#expr, #msg, __FILE__, __LINE__); \
-            DEBUG_BREAK();                                                      \
-        }                                                                       \
-    }                                                                           \
-
-#ifdef SF_DEBUG
-#define SF_ASSERT_DEBUG(expr)                                                   \
-    {                                                                           \
-        if (expr) {                                                             \
-        } else {                                                                \
-            sf::report_assertion_failure(#expr, "", __FILE__, __LINE__);   \
+            sf::report_assertion_failure(#expr, msg, __FILE__, __LINE__);       \
             DEBUG_BREAK();                                                      \
         }                                                                       \
     }                                                                           \
 
 #else
-#define SF_ASSERT_DEBUG(expr)
+#define SF_ASSERT(expr)
+#define SF_ASSERT_MSG(expr, msg)
 #endif
 
 #else
