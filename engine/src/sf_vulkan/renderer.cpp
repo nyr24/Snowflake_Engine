@@ -25,7 +25,6 @@
 #include "sf_platform/glfw3.h"
 // #include "sf_vulkan/allocator.hpp"
 // #include "sf_allocators/free_list_allocator.hpp"
-// #include <list>
 #include <algorithm>
 #include <span>
 #include <vulkan/vk_platform.h>
@@ -45,7 +44,7 @@ static VulkanContext vk_context{};
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
 static constexpr u32 RENDER_SYSTEM_ALLOCATOR_INIT_PAGES{ 4 };
-static constexpr u32 OBJECT_RENDER_COUNT{ 100 };
+static constexpr u32 OBJECT_RENDER_COUNT{ VulkanShaderPipeline::MAX_OBJECT_COUNT };
 static const char*   MAIN_SHADER_FILE_NAME{"shader.spv"};
 
 struct ObjectRenderData {
@@ -57,7 +56,7 @@ static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES
     {"grass.jpg"}, {"liquid_1.jpg"}, {"liquid_2.jpg"}, {"metal.jpg"}, {"painting.jpg"}, {"rock_wall.jpg"},
     {"soil.jpg"}, {"water.jpg"}, {"stones.jpg"}, {"tree.jpg"}, {"sand.jpg"}
 }; 
-static FixedArray<ObjectRenderData, MAX_OBJECT_COUNT> object_render_data;
+static FixedArray<ObjectRenderData, VulkanShaderPipeline::MAX_OBJECT_COUNT> object_render_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
 void create_debugger();
@@ -388,9 +387,9 @@ bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
     required_extensions.append(VK_KHR_SURFACE_EXTENSION_NAME);
     platform_get_required_extensions(required_extensions);
 
-    #ifdef SF_DEBUG
+#ifdef SF_DEBUG
     required_extensions.append(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    #endif
+#endif
 
     if (!init_extensions(create_info, required_extensions)) {
         return false;
@@ -568,7 +567,7 @@ static bool create_initial_textures(const VulkanDevice& device, VulkanCommandBuf
 }
 
 static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline) {
-    SF_ASSERT_MSG(OBJECT_RENDER_COUNT <= MAX_OBJECT_COUNT, "Should not exceed max object count");
+    SF_ASSERT_MSG(OBJECT_RENDER_COUNT <= VulkanShaderPipeline::MAX_OBJECT_COUNT, "Should not exceed max object count");
     
     for (u32 i{0}; i < OBJECT_RENDER_COUNT; ++i) {
         Result<u32> maybe_resource_id = pipeline.acquire_resouces(vk_context.device);
@@ -672,6 +671,8 @@ static bool renderer_handle_mouse_wheel_event(u8 code, void* sender, void* liste
         vk_renderer.camera.zoom -= Camera::ZOOM_SPEED;
     }
 
+    vk_renderer.camera.zoom = sf_clamp<f32>(vk_renderer.camera.zoom, Camera::NEAR, Camera::FAR);
+
     vk_renderer.camera.dirty = true;
     return false;
 }
@@ -682,7 +683,7 @@ static void renderer_update_global_state() {
     }
 
     glm::mat4 view = glm::lookAt(vk_renderer.camera.pos, vk_renderer.camera.pos + vk_renderer.camera.target, vk_renderer.camera.up);
-    glm::mat4 proj = glm::perspective(glm::radians(vk_renderer.camera.zoom), sf::renderer_get_aspect_ratio(), 0.1f, 90.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(vk_renderer.camera.zoom), sf::renderer_get_aspect_ratio(), Camera::NEAR, Camera::FAR);
     proj[1][1] *= -1.0f;
     renderer_update_global_ubo(view, proj);
 
@@ -738,9 +739,9 @@ static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_
 
     for (u32 i{0}; i < object_render_data.count(); ++i) {
         GeometryRenderData render_data{};
-        f32 mult_x = ((i & 0b1) == 0b1) ? -0.5f : 0.5f;
-        f32 mult_y = ((i & 0b10) == 0b10) ? -0.5f : 0.5f;
-        f32 mult_z = ((i & 0b10) == 0b10) ? -0.5f : 0.5f;
+        f32 mult_x = ((i & 0b1) == 0b1) ? -0.2f : 0.2f;
+        f32 mult_y = ((i & 0b10) == 0b10) ? -0.2f : 0.2f;
+        f32 mult_z = ((i & 0b1) == 0b1) ? -0.2f : 0.2f;
         glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(mult_x * i, mult_y * i, mult_z * i)) };
         render_data.model = { translate_mat * rotate_mat };
         render_data.id = object_render_data[i].id;

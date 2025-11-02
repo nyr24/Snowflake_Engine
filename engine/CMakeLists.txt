@@ -89,22 +89,38 @@ target_compile_options(
   >
   $<$<CONFIG:Release>:
     -O2
+    -fsanitize=undefined
+    -fsanitize=address
   >
-)
-
-if (DEFINED SF_SANITIZE)
-target_compile_options(
-  ${PROJECT_NAME}
-  PUBLIC
-  -fsanitize=undefined
-  -fsanitize=address
 )
 
 target_link_options(
   ${PROJECT_NAME}
   PUBLIC
-  -fsanitize=undefined
-  -fsanitize=address
+  $<$<CONFIG:Release>:
+    -fsanitize=undefined
+    -fsanitize=address
+  >
+)
+
+# optional debug build sanitizer
+if (DEFINED SF_SANITIZE)
+target_compile_options(
+  ${PROJECT_NAME}
+  PUBLIC
+  $<$<CONFIG:Debug>:
+    -fsanitize=undefined
+    -fsanitize=address
+  >
+)
+
+target_link_options(
+  ${PROJECT_NAME}
+  PUBLIC
+  $<$<CONFIG:Debug>:
+    -fsanitize=undefined
+    -fsanitize=address
+  >
 )
 endif()
 

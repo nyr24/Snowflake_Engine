@@ -57,7 +57,7 @@ bool Texture::load_from_disk(std::string_view file_name) {
 #ifdef SF_DEBUG
     fs::path texture_path = fs::current_path() / "build" / "debug/engine/assets/" / file_name;
 #else
-    fs::path texture_path = fs::current_path() / "build" / "debug/engine/assets/" / file_name;
+    fs::path texture_path = fs::current_path() / "build" / "release/engine/assets/" / file_name;
 #endif
 
     // detect format

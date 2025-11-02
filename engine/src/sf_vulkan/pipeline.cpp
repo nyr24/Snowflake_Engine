@@ -326,7 +326,6 @@ void VulkanShaderPipeline::bind_object_descriptor_sets(VulkanCommandBuffer& cmd_
     );
 }
 
-// TODO + THINK: allocate all sets for all objects at once, store in 1 buffer
 u32 VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
     u32 object_id{ object_id_counter };
     ++object_id_counter;
@@ -406,10 +405,10 @@ void VulkanShaderPipeline::create_local_descriptors(const VulkanDevice& device) 
     constexpr u32 LOCAL_SAMPLER_COUNT{1};
     
     FixedArray<VkDescriptorPoolSize, OBJECT_SHADER_DESCRIPTOR_COUNT> pool_sizes{
-        { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = MAX_OBJECT_COUNT },
-        { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = LOCAL_SAMPLER_COUNT * MAX_OBJECT_COUNT  }
+        { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT },
+        { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = LOCAL_SAMPLER_COUNT * MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT }
     };
-    VulkanDescriptorPool::create(device, {pool_sizes.data(), pool_sizes.count()}, MAX_OBJECT_COUNT, object_descriptor_pool);
+    VulkanDescriptorPool::create(device, {pool_sizes.data(), pool_sizes.count()}, MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, object_descriptor_pool);
 
     FixedArray<VkDescriptorType, OBJECT_SHADER_DESCRIPTOR_COUNT> descriptor_types = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER };
     

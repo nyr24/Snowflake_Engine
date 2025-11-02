@@ -38,7 +38,6 @@ public:
     void destroy(const VulkanDevice& device);
 };
 
-constexpr u32 MAX_OBJECT_COUNT{ 1024 };
 constexpr u32 OBJECT_SHADER_DESCRIPTOR_COUNT{ 2 };
 
 struct VulkanDescriptorState {
@@ -70,6 +69,7 @@ struct EventContext;
 
 struct VulkanShaderPipeline {
 public:
+    static constexpr u32 MAX_OBJECT_COUNT{ 1024 };
     static constexpr u32 MAX_ATTRIB_COUNT{ 3 };
     static constexpr u32 MAX_DEFAULT_TEXTURES{ 20 };
 

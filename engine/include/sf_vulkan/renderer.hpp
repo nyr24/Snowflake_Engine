@@ -78,12 +78,14 @@ struct RenderPacket {
 struct Camera {
     static constexpr glm::vec3 WORLD_UP{ 0.0f, 1.0f, 0.0f };
     static constexpr f32 ZOOM_SPEED{ 2.5f };
+    static constexpr f32 NEAR{ 0.1f };
+    static constexpr f32 FAR{ 90.0f };
 
     glm::vec3 pos{ 0.0f, 0.0f, 5.0f };
     glm::vec3 target{ 0.0f, 0.0f, -1.0f };
     glm::vec3 right{ 1.0f, 0.0f, 0.0f };
     glm::vec3 up{ WORLD_UP };
-    f32       speed{50.0f};
+    f32       speed{55.0f};
     f32       yaw{-90.0f};
     f32       pitch{0.0f};
     f32       zoom{45.0f};
