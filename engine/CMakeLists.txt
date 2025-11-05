@@ -89,38 +89,22 @@ target_compile_options(
   >
   $<$<CONFIG:Release>:
     -O2
-    -fsanitize=undefined
-    -fsanitize=address
   >
 )
 
-target_link_options(
-  ${PROJECT_NAME}
-  PUBLIC
-  $<$<CONFIG:Release>:
-    -fsanitize=undefined
-    -fsanitize=address
-  >
-)
-
-# optional debug build sanitizer
 if (DEFINED SF_SANITIZE)
 target_compile_options(
   ${PROJECT_NAME}
   PUBLIC
-  $<$<CONFIG:Debug>:
-    -fsanitize=undefined
-    -fsanitize=address
-  >
+  -fsanitize=undefined
+  -fsanitize=address
 )
 
 target_link_options(
   ${PROJECT_NAME}
   PUBLIC
-  $<$<CONFIG:Debug>:
-    -fsanitize=undefined
-    -fsanitize=address
-  >
+  -fsanitize=undefined
+  -fsanitize=address
 )
 endif()
 
@@ -135,6 +119,14 @@ target_compile_definitions(
     -DSF_RELEASE
   >
 )
+
+if (DEFINED SF_BUILD_TESTS)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC SF_TESTS)
+endif()
+
+if (DEFINED SF_BUILD_LIMIT_FRAME_COUNT)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC SF_LIMIT_FRAME_COUNT)
+endif()
 
 if (DEFINED SF_BUILD_WAYLAND)
   target_include_directories(${PROJECT_NAME} PRIVATE ${SRC_DIR} ${INCLUDE_DIR} $ENV{VULKAN_SDK}/include ${GLM_INCLUDE_DIR} ${STB_INCLUDE_DIR})
@@ -151,12 +143,4 @@ else ()
   target_compile_definitions(${PROJECT_NAME} PUBLIC SF_BUILD_WINDOWS)
   target_link_directories(${PROJECT_NAME} PRIVATE $ENV{VULKAN_SDK}/Lib)
   target_link_libraries(${PROJECT_NAME} PRIVATE vulkan-1 glfw)
-endif()
-
-if (DEFINED ENV{SF_BUILD_TESTS})
-  target_compile_definitions(${PROJECT_NAME} PUBLIC SF_TESTS)
-endif()
-
-if (DEFINED ENV{SF_BUILD_LIMIT_FRAME_COUNT})
-  target_compile_definitions(${PROJECT_NAME} PUBLIC SF_LIMIT_FRAME_COUNT)
 endif()

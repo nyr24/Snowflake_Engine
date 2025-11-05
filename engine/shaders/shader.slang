@@ -11,10 +11,15 @@ struct VSOutput {
 struct GlobalUniformObject {
     float4x4    view;
     float4x4    projection;
+    float4x4    padding_1;
+    float4x4    padding_2;
 };
 
 struct LocalUniformObject {
-    float4 diffuse_color;  
+    float4 diffuse_color;
+    float4 padding_0;
+    float4 padding_1;
+    float4 padding_2;
 };
 
 struct PushConstantBlock {

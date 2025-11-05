@@ -229,7 +229,7 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryR
     u32 curr_frame{ context.curr_frame };
     VkDescriptorSet& curr_frame_object_descriptor_set = object_state.descriptor_sets[curr_frame];
 
-    FixedArray<VkWriteDescriptorSet, OBJECT_SHADER_DESCRIPTOR_COUNT> descriptor_writes{};
+    FixedArray<VkWriteDescriptorSet, OBJECT_SHADER_DESCRIPTOR_COUNT> descriptor_writes;
     u32 descriptor_index{0};
 
     u32 range{sizeof(LocalUniformObject)};
@@ -237,13 +237,13 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryR
 
     local_ubo.update(offset, render_data.material->config.diffuse_color);
 
-    if (object_state.descriptor_states[descriptor_index].generations[curr_frame] == INVALID_ID) {
-        VkDescriptorBufferInfo buffer_info{
-            .buffer = local_ubo.buffer.handle,
-            .offset = offset,
-            .range = range   
-        };
+    VkDescriptorBufferInfo buffer_info{
+        .buffer = local_ubo.buffer.handle,
+        .offset = offset,
+        .range = range 
+    };
 
+    if (object_state.descriptor_states[descriptor_index].generations[curr_frame] == INVALID_ID) {
         VkWriteDescriptorSet descriptor_write = {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = curr_frame_object_descriptor_set,
@@ -251,9 +251,7 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryR
             .dstArrayElement = 0,
             .descriptorCount = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .pImageInfo = nullptr,
             .pBufferInfo = &buffer_info,
-            .pTexelBufferView = nullptr,
         };
 
         descriptor_writes.append(descriptor_write);

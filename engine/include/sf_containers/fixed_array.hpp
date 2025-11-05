@@ -248,10 +248,6 @@ public:
     constexpr T& last_past_end() noexcept { return *(_buffer + _count); }
     constexpr T* first_ptr() noexcept { return _buffer; }
     constexpr T* last_ptr() noexcept { return _buffer + _count - 1; }
-    constexpr u32 count() const noexcept { return _count; }
-    constexpr u32 size_in_bytes() const noexcept { return sizeof(T) * Capacity; }
-    constexpr u32 capacity() const noexcept { return Capacity; }
-    constexpr u32 capacity_remain() const noexcept { return Capacity - _count; }
     // const counterparts
     const T* data() const noexcept { return _buffer; }
     const T* data_offset(u32 i) const noexcept { return _buffer + i; }
@@ -260,6 +256,10 @@ public:
     const T& last_past_end() const noexcept { return *(_buffer + _count); }
     const T* first_ptr() const noexcept { return _buffer; }
     const T* last_ptr() const noexcept { return _buffer + _count - 1; }
+    constexpr u32 count() const noexcept { return _count; }
+    constexpr u32 size_in_bytes() const noexcept { return sizeof(T) * Capacity; }
+    constexpr u32 capacity() const noexcept { return Capacity; }
+    constexpr u32 capacity_remain() const noexcept { return Capacity - _count; }
 
     constexpr PtrRandomAccessIterator<T> begin() const noexcept {
         return PtrRandomAccessIterator<T>(static_cast<const T*>(_buffer));

@@ -366,16 +366,19 @@ bool create_instance(ApplicationConfig& config, PlatformState& platform_state) {
     vk_renderer.platform_state = &platform_state;
     vk_renderer.frame_count = 0;
 
-    VkApplicationInfo vk_app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
-    vk_app_info.pApplicationName = config.name;
-    vk_app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    vk_app_info.pEngineName = "SNOWFLAKE_ENGINE";
-    vk_app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    vk_app_info.apiVersion = VK_API_VERSION_1_4;
+    VkApplicationInfo vk_app_info = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pApplicationName = config.name,
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .pEngineName = "SNOWFLAKE_ENGINE",
+        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = VK_API_VERSION_1_4,
+    };
 
-    VkInstanceCreateInfo create_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-    create_info.pNext = nullptr;
-    create_info.pApplicationInfo = &vk_app_info;
+    VkInstanceCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &vk_app_info,
+    };
 
     // Extensions
     FixedArray<const char*, VK_MAX_EXTENSION_COUNT> required_extensions;
@@ -420,10 +423,12 @@ void create_debugger() {
                         VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
                         // VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
 
-    VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-    debug_create_info.messageSeverity = log_severity;
-    debug_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
-    debug_create_info.pfnUserCallback = sf_vk_debug_callback;
+    VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = log_severity,
+        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT,
+        .pfnUserCallback = sf_vk_debug_callback,
+    };
 
     PFN_vkCreateDebugUtilsMessengerEXT func =
         (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vk_context.instance, "vkCreateDebugUtilsMessengerEXT");
@@ -723,13 +728,17 @@ static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_
 
     for (u32 i{0}; i < ROW_COUNT; ++i) {
         for (u32 j{0}; j < ROW_COUNT; ++j) {
+            const u32 ind{ j + i * ROW_COUNT };
+            if (!object_render_data[ind].material) {
+                continue;
+            }
+
             GeometryRenderData render_data{};
             f32 mult_x = ((j & 0b1) == 0b1) ? -STEP : STEP;
             f32 mult_y = ((i & 0b1) == 0b1) ? -STEP : STEP;
             rotate_mat = glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f),
                 ((i & 0b1) == 0b1) ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f));
             translate_mat = glm::translate(glm::mat4(1.0f), glm::vec3(mult_x * j, mult_y * i, 1.0f));
-            const u32 ind{ j + i * ROW_COUNT };
 
             render_data.model = { translate_mat * rotate_mat };
             render_data.descriptor_state_index = object_render_data[ind].descriptor_state_index;

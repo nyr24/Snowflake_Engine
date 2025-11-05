@@ -46,15 +46,15 @@ public:
 struct GlobalUniformObject {
     glm::mat4    view;
     glm::mat4    proj;
-    glm::mat4    padding_1;
-    glm::mat4    padding_2;
+    glm::mat4    reserved_0;
+    glm::mat4    reserved_1;
 };
 
 struct LocalUniformObject {
     glm::vec4 diffuse_color;
-    glm::vec4 reserved_space_0;
-    glm::vec4 reserved_space_1;
-    glm::vec4 reserved_space_2;
+    glm::vec4 reserved_0;
+    glm::vec4 reserved_1;
+    glm::vec4 reserved_2;
 };
 
 struct VulkanGlobalUniformBufferObject {

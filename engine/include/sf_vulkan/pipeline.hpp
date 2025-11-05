@@ -67,7 +67,7 @@ struct EventContext;
 
 struct VulkanShaderPipeline {
 public:
-    static constexpr u32 MAX_OBJECT_COUNT{ 2048 };
+    static constexpr u32 MAX_OBJECT_COUNT{ 256 };
     static constexpr u32 MAX_ATTRIB_COUNT{ 3 };
     static constexpr u32 MAX_DEFAULT_TEXTURES{ 20 };
 
