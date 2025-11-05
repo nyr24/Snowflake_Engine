@@ -1,11 +1,14 @@
 #pragma once
 
+#include "sf_containers/optional.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_containers/iterator.hpp"
 #include <initializer_list>
+#include <span>
+#include <string_view>
 #include <utility>
 
 namespace sf {
@@ -59,7 +62,14 @@ public:
     FixedArray(std::string_view str) noexcept
         : _count{static_cast<u32>(str.size())}
     {
-        sf_mem_copy((void*)_buffer, (void*)(str.data()), sizeof(char) * _count);
+        sf_mem_copy((void*)_buffer, (void*)str.data(), sizeof(T) * _count);
+    }
+
+    FixedArray(std::span<T> sp) noexcept
+        : _count{ sp.size() }
+    {
+        SF_ASSERT_MSG(sp.size() <= Capacity, "Should not exceed capacity");
+        sf_mem_copy((void*)_buffer, (void*)sp.data(), sizeof(T) * _count); 
     }
 
     constexpr FixedArray(FixedArray<T, Capacity>&& rhs) noexcept
@@ -68,14 +78,38 @@ public:
         sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
     }
 
-    constexpr FixedArray<T, Capacity>& operator=(FixedArray<T, Capacity>&& rhs) noexcept {
+    constexpr FixedArray<T, Capacity>& operator=(FixedArray<T, Capacity>&& rhs) noexcept
+    {
         sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
         return *this;
+    }
 
+    constexpr FixedArray<T, Capacity>& operator=(const std::span<T> sp) noexcept
+    {
+        SF_ASSERT_MSG(sp.size() <= Capacity, "Should not exceed capacity");
+        _count = sp.size();
+        sf_mem_copy((void*)_buffer, (void*)sp.data(), sp.size()); 
+        return *this;
+    }
+
+    constexpr FixedArray<T, Capacity>& operator=(const std::span<const T> sp) noexcept
+    {
+        SF_ASSERT_MSG(sp.size() <= Capacity, "Should not exceed capacity");
+        _count = sp.size();
+        sf_mem_copy((void*)_buffer, (void*)sp.data(), sp.size()); 
+        return *this;
     }
 
     friend bool operator==(const FixedArray<T, Capacity>& first, const FixedArray<T, Capacity>& second) noexcept {
         return first._count == second._count && sf_mem_cmp(first._buffer, second._buffer, first._count * sizeof(T));
+    }
+
+    friend bool operator==(const FixedArray<T, Capacity>& arr, std::string_view sv) noexcept {
+        if (arr.count() != sv.length()) {
+            return false;
+        }
+        
+        return sf_mem_cmp(arr.data(), sv.data(), arr.count());
     }
 
     template<typename ...Args>
@@ -89,6 +123,11 @@ public:
 
     constexpr void append(T&& item) noexcept {
         allocate_and_construct(std::move(item));
+    }
+
+    constexpr void append(std::span<T> sp) noexcept {
+        allocate(sp.size());
+        sf_mem_copy(_buffer + _count, sp.data(), sp.size());
     }
 
     constexpr void remove_at(u32 index) noexcept {
@@ -144,6 +183,11 @@ public:
         deallocate(1);
     }
 
+    constexpr void pop_range(u32 count) noexcept {
+        SF_ASSERT_MSG(count <= _count, "Can't pop more than have");
+        deallocate(count);
+    }
+
     constexpr void clear() noexcept {
         deallocate(_count);
     }
@@ -152,12 +196,53 @@ public:
         for (u32 i{0}; i < Capacity; ++i) {
             _buffer[i] = val;
         }
+        _count = Capacity;
     }
 
-    constexpr bool is_empty() const { return _count == 0; }
-    constexpr bool is_full() const { return _count == Capacity; }
+    constexpr bool cmp_ranges(const FixedArray<T, Capacity>& rhs, u32 start, u32 rhs_start, u32 count) const noexcept {
+        return sf_mem_cmp(this->data_offset(start), rhs.data_offset(rhs_start), count);
+    }
 
+    constexpr std::span<T> to_span(u32 start = 0, u32 len = 0) noexcept {
+        return std::span{ _buffer + start, len == 0 ? _count : len };
+    }
+
+    constexpr std::span<const T> to_span(u32 start = 0, u32 len = 0) const noexcept {
+        return std::span{ _buffer + start, len == 0 ? _count : len };
+    }
+
+    constexpr std::string_view to_string_view(u32 start = 0, u32 len = 0) noexcept {
+        return std::string_view{ _buffer + start, len == 0 ? _count : len };
+    }
+
+    constexpr std::string_view to_string_view(u32 start = 0, u32 len = 0) const noexcept {
+        return std::string_view{ static_cast<const T*>(_buffer + start), len == 0 ? _count : len };
+    }
+
+    constexpr bool has(ConstLRefOrValType<T> item) noexcept {
+        for (u32 i{0}; i < _count; ++i) {
+            if (_buffer[i] == item) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    Option<u32> index_of(ConstLRefOrValType<T> item) noexcept {
+        for (u32 i{0}; i < _count; ++i) {
+            if (_buffer[i] == item) {
+                return i;
+            }
+        }
+
+        return {None::VALUE};
+    }
+
+    constexpr bool is_empty() const noexcept { return _count == 0; }
+    constexpr bool is_full() const noexcept { return _count == Capacity; }
     constexpr T* data() noexcept { return _buffer; }
+    constexpr T* data_offset(u32 i) noexcept { return _buffer + i; }
     constexpr T& first() noexcept { return *_buffer; }
     constexpr T& last() noexcept { return *(_buffer + _count - 1); }
     constexpr T& last_past_end() noexcept { return *(_buffer + _count); }
@@ -169,6 +254,7 @@ public:
     constexpr u32 capacity_remain() const noexcept { return Capacity - _count; }
     // const counterparts
     const T* data() const noexcept { return _buffer; }
+    const T* data_offset(u32 i) const noexcept { return _buffer + i; }
     const T& first() const noexcept { return *_buffer; }
     const T& last() const noexcept { return *(_buffer + _count - 1); }
     const T& last_past_end() const noexcept { return *(_buffer + _count); }
@@ -228,18 +314,16 @@ private:
     }
 
     template<typename ...Args>
-    constexpr T* allocate_and_construct(Args&&... args) noexcept
+    constexpr void allocate_and_construct(Args&&... args) noexcept
     {
         T* place_ptr = allocate(1);
         construct_at(place_ptr, std::forward<Args>(args)...);
-        return place_ptr;
     }
 
-    constexpr T* allocate_and_default_construct(u32 count) noexcept
+    constexpr void allocate_and_default_construct(u32 count) noexcept
     {
         T* place_ptr = allocate(count);
         default_construct_at(place_ptr);
-        return place_ptr;
     }
 
     constexpr void deallocate(u32 dealloc_count) noexcept

@@ -10,6 +10,7 @@
 #include "sf_containers/iterator.hpp"
 #include "sf_core/utility.hpp"
 #include <initializer_list>
+#include <span>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -297,14 +298,21 @@ public:
         move_ptr_backwards(1);
     }
 
+    constexpr void pop_range(u32 count) noexcept {
+        SF_ASSERT_MSG(count <= _count, "Can't pop more than have");
+        move_ptr_backwards(count);
+    }
+
     constexpr void clear() noexcept {
         move_ptr_backwards(_count);
     }
 
     constexpr void fill(ConstLRefOrValType<T> val) noexcept {
+        T* data_ptr{ handle_to_ptr() };
         for (u32 i{0}; i < _capacity; ++i) {
-            handle_to_ptr()[i] = val;
+            data_ptr[i] = val;
         }
+        _count = _capacity;
     }
 
     constexpr void grow() noexcept {
@@ -369,9 +377,18 @@ public:
         }
     }
 
+    std::span<T> to_span(u32 start = 0, u32 len = 0) noexcept {
+        return std::span{ handle_to_ptr() + start, len == 0 ? _count : len };
+    }
+
+    std::span<const T> to_span(u32 start = 0, u32 len = 0) const noexcept {
+        return std::span{ handle_to_ptr() + start, len == 0 ? _count : len };
+    }
+
     constexpr bool is_empty() const { return _count == 0; }
     constexpr bool is_full() const { return _count == _capacity; }
     constexpr T* data() noexcept { return handle_to_ptr(); }
+    constexpr T* data_offset(u32 i) noexcept { return handle_to_ptr() + i; }
     constexpr T& first() noexcept { return *(handle_to_ptr()); }
     constexpr T& last() noexcept { return *(handle_to_ptr() + _count - 1); }
     constexpr T& last_past_end() noexcept { return *(handle_to_ptr() + _count); }
@@ -383,6 +400,7 @@ public:
     constexpr u32 capacity_remain() const noexcept { return _capacity - _count; }
     // const counterparts
     const T* data() const noexcept { return handle_to_ptr(); }
+    const T* data_offset(u32 i) const noexcept { return handle_to_ptr() + i; }
     const T& first() const noexcept { return *(handle_to_ptr()); }
     const T& last() const noexcept { return *(handle_to_ptr() + _count - 1); }
     const T& last_past_end() const noexcept { return *(handle_to_ptr() + _count); }
@@ -517,5 +535,8 @@ private:
         _count -= move_count;
     }
 }; // DynamicArray
+
+template<AllocatorTrait Allocator>
+using String = DynamicArray<char, Allocator>;
 
 } // sf

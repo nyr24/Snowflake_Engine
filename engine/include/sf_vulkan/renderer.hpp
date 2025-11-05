@@ -79,7 +79,7 @@ struct Camera {
     static constexpr glm::vec3 WORLD_UP{ 0.0f, 1.0f, 0.0f };
     static constexpr f32 ZOOM_SPEED{ 2.5f };
     static constexpr f32 NEAR{ 0.1f };
-    static constexpr f32 FAR{ 90.0f };
+    static constexpr f32 FAR{ 300.0f };
 
     glm::vec3 pos{ 0.0f, 0.0f, 5.0f };
     glm::vec3 target{ 0.0f, 0.0f, -1.0f };

@@ -1,9 +1,12 @@
 #pragma once
 
+#include "glm/fwd.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/optional.hpp"
+#include "sf_core/defines.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/device.hpp"
+#include "sf_vulkan/material.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/texture.hpp"
 #include <filesystem>
@@ -51,14 +54,9 @@ struct ObjectShaderState {
 };
 
 struct GeometryRenderData {
-    glm::mat4               model;
-    FixedArray<Texture*, 16> textures;
-    u32                     id;
-
-    GeometryRenderData()
-    {
-        textures.resize_to_capacity();
-    }
+    glm::mat4                model;
+    Material*                material;
+    u32                      descriptor_state_index;
 };
 
 // TODO: shader object with multiple pipelines (default/wireframe)
@@ -69,7 +67,7 @@ struct EventContext;
 
 struct VulkanShaderPipeline {
 public:
-    static constexpr u32 MAX_OBJECT_COUNT{ 1024 };
+    static constexpr u32 MAX_OBJECT_COUNT{ 2048 };
     static constexpr u32 MAX_ATTRIB_COUNT{ 3 };
     static constexpr u32 MAX_DEFAULT_TEXTURES{ 20 };
 
@@ -85,7 +83,7 @@ public:
     VkPipelineLayout             pipeline_layout;
     VkViewport                   viewport;
     VkRect2D                     scissors;
-    u32                          object_id_counter;
+    u32                          descriptor_state_index_counter;
     // NOTE: TEMP
     u32                          default_texture_index;
 public:
@@ -99,7 +97,7 @@ public:
         const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& attrib_descriptions,
         VkViewport                     viewport,
         VkRect2D                       scissors,
-        std::span<const TextureInputConfig> default_texture_configs,
+        std::span<Texture*>            default_textures,
         VulkanShaderPipeline&          out_pipeline
     );
     void destroy(const VulkanDevice& device);
@@ -107,13 +105,13 @@ public:
     void bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame);
     void update_object_state(VulkanContext& context, GeometryRenderData& render_data);
     u32  acquire_resouces(const VulkanDevice& device);
-    void release_resouces(const VulkanDevice& device, u32 object_id);
+    void release_resouces(const VulkanDevice& device, u32 descriptor_state_index);
     static bool handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> context);
 private:
     void create_attribute_descriptions(const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& config);
     void create_local_descriptors(const VulkanDevice& device);
     void update_local_descriptors(const VulkanDevice& device);
-    void create_default_textures(std::span<const TextureInputConfig> configs);
+    // void create_default_textures(std::span<const TextureInputConfig> configs);
 };
 
 } // sf

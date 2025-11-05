@@ -13,6 +13,7 @@
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
+#include "sf_vulkan/material.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/texture.hpp"
 #include "sf_vulkan/swapchain.hpp"
@@ -43,7 +44,7 @@ bool VulkanShaderPipeline::create(
     const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& attrib_description_config,
     VkViewport                     viewport,
     VkRect2D                       scissors,
-    std::span<const TextureInputConfig> default_texture_configs,
+    std::span<Texture*>            default_textures,
     VulkanShaderPipeline&          out_pipeline
 ) {
     #ifdef SF_DEBUG
@@ -58,8 +59,8 @@ bool VulkanShaderPipeline::create(
     }
 
     out_pipeline.context = &context;
-
     out_pipeline.shader_handle = maybe_shader_module.unwrap();
+    out_pipeline.default_textures = default_textures;
 
     FixedArray<VkPipelineShaderStageCreateInfo, 2> shader_stages{
         {
@@ -77,7 +78,6 @@ bool VulkanShaderPipeline::create(
     };
 
     out_pipeline.create_attribute_descriptions(attrib_description_config);
-    out_pipeline.create_default_textures(default_texture_configs);
 
     // Local/Object descriptors
     if (!VulkanLocalUniformBufferObject::create(context.device, out_pipeline.local_ubo)) {
@@ -224,7 +224,7 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryR
 
     vkCmdPushConstants(curr_cmd_buffer.handle, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &render_data.model);
 
-    ObjectShaderState& object_state{ object_shader_states[render_data.id] };
+    ObjectShaderState& object_state{ object_shader_states[render_data.descriptor_state_index] };
 
     u32 curr_frame{ context.curr_frame };
     VkDescriptorSet& curr_frame_object_descriptor_set = object_state.descriptor_sets[curr_frame];
@@ -233,15 +233,9 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryR
     u32 descriptor_index{0};
 
     u32 range{sizeof(LocalUniformObject)};
-    u64 offset{sizeof(LocalUniformObject) * render_data.id};
+    u64 offset{sizeof(LocalUniformObject) * render_data.descriptor_state_index};
 
-    // TODO: get diffuse color from a material
-    // static f32 accumulator{0.0f};
-    // accumulator += context.frame_delta_time;
-    // f32 s{(std::sin(accumulator) + 1.0f) / 2.0f};
-    glm::vec4 diffuse_color{ glm::vec4(0.0f, 1.0f, 0.0f, 0.0f)};
-
-    local_ubo.update(offset, diffuse_color);
+    local_ubo.update(offset, render_data.material->config.diffuse_color);
 
     if (object_state.descriptor_states[descriptor_index].generations[curr_frame] == INVALID_ID) {
         VkDescriptorBufferInfo buffer_info{
@@ -275,20 +269,23 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryR
     FixedArray<VkDescriptorImageInfo, SAMPLER_COUNT> image_infos(SAMPLER_COUNT);
 
     for (u32 i{0}; i < SAMPLER_COUNT; ++i) {
-        Texture* texture{ render_data.textures[i] };
+        Texture* diffuse_texture{ render_data.material->diffuse_map.texture };
+        if (!diffuse_texture) {
+            continue;
+        }
         
         u32& descriptor_generation{ object_state.descriptor_states[descriptor_index].generations[curr_frame] };
 
         // if texture hasn't been loaded - use the default one
-        if (!texture || texture->generation == INVALID_ID) {
-            texture = default_textures[default_texture_index]; 
+        if (!diffuse_texture || diffuse_texture->generation == INVALID_ID) {
+            diffuse_texture = default_textures[default_texture_index]; 
             descriptor_generation = INVALID_ID;
         }
 
-        if (descriptor_generation != texture->generation || texture->generation == INVALID_ID) {
+        if (descriptor_generation != diffuse_texture->generation || diffuse_texture->generation == INVALID_ID) {
             image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            image_infos[i].imageView = texture->image.view;
-            image_infos[i].sampler = texture->sampler; 
+            image_infos[i].imageView = diffuse_texture->image.view;
+            image_infos[i].sampler = diffuse_texture->sampler; 
 
             VkWriteDescriptorSet descriptor_write{
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -304,8 +301,8 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryR
 
             descriptor_writes.append(descriptor_write);
 
-            if (texture->generation != INVALID_ID) {
-                descriptor_generation = texture->generation;
+            if (diffuse_texture->generation != INVALID_ID) {
+                descriptor_generation = diffuse_texture->generation;
             }
             descriptor_index++;
         }
@@ -315,7 +312,7 @@ void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryR
         vkUpdateDescriptorSets(context.device.logical_device, descriptor_writes.count(), descriptor_writes.data(), 0, nullptr);
     }
 
-    bind_object_descriptor_sets(curr_cmd_buffer, render_data.id, curr_frame);    
+    bind_object_descriptor_sets(curr_cmd_buffer, render_data.descriptor_state_index, curr_frame);    
 }
 
 void VulkanShaderPipeline::bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame) {
@@ -327,10 +324,10 @@ void VulkanShaderPipeline::bind_object_descriptor_sets(VulkanCommandBuffer& cmd_
 }
 
 u32 VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
-    u32 object_id{ object_id_counter };
-    ++object_id_counter;
+    u32 object_descriptor_state_index = descriptor_state_index_counter;
+    ++descriptor_state_index_counter;
 
-    ObjectShaderState& object_state{ object_shader_states[object_id] };
+    ObjectShaderState& object_state{ object_shader_states[object_descriptor_state_index] };
 
     for (u32 i{0}; i < OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {
         for (u32 j{0}; j < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++j) {
@@ -342,11 +339,11 @@ u32 VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
     layouts.fill(object_descriptor_layout.handle);
 
     object_descriptor_pool.allocate_sets(device, object_state.descriptor_sets.count(), layouts.data(), object_state.descriptor_sets.data());
-    return object_id;
+    return object_descriptor_state_index;
 }
 
-void VulkanShaderPipeline::release_resouces(const VulkanDevice& device, u32 object_id) {
-    ObjectShaderState& object_state{ object_shader_states[object_id] };     
+void VulkanShaderPipeline::release_resouces(const VulkanDevice& device, u32 descriptor_state_index) {
+    ObjectShaderState& object_state{ object_shader_states[descriptor_state_index] };
 
     VkResult result{ vkFreeDescriptorSets(device.logical_device, object_descriptor_pool.handle, object_state.descriptor_sets.count(), object_state.descriptor_sets.data()) };
     if (result != VK_SUCCESS) {
@@ -387,17 +384,6 @@ void VulkanShaderPipeline::create_attribute_descriptions(const FixedArray<VkVert
 
     for (u32 i{0}; i < input_descriptions.count(); ++i) {
         attrib_descriptions[i] = input_descriptions[i];
-    }
-}
-
-void VulkanShaderPipeline::create_default_textures(std::span<const TextureInputConfig> configs) {
-    SF_ASSERT_MSG(context, "Should be valid pointer to context");
-    
-    for (const auto& config : configs) {
-        Texture* texture = texture_system_get_texture(context->device, context->texture_load_command_buffer, config);
-        if (texture) {
-            default_textures.append(texture);
-        }
     }
 }
 

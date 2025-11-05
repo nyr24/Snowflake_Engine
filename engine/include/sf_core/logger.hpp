@@ -10,10 +10,12 @@
 #define LOG_INFO_ENABLED 0
 #define LOG_DEBUG_ENABLED 0
 #define LOG_TRACE_ENABLED 0
+#define LOG_ERROR_ENABLED 0
 #else
 #define LOG_INFO_ENABLED 1
 #define LOG_DEBUG_ENABLED 1
 #define LOG_TRACE_ENABLED 1
+#define LOG_ERROR_ENABLED 1
 #endif
 
 namespace sf {
@@ -63,7 +65,12 @@ SF_EXPORT void log_output(LogLevel log_level, std::format_string<Args...> fmt, A
 } // sf
 
 #define LOG_FATAL(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__);
+
+#if LOG_ERROR_ENABLED == 1
 #define LOG_ERROR(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__);
+#else
+#define LOG_ERROR(fmt, ...)
+#endif
 
 #if LOG_WARN_ENABLED == 1
 #define LOG_WARN(fmt, ...) log_output(sf::LogLevel::LOG_LEVEL_WARN, fmt, ##__VA_ARGS__);

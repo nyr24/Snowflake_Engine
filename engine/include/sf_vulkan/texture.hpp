@@ -107,8 +107,9 @@ struct TextureMap {
 };
 
 void texture_system_init_internal_state(TextureSystemState* state);
-void texture_system_load_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, std::span<const TextureInputConfig> texture_configs);
-Texture* texture_system_get_texture(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, const TextureInputConfig config);
-bool texture_system_free_texture(const VulkanDevice& device, std::string_view name);
+void texture_system_load_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, std::span<const TextureInputConfig> configs, std::span<Texture*> out_textures);
+Texture* texture_system_get_or_load_texture(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, const TextureInputConfig config);
+Texture* texture_system_get_texture(std::string_view name);
+void texture_system_free_texture(const VulkanDevice& device, std::string_view name);
 
 } // sf

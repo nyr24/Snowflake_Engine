@@ -3,7 +3,6 @@
 DEBUG_BUILD_DIR="build/debug"
 RELEASE_BUILD_DIR="build/release"
 ASSETS_SRC_DIR="engine/assets"
-ASSETS_EXTENSIONS="jpg png bmp"
 
 BUILD_RELEASE=0
 X11_BUILD_FLAG_SPECIFIED=0;
@@ -108,9 +107,7 @@ if [ $BUILD_TYPE == "debug" ]; then
   # assets
   if [ $COPY_ASSETS -eq 1 ]; then
     [ -d "$DEBUG_BUILD_DIR/engine/assets" ] || mkdir -p "$DEBUG_BUILD_DIR/engine/assets"
-    for EXT in $ASSETS_EXTENSIONS; do
-      cp "$ASSETS_SRC_DIR"/*."$EXT" "$DEBUG_BUILD_DIR"/engine/assets
-    done
+    cp -r "$ASSETS_SRC_DIR" "$DEBUG_BUILD_DIR/engine"
   fi
   cd "$DEBUG_BUILD_DIR"
   cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS
@@ -120,9 +117,7 @@ else
     # assets
   if [ $COPY_ASSETS -eq 1 ]; then
     [ -d "$RELEASE_BUILD_DIR/engine/assets" ] || mkdir -p "$RELEASE_BUILD_DIR/engine/assets"
-    for EXT in $ASSETS_EXTENSIONS; do
-      cp "$ASSETS_SRC_DIR"/*."$EXT" "$RELEASE_BUILD_DIR"/engine/assets
-    done
+    cp -r "$ASSETS_SRC_DIR" "$RELEASE_BUILD_DIR/engine"
   fi
   cd "$RELEASE_BUILD_DIR"
   cmake $CMAKE_OPTS ../../ && cmake --build . $CMAKE_BUILD_OPTS

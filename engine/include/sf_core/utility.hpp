@@ -3,6 +3,7 @@
 #include "sf_core/asserts_sf.hpp"
 #include <concepts>
 #include <format>
+#include <span>
 #include <string_view>
 #include <type_traits>
 
@@ -60,6 +61,11 @@ T sf_clamp(ConstLRefOrValType<T> val, ConstLRefOrValType<T> min, ConstLRefOrValT
         return max;
     }
     return val;
+}
+
+template<typename T>
+bool cmp_slices(std::span<T> first, std::span<T> sec) noexcept {
+    
 }
 
 } // sf

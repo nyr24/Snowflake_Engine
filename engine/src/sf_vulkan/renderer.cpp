@@ -1,6 +1,5 @@
 #include "glm/geometric.hpp"
 #include "sf_containers/optional.hpp"
-#include "sf_containers/result.hpp"
 #include "sf_core/application.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/defines.hpp"
@@ -10,6 +9,7 @@
 #include "sf_core/utility.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
+#include "sf_vulkan/material.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/texture.hpp"
 #include "sf_vulkan/swapchain.hpp"
@@ -26,6 +26,7 @@
 // #include "sf_vulkan/allocator.hpp"
 // #include "sf_allocators/free_list_allocator.hpp"
 #include <algorithm>
+#include <cmath>
 #include <span>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
@@ -44,19 +45,17 @@ static VulkanContext vk_context{};
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
 static constexpr u32 RENDER_SYSTEM_ALLOCATOR_INIT_PAGES{ 4 };
-static constexpr u32 OBJECT_RENDER_COUNT{ VulkanShaderPipeline::MAX_OBJECT_COUNT };
+static constexpr u32 OBJECT_RENDER_COUNT{ 256 };
 static const char*   MAIN_SHADER_FILE_NAME{"shader.spv"};
 
-struct ObjectRenderData {
-    Texture*    texture;  
-    u32         id;
-};
-
-static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_create_configs{
+static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_load_configs{
     {"grass.jpg"}, {"liquid_1.jpg"}, {"liquid_2.jpg"}, {"metal.jpg"}, {"painting.jpg"}, {"rock_wall.jpg"},
     {"soil.jpg"}, {"water.jpg"}, {"stones.jpg"}, {"tree.jpg"}, {"sand.jpg"}
-}; 
-static FixedArray<ObjectRenderData, VulkanShaderPipeline::MAX_OBJECT_COUNT> object_render_data;
+};
+static FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> material_load_configs{ MaterialSystemState::DEFAULT_NAME };
+static FixedArray<Texture*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> textures(texture_load_configs.count());
+static FixedArray<Material*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> materials(material_load_configs.count());
+static FixedArray<GeometryRenderData, OBJECT_RENDER_COUNT> object_render_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
 void create_debugger();
@@ -73,9 +72,9 @@ void create_descriptor_layouts_and_sets_for_ubo(
     std::span<VulkanDescriptorSetLayout> out_layouts,
     std::span<VkDescriptorSet> out_sets
 );
-static bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs);
-static bool create_initial_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer);
-static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline);
+static bool create_main_shader_pipeline();
+static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer);
+static void init_object_render_data(VulkanShaderPipeline& shader, const VulkanDevice& device);
 static void update_global_state();
 static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
 static void init_global_descriptors(const VulkanDevice& device);
@@ -145,17 +144,13 @@ VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_s
 
 // NOTE: texture, material, event systems should be available at the moment of call
 bool renderer_post_init() {
-    if (!create_initial_textures(vk_context.device, vk_context.texture_load_command_buffer)) {
+    preload_textures_and_materials(vk_context.device, vk_context.texture_load_command_buffer);
+    
+    if (!create_main_shader_pipeline()) {
         return false;
     }
 
-    if (!create_main_shader_pipeline({texture_create_configs.data(), texture_create_configs.count()})) {
-        return false;
-    }
-
-    if (!init_objects_render_data(vk_context.device, vk_context.texture_load_command_buffer, vk_context.pipeline)) {
-        return false;
-    }
+    init_object_render_data(vk_context.pipeline, vk_context.device);
 
     event_system_add_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
     event_system_add_listener(SystemEventCode::MOUSE_MOVED, nullptr, renderer_handle_mouse_move_event);
@@ -520,7 +515,7 @@ void destroy_synch_primitives(VulkanContext& context) {
     }
 }
 
-static bool create_main_shader_pipeline(std::span<const TextureInputConfig> texture_configs) {
+static bool create_main_shader_pipeline() {
     FixedArray<VkVertexInputAttributeDescription, VulkanShaderPipeline::MAX_ATTRIB_COUNT> attrib_descriptions(MAIN_PIPELINE_ATTRIB_COUNT);
     // Position
     attrib_descriptions[0].binding = 0;
@@ -544,43 +539,9 @@ static bool create_main_shader_pipeline(std::span<const TextureInputConfig> text
         attrib_descriptions,
         viewport,
         scissors,
-        texture_configs,
+        textures.to_span(),
         vk_context.pipeline
     );
-}
-
-static bool create_initial_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer) {
-    cmd_buffer.begin_recording(0);
-    texture_system_load_textures(vk_context.device, cmd_buffer, {texture_create_configs.data(), texture_create_configs.count()});
-    cmd_buffer.end_recording();
-
-    VkSubmitInfo submit_info{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &cmd_buffer.handle
-    };
-
-    cmd_buffer.submit(vk_context, vk_context.device.graphics_queue, submit_info, {None::VALUE});
-    vkQueueWaitIdle(vk_context.device.graphics_queue);
-
-    return true;
-}
-
-static bool init_objects_render_data(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, VulkanShaderPipeline& pipeline) {
-    SF_ASSERT_MSG(OBJECT_RENDER_COUNT <= VulkanShaderPipeline::MAX_OBJECT_COUNT, "Should not exceed max object count");
-    
-    for (u32 i{0}; i < OBJECT_RENDER_COUNT; ++i) {
-        Result<u32> maybe_resource_id = pipeline.acquire_resouces(vk_context.device);
-        if (maybe_resource_id.is_err()) {
-            continue;
-        }
-        object_render_data.append({
-            .texture = nullptr,
-            .id = maybe_resource_id.unwrap_copy()
-        });
-    }
-
-    return true;
 }
 
 static void init_global_descriptors(const VulkanDevice& device) {
@@ -604,18 +565,13 @@ static bool renderer_handle_mouse_move_event(u8 code, void* sender, void* listen
     SF_ASSERT_MSG(maybe_context.is_some(), "Context should be available");
 
     EventContext& context{ maybe_context.unwrap() };
-
     f32 delta_x = context.data.f32[0];
     f32 delta_y = context.data.f32[1];
     Camera& camera{ vk_renderer.camera };
-
     camera.yaw += delta_x * MouseDelta::SENSITIVITY;
     camera.pitch = std::clamp(camera.pitch + delta_y * MouseDelta::SENSITIVITY, -89.0f, 89.0f);
-
     camera.update_vectors();
-
     vk_renderer.camera.dirty = true;
-
     return false;
 }
 
@@ -629,7 +585,6 @@ void Camera::update_vectors() {
     target.y = glm::sin(glm::radians(pitch));
     target.z = glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
     target = glm::normalize(target);
-
     right = glm::normalize(glm::cross(target, Camera::WORLD_UP));
     up = glm::normalize(glm::cross(right, target));
 }
@@ -672,7 +627,6 @@ static bool renderer_handle_mouse_wheel_event(u8 code, void* sender, void* liste
     }
 
     vk_renderer.camera.zoom = sf_clamp<f32>(vk_renderer.camera.zoom, Camera::NEAR, Camera::FAR);
-
     vk_renderer.camera.dirty = true;
     return false;
 }
@@ -686,7 +640,6 @@ static void renderer_update_global_state() {
     glm::mat4 proj = glm::perspective(glm::radians(vk_renderer.camera.zoom), sf::renderer_get_aspect_ratio(), Camera::NEAR, Camera::FAR);
     proj[1][1] *= -1.0f;
     renderer_update_global_ubo(view, proj);
-
     vk_renderer.camera.dirty = false;
 }
 
@@ -734,20 +687,57 @@ static void update_global_descriptors(const VulkanDevice& device) {
     }
 }
 
-static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
-    glm::mat4 rotate_mat{ glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 1.0f)) };
+static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer) {
+    cmd_buffer.begin_recording(0);
 
-    for (u32 i{0}; i < object_render_data.count(); ++i) {
-        GeometryRenderData render_data{};
-        f32 mult_x = ((i & 0b1) == 0b1) ? -0.2f : 0.2f;
-        f32 mult_y = ((i & 0b10) == 0b10) ? -0.2f : 0.2f;
-        f32 mult_z = ((i & 0b1) == 0b1) ? -0.2f : 0.2f;
-        glm::mat4 translate_mat{ glm::translate(glm::mat4(1.0f), glm::vec3(mult_x * i, mult_y * i, mult_z * i)) };
-        render_data.model = { translate_mat * rotate_mat };
-        render_data.id = object_render_data[i].id;
-        render_data.textures[0] = object_render_data[i].texture;
-        shader.update_object_state(vk_context, render_data);
-        vk_context.vertex_index_buffer.draw(cmd_buffer);
+    texture_system_load_textures(device, cmd_buffer, texture_load_configs.to_span(), textures.to_span());
+    material_system_load_from_file_many(device, cmd_buffer, material_load_configs.to_span(), materials.to_span());
+
+    VkSubmitInfo submit_info{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd_buffer.handle
+    };
+
+    cmd_buffer.end_recording();
+    cmd_buffer.submit(vk_context, vk_context.device.graphics_queue, submit_info, {None::VALUE});
+    vkQueueWaitIdle(vk_context.device.graphics_queue);
+}
+
+static void init_object_render_data(VulkanShaderPipeline& shader, const VulkanDevice& device) {
+    object_render_data.resize_to_capacity();
+
+    for (auto& render_data : object_render_data) {
+        render_data.descriptor_state_index = shader.acquire_resouces(device);
+        // NOTE: TEMP
+        render_data.material = materials[0];
+    }
+}
+
+static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
+    static const u32 ROW_COUNT{ static_cast<u32>(std::sqrt(OBJECT_RENDER_COUNT)) };
+    static constexpr f32 STEP{ 0.8f };
+
+    glm::mat4 rotate_mat;
+    glm::mat4 translate_mat;
+
+    for (u32 i{0}; i < ROW_COUNT; ++i) {
+        for (u32 j{0}; j < ROW_COUNT; ++j) {
+            GeometryRenderData render_data{};
+            f32 mult_x = ((j & 0b1) == 0b1) ? -STEP : STEP;
+            f32 mult_y = ((i & 0b1) == 0b1) ? -STEP : STEP;
+            rotate_mat = glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f),
+                ((i & 0b1) == 0b1) ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f));
+            translate_mat = glm::translate(glm::mat4(1.0f), glm::vec3(mult_x * j, mult_y * i, 1.0f));
+            const u32 ind{ j + i * ROW_COUNT };
+
+            render_data.model = { translate_mat * rotate_mat };
+            render_data.descriptor_state_index = object_render_data[ind].descriptor_state_index;
+            render_data.material = object_render_data[ind].material;
+
+            shader.update_object_state(vk_context, render_data);
+            vk_context.vertex_index_buffer.draw(cmd_buffer);
+        }
     }
 }
 

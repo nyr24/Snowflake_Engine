@@ -346,6 +346,14 @@ public:
         }
     }
 
+    void fill(ConstLRefOrValType<V> val) noexcept {
+        Bucket* data_ptr{ handle_to_ptr(_data) };
+        for (u32 i{0}; i < _capacity; ++i) {
+            data_ptr[i].value = val;
+        }
+        _count = _capacity;
+    }
+
     bool is_empty() const { return _data == INVALID_ALLOC_HANDLE && _capacity == 0 && _count == 0; }
 
     constexpr PtrRandomAccessIterator<Bucket> begin() noexcept {
