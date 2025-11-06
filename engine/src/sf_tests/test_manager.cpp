@@ -137,7 +137,7 @@ void linear_allocator_test() {
 
 void hashmap_test() {
     LinearAllocator alloc(1024 * sizeof(u32));
-    HashMap<std::string_view, u32, LinearAllocator, 100> map(&alloc); 
+    HashMap<std::string_view, u32, LinearAllocator> map(&alloc); 
     map.reserve(32);
 
     std::string_view key1 = "kate_age";

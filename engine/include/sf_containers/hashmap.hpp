@@ -17,9 +17,6 @@
 
 namespace sf {
 
-template<typename K, typename V, AllocatorTrait Allocator = GeneralPurposeAllocator, u64 MAX_ITEMS = 0>
-struct HashMap;
-
 template<typename K>
 using HashFn = std::function<u64(ConstLRefOrValType<K>)>;
 
@@ -109,7 +106,7 @@ static HashMapConfig<K> get_default_config() {
     };
 }
 
-template<typename K, typename V, AllocatorTrait Allocator, u64 MAX_ITEMS>
+template<typename K, typename V, AllocatorTrait Allocator = GeneralPurposeAllocator>
 struct HashMap {
 public:
     using KeyType = K;
@@ -159,9 +156,6 @@ public:
         , _count{ 0 }
         , _config{ config }
     {
-        if constexpr (MAX_ITEMS != 0) {
-            SF_ASSERT_MSG(_capacity <= MAX_ITEMS, "Should not exceed max item limit");
-        }
         init_data_empty(_data, _capacity);
     }
 
@@ -220,13 +214,6 @@ public:
     requires SameTypes<K, Key> && SameTypes<V, Val>
     void put(Key&& key, Val&& val) noexcept {
         SF_ASSERT_MSG(_allocator, "Should be valid pointer");
-        if constexpr (MAX_ITEMS != 0) {
-            if (_count + 1 > MAX_ITEMS) {
-                LOG_ERROR("Maximum limit of items exceeded");
-                return;
-            }
-        }
-
         if (_count >= static_cast<u32>(_capacity * _config.load_factor)) {
             resize();
         }
@@ -279,13 +266,6 @@ public:
     requires SameTypes<K, Key> && SameTypes<V, Val>
     bool put_if_empty(K&& key, V&& val) noexcept {
         SF_ASSERT_MSG(_allocator, "Should be valid pointer");
-        if constexpr (MAX_ITEMS != 0) {
-            if (_count + 1 > MAX_ITEMS) {
-                LOG_ERROR("Maximum limit of items exceeded");
-                return false;
-            }
-        }
-
         if (_count >= static_cast<u32>(_capacity * _config.load_factor)) {
             resize();
         }
@@ -313,7 +293,7 @@ public:
             return {None::VALUE};
         }
 
-        return {&maybe_bucket.unwrap()->value};
+        return &maybe_bucket.unwrap_ref()->value;
     }
 
     bool remove(ConstLRefOrValType<K> key) noexcept {
@@ -322,7 +302,7 @@ public:
             return false;
         }
 
-        Bucket* bucket = maybe_bucket.unwrap();
+        Bucket* bucket = maybe_bucket.unwrap_copy();
         bucket->state = Bucket::TOMBSTONE;
         --_count;
 
@@ -331,13 +311,6 @@ public:
 
     void reserve(u32 new_capacity) noexcept {
         SF_ASSERT_MSG(_allocator, "Allocator should be set");
-
-        if constexpr (MAX_ITEMS != 0) {
-            if (new_capacity > MAX_ITEMS) {
-                LOG_ERROR("Can't reserve exactly with input value, Maximum limit of items will be exceeded");
-                new_capacity = MAX_ITEMS;
-            }
-        }
 
         if (is_empty()) {
             resize_empty(new_capacity);
@@ -390,7 +363,7 @@ private:
         u32 new_capacity;
         u32 grow_factor_capacity = _capacity * _config.grow_factor;
 
-        if (capacity_hint.is_some() && capacity_hint.unwrap() > grow_factor_capacity) {
+        if (capacity_hint.is_some() && capacity_hint.unwrap_copy() > grow_factor_capacity) {
             new_capacity = capacity_hint.unwrap_copy();
         } else {
             new_capacity = grow_factor_capacity;

@@ -89,7 +89,7 @@ struct TextureRef {
 struct TextureSystemState {
 public:
     static constexpr u32 MAX_TEXTURE_AMOUNT{ 65536 };
-    using TextureHashMap = HashMap<std::string_view, TextureRef, LinearAllocator, MAX_TEXTURE_AMOUNT>;
+    using TextureHashMap = HashMap<std::string_view, TextureRef, LinearAllocator>;
 
     DynamicArray<Texture, LinearAllocator>    textures;
     TextureHashMap                            texture_lookup_table;

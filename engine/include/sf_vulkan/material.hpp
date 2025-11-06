@@ -44,7 +44,7 @@ struct MaterialRef {
 struct MaterialSystemState {
     static constexpr std::string_view DEFAULT_NAME{ "default_mat.sfmt" };
     static constexpr u32 MAX_MATERIAL_AMOUNT{ 4096 };
-    using MaterialHashMap = HashMap<std::string_view, MaterialRef, LinearAllocator, MAX_MATERIAL_AMOUNT>;
+    using MaterialHashMap = HashMap<std::string_view, MaterialRef, LinearAllocator>;
 
     DynamicArray<Material, LinearAllocator>    materials;
     MaterialHashMap                            material_lookup_table;
