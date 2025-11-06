@@ -165,7 +165,7 @@ bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<Event
         return false;
     }
 
-    EventContext& context{ maybe_context.unwrap() };
+    EventContext& context{ maybe_context.unwrap_ref() };
 
     vk_context.framebuffer_width = context.data.u16[0];
     vk_context.framebuffer_height = context.data.u16[1];
@@ -312,7 +312,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL sf_vk_debug_callback(
 }
 
 VulkanContext::~VulkanContext() {
-    vkDeviceWaitIdle(vk_context.device.logical_device);
+    if (vk_context.device.logical_device) {
+        vkDeviceWaitIdle(vk_context.device.logical_device);
+    }
 
     destroy_synch_primitives(*this);
     
@@ -569,7 +571,7 @@ static void init_global_descriptors(const VulkanDevice& device) {
 static bool renderer_handle_mouse_move_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context)  {
     SF_ASSERT_MSG(maybe_context.is_some(), "Context should be available");
 
-    EventContext& context{ maybe_context.unwrap() };
+    EventContext& context{ maybe_context.unwrap_ref() };
     f32 delta_x = context.data.f32[0];
     f32 delta_y = context.data.f32[1];
     Camera& camera{ vk_renderer.camera };
@@ -596,7 +598,7 @@ void Camera::update_vectors() {
 
 static bool renderer_handle_key_press_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context)  {
     SF_ASSERT_MSG(maybe_context.is_some(), "Event context should be available");
-    u16 key{ maybe_context.unwrap().data.u16[0] };
+    u16 key{ maybe_context.unwrap_ref().data.u16[0] };
     Camera& camera{ vk_renderer.camera };
     const f32 velocity = camera.speed * static_cast<f32>(vk_renderer.delta_time);
 
@@ -622,7 +624,7 @@ static bool renderer_handle_key_press_event(u8 code, void* sender, void* listene
 
 static bool renderer_handle_mouse_wheel_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
     SF_ASSERT_MSG(maybe_context.is_some(), "Event context should be available");
-    EventContext& context{ maybe_context.unwrap() };
+    EventContext& context{ maybe_context.unwrap_ref() };
     i8 delta{ context.data.i8[0] };
 
     if (delta > 0) {

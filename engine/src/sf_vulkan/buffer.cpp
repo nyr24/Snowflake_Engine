@@ -38,7 +38,7 @@ void VulkanBuffer::create(
     VkMemoryAllocateInfo alloc_info{
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = out_buffer.memory.requirements.size,
-        .memoryTypeIndex = memory_index.unwrap(),
+        .memoryTypeIndex = memory_index.unwrap_copy(),
     };
 
     // TODO: custom allocator

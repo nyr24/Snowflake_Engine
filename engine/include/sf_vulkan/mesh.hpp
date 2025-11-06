@@ -9,7 +9,6 @@ namespace sf {
 
 struct Vertex {
     glm::vec3 pos;
-    // glm::vec3 color;
     glm::vec2 texture_coord;
 
     static VkVertexInputBindingDescription get_binding_descr();

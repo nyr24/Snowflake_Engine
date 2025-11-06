@@ -181,10 +181,17 @@ Result<ImageFormat> Texture::map_extension_to_format(std::string_view extension)
 }
 
 void Texture::destroy(const VulkanDevice& device) {
-    vkDeviceWaitIdle(device.logical_device);
-    
-    image.destroy(device);
-    staging_buffer.destroy(device);
+    if (device.logical_device) {
+        vkDeviceWaitIdle(device.logical_device);
+        image.destroy(device);
+        staging_buffer.destroy(device);
+
+        if (sampler) {
+            // TODO: custom allocator
+            vkDestroySampler(device.logical_device, sampler, nullptr);
+            sampler = nullptr;
+        }
+    }
 
     if (pixels) {
         stbi_image_free(pixels);
@@ -194,12 +201,6 @@ void Texture::destroy(const VulkanDevice& device) {
     state = TextureState::NOT_LOADED;
     id = INVALID_ID;
     generation = INVALID_ID;
-
-    if (sampler) {
-        // TODO: custom allocator
-        vkDestroySampler(device.logical_device, sampler, nullptr);
-        sampler = nullptr;
-    }
 }
 
 // Texture System State
@@ -300,7 +301,7 @@ Texture* texture_system_get_or_load_texture(const VulkanDevice& device, VulkanCo
         return &state_ptr->textures[newly_created_texture->handle];
     }
 
-    TextureRef* texture_ref{ maybe_texture.unwrap() };
+    TextureRef* texture_ref{ maybe_texture.unwrap_copy() };
     texture_ref->ref_count++;
     return &state_ptr->textures[texture_ref->handle];
 }
@@ -313,7 +314,7 @@ Texture* texture_system_get_texture(std::string_view file_name) {
         return nullptr;
     }
     
-    TextureRef* texture_ref{ maybe_texture.unwrap() };
+    TextureRef* texture_ref{ maybe_texture.unwrap_copy() };
     texture_ref->ref_count++;
     return &state_ptr->textures[texture_ref->handle];
 }

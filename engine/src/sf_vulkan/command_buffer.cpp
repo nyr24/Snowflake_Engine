@@ -165,7 +165,7 @@ void VulkanCommandBuffer::submit(const VulkanContext& context, VkQueue queue, Vk
         return;
     }
 
-    VulkanFence& fence = maybe_fence.unwrap();
+    VulkanFence& fence = maybe_fence.unwrap_ref();
     
     if (fence.is_signaled) {
         LOG_WARN("Fence can't be in signaled state when submitting a queue, resetting...");

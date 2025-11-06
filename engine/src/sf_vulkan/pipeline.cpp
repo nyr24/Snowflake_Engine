@@ -59,7 +59,7 @@ bool VulkanShaderPipeline::create(
     }
 
     out_pipeline.context = &context;
-    out_pipeline.shader_handle = maybe_shader_module.unwrap();
+    out_pipeline.shader_handle = maybe_shader_module.unwrap_ref();
     out_pipeline.default_textures = default_textures;
 
     FixedArray<VkPipelineShaderStageCreateInfo, 2> shader_stages{
@@ -341,23 +341,27 @@ u32 VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
 }
 
 void VulkanShaderPipeline::release_resouces(const VulkanDevice& device, u32 descriptor_state_index) {
-    ObjectShaderState& object_state{ object_shader_states[descriptor_state_index] };
+    if (device.logical_device) {
+        vkDeviceWaitIdle(device.logical_device);
 
-    VkResult result{ vkFreeDescriptorSets(device.logical_device, object_descriptor_pool.handle, object_state.descriptor_sets.count(), object_state.descriptor_sets.data()) };
-    if (result != VK_SUCCESS) {
-        LOG_ERROR("Error freeing object descriptor sets");
-    }
+        ObjectShaderState& object_state{ object_shader_states[descriptor_state_index] };
 
-    for (u32 i{0}; i < OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {
-        for (u32 j{0}; j < 3; ++j) {
-            object_state.descriptor_states[i].generations[j] = INVALID_ID;
+        VkResult result{ vkFreeDescriptorSets(device.logical_device, object_descriptor_pool.handle, object_state.descriptor_sets.count(), object_state.descriptor_sets.data()) };
+        if (result != VK_SUCCESS) {
+            LOG_ERROR("Error freeing object descriptor sets");
+        }
+
+        for (u32 i{0}; i < OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {
+            for (u32 j{0}; j < 3; ++j) {
+                object_state.descriptor_states[i].generations[j] = INVALID_ID;
+            }
         }
     }
 }
 
 bool VulkanShaderPipeline::handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context) {
     SF_ASSERT_MSG(maybe_context.is_some(), "Context should be presented");
-    EventContext& context{ maybe_context.unwrap() };
+    EventContext& context{ maybe_context.unwrap_ref() };
 
     VulkanShaderPipeline* pipeline{ static_cast<VulkanShaderPipeline*>(listener_inst) };
     u16 key = context.data.u16[0];

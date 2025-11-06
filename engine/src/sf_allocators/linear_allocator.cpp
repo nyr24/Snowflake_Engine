@@ -2,7 +2,6 @@
 #include "sf_core/constants.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_platform/platform.hpp"
-#include <algorithm>
 
 namespace sf {
     LinearAllocator::LinearAllocator() noexcept
@@ -59,9 +58,10 @@ namespace sf {
     void* LinearAllocator::allocate(u32 size, u16 alignment) noexcept
     {
         u32 padding = sf_calc_padding(_buffer + _count, alignment);
-        if (_count + padding + size > _capacity) {
-            resize(std::max(_capacity * 2, _count + padding + size));
+        while (_count + padding + size > _capacity) {
+            _capacity *= 2;
         }
+        resize(_capacity);
 
         void* addr_to_return = _buffer + _count + padding;
         _count += padding + size;
@@ -83,10 +83,6 @@ namespace sf {
     }
 
     usize LinearAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
-        if (handle == INVALID_ALLOC_HANDLE) {
-            return allocate_handle(new_size, alignment);;
-        }
-        
         if (!is_handle_in_range(_buffer, _capacity, handle)) {
             return INVALID_ALLOC_HANDLE;
         }

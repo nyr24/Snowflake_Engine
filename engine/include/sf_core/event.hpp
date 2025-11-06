@@ -51,7 +51,7 @@ struct Event {
 
 struct EventSystemState {
     static constexpr u32 MAX_EVENT_COUNT{50};
-    FixedArray<DynamicArray<Event, LinearAllocator, MAX_EVENT_COUNT>, static_cast<u32>(SystemEventCode::COUNT)> event_lists;
+    FixedArray<DynamicArray<Event, LinearAllocator>, static_cast<u32>(SystemEventCode::COUNT)> event_lists;
 
     static consteval u32 get_memory_requirement() {
         return sizeof(Event) * MAX_EVENT_COUNT * SystemEventCode::COUNT;

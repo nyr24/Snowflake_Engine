@@ -98,14 +98,14 @@ public:
     bool is_none() const { return _tag == Tag::NONE; }
     bool is_some() const { return _tag == Tag::SOME; }
 
-    const Some& unwrap() const noexcept {
+    const Some& unwrap_ref() const noexcept {
         if (_tag == Tag::NONE) {
             panic("Option is none!");
         }
         return _storage.some;
     }
 
-    Some& unwrap() noexcept {
+    Some& unwrap_ref() noexcept {
         if (_tag == Tag::NONE) {
             panic("Option is none!");
         }

@@ -1,6 +1,7 @@
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/memory_sf.hpp"
+#include "sf_core/logger.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_platform/platform.hpp"
 #include <cstdlib>
@@ -11,16 +12,18 @@ namespace sf {
 
 SF_EXPORT void* sf_mem_alloc(usize byte_size, u16 alignment) {
     void* block = platform_mem_alloc(byte_size, alignment);
-#ifdef SF_DEBUG
-    sf_mem_zero(block, byte_size);
-#endif
+    if (!block) {
+        LOG_FATAL("Out of memory, requested size: {}", byte_size);
+        panic("Ending the program");
+    }
     return block;
 }
 
 SF_EXPORT void* sf_mem_realloc(void* ptr, usize byte_size) {
     void* block = std::realloc(ptr, byte_size);
     if (!block) {
-        panic("Out of memory");
+        LOG_FATAL("Out of memory, requested size: {}", byte_size);
+        panic("Ending the program");
     }
     return block;
 }

@@ -69,27 +69,27 @@ DynamicArray<Vertex, LinearAllocator> Mesh::define_cube_vertices(LinearAllocator
 
             // up
             {{ POS_TLN }, { TEX_TL }},
-            {{ POS_TRN }, { TEX_BL }},
-            {{ POS_TLF }, { TEX_BR }},
-            {{ POS_TRF }, { TEX_TR }},
+            {{ POS_TRN }, { TEX_TR }},
+            {{ POS_TLF }, { TEX_BL }},
+            {{ POS_TRF }, { TEX_BR }},
 
             // down
             {{ POS_BLN }, { TEX_TL }},
-            {{ POS_BRN }, { TEX_BL }},
-            {{ POS_BLF }, { TEX_BR }},
-            {{ POS_BRF }, { TEX_TR }},
+            {{ POS_BRN }, { TEX_TR }},
+            {{ POS_BLF }, { TEX_BL }},
+            {{ POS_BRF }, { TEX_BR }},
 
             // right
             {{ POS_TRN }, { TEX_TL }},
             {{ POS_BRN }, { TEX_BL }},
-            {{ POS_TRF }, { TEX_BR }},
-            {{ POS_BRF }, { TEX_TR }},
+            {{ POS_TRF }, { TEX_TR }},
+            {{ POS_BRF }, { TEX_BR }},
 
             // left
             {{ POS_TLN }, { TEX_TL }},
             {{ POS_BLN }, { TEX_BL }},
-            {{ POS_TLF }, { TEX_BR }},
-            {{ POS_BLF }, { TEX_TR }},
+            {{ POS_TLF }, { TEX_TR }},
+            {{ POS_BLF }, { TEX_BR }},
         }
     };
 }

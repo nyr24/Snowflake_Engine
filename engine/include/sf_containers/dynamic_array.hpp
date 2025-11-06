@@ -18,8 +18,8 @@
 namespace sf {
 
 // _capacity and _len are in elements, not bytes
-template<typename T, AllocatorTrait Allocator = GeneralPurposeAllocator, u64 MAX_ITEMS = 0>
-struct DynamicArray {    
+template<typename T, AllocatorTrait Allocator = GeneralPurposeAllocator, f32 GROW_FACTOR = 2.0f, u32 DEFAULT_CAPACITY = 8>
+struct DynamicArray {
 private:
     Allocator* _allocator;
     usize      _data;
@@ -27,8 +27,8 @@ private:
     u32        _count;
 
 public:
-    using ValueType = T;
-    using Pointer   = T*;
+    using ValueType     = T;
+    using PointerType   = T*;
 
 public:
     DynamicArray() noexcept
@@ -51,9 +51,6 @@ public:
         , _capacity{ capacity_input }
         , _count{ 0 }
     {
-        if constexpr (MAX_ITEMS != 0) {
-            SF_ASSERT_MSG(_capacity <= MAX_ITEMS, "Should not exceed max item limit");
-        }
         if (_allocator) {
             _data = allocator->allocate_handle(capacity_input * sizeof(T), alignof(T));
         } else {
@@ -67,14 +64,11 @@ public:
         , _capacity{ capacity_input }
         , _count{ 0 }
     {
-        if constexpr (MAX_ITEMS != 0) {
-            SF_ASSERT_MSG(_capacity <= MAX_ITEMS, "Should not exceed max item limit");
-        }
         SF_ASSERT_MSG(capacity_input >= count, "Count shouldn't be bigger than capacity");
 
         if (_allocator) {
             _data = allocator->allocate_handle(capacity_input * sizeof(T), alignof(T));
-            move_ptr_forward(count);
+            move_forward(count);
         } else {
             LOG_ERROR("DynamicArray: provided allocator is nullptr");
         }
@@ -86,19 +80,21 @@ public:
         , _capacity{ static_cast<u32>(std::get<1>(config)) }
         , _count{0}
     {
-        if constexpr (MAX_ITEMS != 0) {
-            SF_ASSERT_MSG(_capacity <= MAX_ITEMS, "Should not exceed max item limit");
-        }
-
         auto& init_list{ std::get<2>(config) };
         SF_ASSERT_MSG(init_list.size() <= _capacity, "Initializer list size don't fit for specified capacity");
 
         if (_allocator) {
-            _data = _allocator->allocate_handle(std::get<1>(config) * sizeof(T), alignof(T)) ;
-            move_ptr_forward(init_list.size());
+            _data = _allocator->allocate_handle(std::get<1>(config) * sizeof(T), alignof(T));
+            T* buffer = handle_to_ptr();
+            move_forward(init_list.size());
+
             u32 i{0};
-            for (auto curr = init_list.begin(); curr != init_list.end(); ++curr, ++i) {
-                construct_at(_data + i, *curr);
+            for (auto it = init_list.begin(); it != init_list.end(); ++it, ++i) {
+                if constexpr (std::is_trivial_v<T>) {
+                    buffer[i] = *it;
+                } else {
+                    construct_at(buffer + i, *it);
+                }
             }
         } else {
             LOG_ERROR("DynamicArray: provided allocator is nullptr");
@@ -111,17 +107,19 @@ public:
         , _capacity{ static_cast<u32>(std::get<1>(config).size()) }
         , _count{0}
     {
-        if constexpr (MAX_ITEMS != 0) {
-            SF_ASSERT_MSG(_capacity <= MAX_ITEMS, "Should not exceed max item limit");
-        }
         if (_allocator) {
             _data = _allocator->allocate_handle(std::get<1>(config).size() * sizeof(T), alignof(T));
+            T* buffer = handle_to_ptr();
             auto& init_list{ std::get<1>(config) };
-            move_ptr_forward(init_list.size());
+            move_forward(init_list.size());
 
             u32 i{0};
-            for (auto curr = init_list.begin(); curr != init_list.end(); ++curr, ++i) {
-                construct_at(handle_to_ptr() + i, *curr);
+            for (auto it = init_list.begin(); it != init_list.end(); ++it, ++i) {
+                if constexpr (std::is_trivial_v<T>) {
+                    buffer[i] = *it;
+                } else {
+                    construct_at(buffer + i, *it);
+                }
             }
         } else {
             LOG_ERROR("DynamicArray: provided allocator is nullptr");
@@ -179,7 +177,7 @@ public:
         _allocator = rhs._allocator;
 
         if (_capacity < rhs._capacity) {
-            resize_internal(rhs._capacity);
+            grow(rhs._capacity);
         }
 
         if (rhs._count > 0) {
@@ -203,7 +201,7 @@ public:
     }
 
     bool is_free() noexcept {
-        return _data = INVALID_ALLOC_HANDLE;
+        return _data == INVALID_ALLOC_HANDLE;
     }
 
     void set_allocator(Allocator* allocator) noexcept
@@ -217,37 +215,26 @@ public:
     
     template<typename ...Args>
     void append_emplace(Args&&... args) noexcept {
-        if constexpr (MAX_ITEMS != 0) {
-            if (_count + 1 > MAX_ITEMS) {
-                LOG_ERROR("Maximum limit of items exceeded");
-                return;
-            }
-        }
-        SF_ASSERT_MSG(_allocator, "Should be valid pointer");
-        
-        move_ptr_and_construct(std::forward<Args>(args)...);
+        SF_ASSERT_MSG(_allocator, "Should be valid pointer");       
+        move_forward_and_construct(std::forward<Args>(args)...);
     }
 
     void append(const T& item) noexcept {
-        if constexpr (MAX_ITEMS != 0) {
-            if (_count + 1 > MAX_ITEMS) {
-                LOG_ERROR("Maximum limit of items exceeded");
-                return;
-            }
+        if constexpr (std::is_trivial_v<T>) {
+            move_forward(1);
+            handle_to_ptr()[_count - 1] = item;
+        } else {
+            move_forward_and_construct(item);
         }
-
-        move_ptr_and_construct(item);
     }
 
     void append(T&& item) noexcept {
-        if constexpr (MAX_ITEMS != 0) {
-            if (_count + 1 > MAX_ITEMS) {
-                LOG_ERROR("Maximum limit of items exceeded");
-                return;
-            }
+        if constexpr (std::is_trivial_v<T>) {
+            move_forward(1);
+            handle_to_ptr()[_count - 1] = item;
+        } else {
+            move_forward_and_construct(std::move(item));
         }
-
-        move_ptr_and_construct(std::move(item));
     }
 
     void remove_at(u32 index) noexcept {
@@ -315,47 +302,27 @@ public:
         _count = _capacity;
     }
 
-    constexpr void grow() noexcept {
-        SF_ASSERT_MSG(_allocator, "Allocator should be set");
-        resize_internal(_capacity * 2);
-    }
-
     void reserve(u32 new_capacity) noexcept {
-        if constexpr (MAX_ITEMS != 0) {
-            if (new_capacity > MAX_ITEMS) {
-                LOG_ERROR("Can't reserve exactly with input value, Maximum limit of items will be exceeded");
-                new_capacity = MAX_ITEMS;
-            }
-        }
-
-        if (!_allocator) {
-            LOG_ERROR("DynamicArray : reserve(): _allocator should be valid pointer");
-            return;
-        }
-
         if (new_capacity > _capacity) {
-            resize_internal(new_capacity);
+            grow(new_capacity);
         }
     }
 
     void resize(u32 new_count) noexcept {
-        if constexpr (MAX_ITEMS != 0) {
-            if (new_count > MAX_ITEMS) {
-                LOG_ERROR("Can't resize exactly with input value, Maximum limit of items will be exceeded");
-                new_count = MAX_ITEMS;
-            }
-        }
-
         if (!_allocator) {
             LOG_ERROR("DynamicArray : resize(): _allocator should be valid pointer");
             return;
         }
 
         if (new_count > _capacity) {
-            resize_internal(new_count);
+            grow(new_count);
         }
         if (new_count > _count) {
-            move_ptr_and_default_construct(new_count - _count);
+            if constexpr (std::is_trivial_v<T>) {
+                move_forward(new_count - _count);
+            } else {
+                move_forward_and_default_construct(new_count - _count);
+            }
         }
     }
 
@@ -369,11 +336,15 @@ public:
         }
 
         if (new_capacity > _capacity) {
-            resize_internal(new_capacity);
+            grow(new_capacity);
         }
 
         if (new_count > _count) {
-            move_ptr_and_default_construct(new_count - _count);
+            if constexpr (std::is_trivial_v<T>) {
+                move_forward(new_count - _count);
+            } else {
+                move_forward_and_default_construct(new_count - _count);
+            }
         }
     }
 
@@ -425,7 +396,7 @@ public:
         return (handle_to_ptr())[ind];
     }
 
-    friend bool operator==(const DynamicArray<T, Allocator, MAX_ITEMS>& first, const DynamicArray<T, Allocator, MAX_ITEMS>& second) noexcept {
+    friend bool operator==(const DynamicArray<T, Allocator>& first, const DynamicArray<T, Allocator>& second) noexcept {
         return first._count == second._count && sf_mem_cmp(first._allocator->get_mem_with_handle(first._data), second._allocator->get_mem_with_handle(second._data), first._count * sizeof(T));
     }
 
@@ -443,6 +414,26 @@ public:
         return hash;
     }
 
+    void grow(u32 new_capacity) noexcept {
+        SF_ASSERT_MSG(_allocator, "Allocator should be set");
+        if (_capacity < new_capacity) {
+            if (_capacity == 0) {
+                _capacity = DEFAULT_CAPACITY;
+            }
+            while (_capacity < new_capacity) {
+                _capacity *= GROW_FACTOR;
+            }
+            _data = _allocator->reallocate_handle(_data, _capacity * sizeof(T), alignof(T));
+        }
+    }
+
+    void shrink(u32 new_capacity) noexcept {
+        SF_ASSERT_MSG(_allocator, "Allocator should be set");
+        if (new_capacity < _count) {
+            move_ptr_backwards(_count - new_capacity);
+        }
+        _capacity = new_capacity;
+    }
 private:
     constexpr T* handle_to_ptr() const {
         return static_cast<T*>(_allocator->get_mem_with_handle(_data));
@@ -453,9 +444,7 @@ private:
         u32 free_capacity = _capacity - _count;
 
         if (free_capacity < alloc_count) {
-            if (!resize_internal(_capacity * 2)) {
-                return nullptr;
-            }
+            grow(_capacity * GROW_FACTOR);
         }
 
         T* return_memory = handle_to_ptr() + _count;
@@ -464,34 +453,13 @@ private:
         return return_memory;
     }
 
-    bool resize_internal(u32 new_capacity) noexcept
+    void move_forward(u32 alloc_count) noexcept
     {
-        if (!_allocator) {
-            LOG_ERROR("DynamicArray : resize_internal(): _allocator should be valid pointer");
-            return false;
+        u32 free_capacity = _capacity - _count;
+        if (free_capacity < alloc_count) {
+            grow(_capacity * GROW_FACTOR);
         }
-
-        if (_data == INVALID_ALLOC_HANDLE) {
-            _data = _allocator->allocate_handle(new_capacity, alignof(T));
-            _capacity = new_capacity;
-        }
-        
-        if (new_capacity > _capacity) {
-            usize maybe_handle = _allocator->reallocate_handle(_data, new_capacity * sizeof(T), alignof(T));
-            if (maybe_handle == INVALID_ALLOC_HANDLE) {
-                LOG_ERROR("Allocator return invalid handle - DynamicArray: resize_internal");
-                return false;
-            }
-            _data = maybe_handle;
-            _capacity = new_capacity;
-        } else if (new_capacity < _capacity) {
-            if (new_capacity < _count) {
-                move_ptr_backwards(_count - new_capacity);
-            }
-            _capacity = new_capacity;
-        }
-
-        return true;
+        _count += alloc_count;
     }
 
     template<typename ...Args>
@@ -506,14 +474,13 @@ private:
     }
 
     template<typename ...Args>
-    T* move_ptr_and_construct(Args&&... args) noexcept
+    void move_forward_and_construct(Args&&... args) noexcept
     {
         T* place_ptr = move_ptr_forward(1);
         construct_at(place_ptr, std::forward<Args>(args)...);
-        return place_ptr;
     }
 
-    T* move_ptr_and_default_construct(u32 count) noexcept
+    T* move_forward_and_default_construct(u32 count) noexcept
     {
         T* place_ptr = move_ptr_forward(count);
         default_construct_at(place_ptr);

@@ -146,7 +146,7 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, Option<Event
         return false;
     }
 
-    EventContext& context{ maybe_context.unwrap() };
+    EventContext& context{ maybe_context.unwrap_ref() };
 
     if (code == static_cast<u8>(SystemEventCode::KEY_PRESSED)) {
         u16 key_code = context.data.u16[0];

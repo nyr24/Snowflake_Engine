@@ -46,9 +46,9 @@ struct MaterialSystemState {
     static constexpr u32 MAX_MATERIAL_AMOUNT{ 4096 };
     using MaterialHashMap = HashMap<std::string_view, MaterialRef, LinearAllocator, MAX_MATERIAL_AMOUNT>;
 
-    DynamicArray<Material, LinearAllocator, MAX_MATERIAL_AMOUNT>                 materials;
-    MaterialHashMap                                                              material_lookup_table;
-    u32                                                                          id_counter;
+    DynamicArray<Material, LinearAllocator>    materials;
+    MaterialHashMap                            material_lookup_table;
+    u32                                        id_counter;
 
     static consteval u32 get_memory_requirement() { return MAX_MATERIAL_AMOUNT * sizeof(Material) + MAX_MATERIAL_AMOUNT * sizeof(MaterialHashMap::Bucket); }
     static void create(LinearAllocator& system_allocator, MaterialSystemState& out_system);

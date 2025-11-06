@@ -92,14 +92,14 @@ public:
     bool is_err() const { return _tag == Tag::ERROR; }
     bool is_ok() const { return _tag == Tag::OK; }
 
-    const OkType& unwrap() const noexcept {
+    const OkType& unwrap_ref() const noexcept {
         if (_tag == Tag::ERROR) {
             panic("Result is error!");
         }
         return _storage.ok;
     }
 
-    OkType& unwrap() noexcept {
+    OkType& unwrap_ref() noexcept {
         if (_tag == Tag::ERROR) {
             panic("Result is error!");
         }

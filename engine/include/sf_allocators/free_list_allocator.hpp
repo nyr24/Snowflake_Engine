@@ -63,7 +63,7 @@ FreeList<Config>
     clear();
 }
 
-// UnManaged
+// UnManaged (user responsible for freeing backing buffer)
 template<FreeListConfig Config>
 FreeList<Config>
 ::FreeList(void* data, u32 capacity) noexcept

@@ -1,7 +1,6 @@
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/memory_sf.hpp"
-#include <algorithm>
 
 namespace sf {
 
@@ -65,11 +64,10 @@ StackAllocator::~StackAllocator() noexcept
 void* StackAllocator::allocate(u32 size, u16 alignment) noexcept
 {
     u32 padding = calc_padding_with_header(_buffer + _count, alignment, sizeof(StackAllocatorHeader));
-
-    if (_count + padding + size > _capacity) {
-        u32 new_capacity = std::max(_capacity * 2, _count + padding + size);
-        resize(new_capacity);
+    while (_count + padding + size > _capacity) {
+        _capacity *= 2;
     }
+    resize(_capacity);
 
     StackAllocatorHeader* header = reinterpret_cast<StackAllocatorHeader*>(_buffer + _count + (padding - sizeof(StackAllocatorHeader)));
     header->diff = _count - _prev_count;
@@ -91,7 +89,7 @@ void* StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment) noexce
 {
     if (addr == nullptr) {
         return allocate(new_size, alignment);
-    } else if (new_size == 0) {
+    } else if (new_size == 0 && is_address_in_range(_buffer, _capacity, addr)) {
         free(addr);
         return nullptr;
     } else {
