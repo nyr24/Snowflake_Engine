@@ -1,6 +1,6 @@
 #include "sf_vulkan/material.hpp"
 #include "glm/ext/vector_float4.hpp"
-#include "sf_allocators/linear_allocator.hpp"
+#include "sf_allocators/arena_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/optional.hpp"
@@ -11,7 +11,6 @@
 #include "sf_core/application.hpp"
 #include "sf_core/parsing.hpp"
 #include "sf_vulkan/texture.hpp"
-#include <cstdio>
 #include <span>
 #include <string_view>
 
@@ -29,7 +28,7 @@ FixedArray<std::string_view, MaterialConfig::PROP_COUNT> config_property_names{
 
 static MaterialSystemState* state_ptr{nullptr};
 
-void MaterialSystemState::create(LinearAllocator& system_allocator, MaterialSystemState& out_system) {
+void MaterialSystemState::create(ArenaAllocator& system_allocator, MaterialSystemState& out_system) {
     out_system.materials.set_allocator(&system_allocator);
     out_system.material_lookup_table.set_allocator(&system_allocator);
     out_system.materials.resize(MAX_MATERIAL_AMOUNT);
@@ -162,7 +161,7 @@ static bool material_parse_config(std::string_view file_name, MaterialConfig& ou
         return false;
     }
 
-    String<StackAllocator> file_contents{ maybe_file_contents.unwrap_move() };    
+    StringBacked<StackAllocator> file_contents{ maybe_file_contents.unwrap_move() };    
 
     FixedArray<char, MaterialConfig::MAX_STR_LEN> line_buff;
     Parser<StackAllocator> parser{ file_contents };
@@ -206,8 +205,8 @@ static bool material_parse_config(std::string_view file_name, MaterialConfig& ou
             } break;
             case 2: {
                 glm::vec4 vec;
-                i32 res = std::sscanf(line_buff.data(), "%f %f %f %f", &vec.r, &vec.g, &vec.b, &vec.a);
-                if (res == 0) {
+                bool res = parser.vec4_from_str(line_buff.to_string_view(), vec);
+                if (!res) {
                     LOG_ERROR("Failed to parse vec4 'diffuse_color' from material config");
                     out_config.diffuse_color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
                 } else {
@@ -215,16 +214,12 @@ static bool material_parse_config(std::string_view file_name, MaterialConfig& ou
                 }
             } break;
             case 3: {
-                std::string_view value = line_buff.to_string_view();
-                std::string_view true_s = "true";
-                std::string_view false_s = "false";
-                if (value == true_s) {
-                    out_config.auto_release = true;
-                } else if (value == false_s) {
-                    out_config.auto_release = false;
-                } else {
+                Result<bool> res = parser.bool_from_str(line_buff.to_string_view());
+                if (res.is_err()) {
                     LOG_ERROR("Failed to parse boolean 'auto_release' from material config"); 
                     out_config.auto_release = false;
+                } else {
+                    out_config.auto_release = res.unwrap_copy();
                 }
             } break;
         }

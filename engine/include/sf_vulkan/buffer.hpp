@@ -1,7 +1,7 @@
 #pragma once
 
 #include "glm/ext/matrix_float4x4.hpp"
-#include "sf_allocators/linear_allocator.hpp"
+#include "sf_allocators/arena_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
@@ -29,13 +29,13 @@ public:
 
 struct VulkanVertexIndexBuffer {
 public:
-    DynamicArray<u8, LinearAllocator>    data;
-    VulkanBuffer                         staging_buffer;
-    VulkanBuffer                         main_buffer;
-    u32                                  indeces_offset;
-    u16                                  indeces_count;
+    DynamicArrayBacked<u8, ArenaAllocator>     data;
+    VulkanBuffer                               staging_buffer;
+    VulkanBuffer                               main_buffer;
+    u32                                        indeces_offset;
+    u16                                        indeces_count;
 public:
-    static bool create(const VulkanDevice& device, Mesh&& mesh, LinearAllocator& render_system_allocator, VulkanVertexIndexBuffer& out_buffer);
+    static bool create(const VulkanDevice& device, Mesh&& mesh, ArenaAllocator& render_system_allocator, VulkanVertexIndexBuffer& out_buffer);
     bool copy_data_to_staging_buffer(const VulkanDevice& device);
     void destroy(const VulkanDevice& device);
     void bind(const VulkanCommandBuffer& cmd_buffer);

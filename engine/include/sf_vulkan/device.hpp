@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sf_allocators/linear_allocator.hpp"
+#include "sf_allocators/arena_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/optional.hpp"
 #include "sf_containers/fixed_array.hpp"
@@ -38,19 +38,17 @@ struct VulkanPhysicalDeviceRequirements {
 };
 
 struct VulkanSwapchainSupportInfo {
-    DynamicArray<VkSurfaceFormatKHR, LinearAllocator>    formats;
-    DynamicArray<VkPresentModeKHR, LinearAllocator>      present_modes;
+    DynamicArrayBacked<VkSurfaceFormatKHR, ArenaAllocator>    formats;
+    DynamicArrayBacked<VkPresentModeKHR, ArenaAllocator>      present_modes;
     VkSurfaceCapabilitiesKHR            capabilities;
     u32                                 format_count;
     u32                                 present_mode_count;
 
-    VulkanSwapchainSupportInfo() = default;
+    VulkanSwapchainSupportInfo();
     VulkanSwapchainSupportInfo(VulkanSwapchainSupportInfo&& rhs) = default;
     VulkanSwapchainSupportInfo& operator=(VulkanSwapchainSupportInfo&& rhs) = default;
     VulkanSwapchainSupportInfo(const VulkanSwapchainSupportInfo& rhs) = delete;
     VulkanSwapchainSupportInfo& operator=(const VulkanSwapchainSupportInfo& rhs) = delete;
-    
-    void set_allocator(LinearAllocator& allocator);
 };
 
 struct VulkanDeviceQueueFamilyInfo {
@@ -88,8 +86,7 @@ public:
         const VkPhysicalDeviceFeatures& features,
         const VulkanPhysicalDeviceRequirements& requirements,
         VulkanDeviceQueueFamilyInfo& out_queue_family_info,
-        VulkanSwapchainSupportInfo& out_swapchain_support_info,
-        LinearAllocator& render_system_allocator
+        VulkanSwapchainSupportInfo& out_swapchain_support_info
     );
     static void query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface, VulkanSwapchainSupportInfo& out_support_info);
     void destroy(VulkanContext& context);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sf_containers/traits.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/memory_sf.hpp"
@@ -17,12 +18,7 @@ struct FreeListNode {
     u32 size;
 };
 
-struct FreeListConfig {
-    bool should_manage_memory;
-    bool resizable;
-};
-
-template<FreeListConfig Config>
+template<bool RESIZABLE = true>
 struct FreeList {
 private:
     u8* _buffer;
@@ -37,9 +33,10 @@ public:
     ~FreeList() noexcept;
     void* allocate(u32 size, u16 alignment) noexcept;
     usize allocate_handle(u32 size, u16 alignment) noexcept;
-    void* get_mem_with_handle(usize handle) noexcept;
-    void* reallocate(void* addr, u32 new_size, u16 alignment) noexcept;
-    usize reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept;
+    void* handle_to_ptr(usize handle) const noexcept;
+    usize ptr_to_handle(void* ptr) const noexcept;
+    ReallocReturn reallocate(void* addr, u32 new_size, u16 alignment) noexcept;
+    ReallocReturnHandle reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept;
     void free(void* ptr) noexcept;
     void free_handle(usize handle) noexcept;
     void clear() noexcept;
@@ -52,43 +49,28 @@ public:
     constexpr u32 total_size() noexcept { return _capacity; };
 };
 
-template<FreeListConfig Config>
-FreeList<Config>
+template<bool RESIZABLE>
+FreeList<RESIZABLE>
 ::FreeList(u32 capacity) noexcept
     : _buffer{ static_cast<u8*>(sf_mem_alloc(capacity)) }
     , _head{ reinterpret_cast<FreeListNode*>(_buffer) }
     , _capacity{ capacity }
 {
-    static_assert(Config.should_manage_memory && "Wrong constructor call or template parameter, this one manages memory yourself");
     clear();
 }
 
-// UnManaged (user responsible for freeing backing buffer)
-template<FreeListConfig Config>
-FreeList<Config>
-::FreeList(void* data, u32 capacity) noexcept
-    : _buffer{ static_cast<u8*>(data) }
-    , _head{ reinterpret_cast<FreeListNode*>(_buffer) }
-    , _capacity{ capacity }
-{
-    static_assert(!Config.should_manage_memory && "Wrong constructor call or template parameter, this one don't manages memory yourself");
-    clear();
-}
-
-template<FreeListConfig Config>
-FreeList<Config>
+template<bool RESIZABLE>
+FreeList<RESIZABLE>
 ::~FreeList() noexcept
 {
-    if constexpr (Config.should_manage_memory) {
-        if (_buffer) {
-            sf_mem_free(_buffer);
-            _buffer = nullptr;
-        }
+    if (_buffer) {
+        sf_mem_free(_buffer);
+        _buffer = nullptr;
     }
 }
 
-template<FreeListConfig Config>
-void* FreeList<Config>::allocate(u32 size, u16 alignment) noexcept {
+template<bool RESIZABLE>
+void* FreeList<RESIZABLE>::allocate(u32 size, u16 alignment) noexcept {
     if (size < MIN_ALLOC_SIZE) {
         size = MIN_ALLOC_SIZE;
     }
@@ -115,7 +97,7 @@ void* FreeList<Config>::allocate(u32 size, u16 alignment) noexcept {
     }
 
     if (!curr) {
-        if constexpr (Config.resizable) {
+        if constexpr (RESIZABLE) {
             resize(_capacity * 2);
             return allocate(size, alignment);
         } else {
@@ -141,36 +123,41 @@ void* FreeList<Config>::allocate(u32 size, u16 alignment) noexcept {
     return alloc_header + 1;
 }
 
-template<FreeListConfig Config>
-usize FreeList<Config>::allocate_handle(u32 size, u16 alignment) noexcept {
+template<bool RESIZABLE>
+usize FreeList<RESIZABLE>::allocate_handle(u32 size, u16 alignment) noexcept {
     void* res = allocate(size, alignment);
     return turn_ptr_into_handle(res, _buffer);
 }
 
-template<FreeListConfig Config>
-void* FreeList<Config>::reallocate(void* addr, u32 new_size, u16 alignment) noexcept {
+template<bool RESIZABLE>
+ReallocReturn FreeList<RESIZABLE>::reallocate(void* addr, u32 new_size, u16 alignment) noexcept {
     if (!is_address_in_range(_buffer, _capacity, addr)) {
-        return nullptr;
+        return {nullptr, false};
     }
 
+    void* res = allocate(new_size, alignment);
+    FreeListAllocHeader* header_ptr = static_cast<FreeListAllocHeader*>(ptr_step_bytes_backward(addr, sizeof(FreeListAllocHeader)));
+    // copy old memory to the new chunk
+    sf_mem_copy(res, addr, header_ptr->size);
     free(addr);
-    return allocate(new_size, alignment);
+    return {res, false};
 }
 
-template<FreeListConfig Config>
-usize FreeList<Config>::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
+template<bool RESIZABLE>
+ReallocReturnHandle FreeList<RESIZABLE>::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
     if (!is_handle_in_range(_buffer, _capacity, handle)) {
-        return INVALID_ALLOC_HANDLE;
+        return {INVALID_ALLOC_HANDLE, false};
     }
 
-    free_handle(handle);
-    return allocate_handle(new_size, alignment);
+    ReallocReturn realloc_res = reallocate(turn_handle_into_ptr(handle, _buffer), new_size, alignment);
+    return {turn_ptr_into_handle(realloc_res.ptr, _buffer), realloc_res.should_mem_copy};
 }
 
-template<FreeListConfig Config>
-void FreeList<Config>::free(void* block) noexcept {
+template<bool RESIZABLE>
+void FreeList<RESIZABLE>::free(void* block) noexcept {
     if (!is_address_in_range(_buffer, _capacity, block)) {
         LOG_WARN("Attempt to free block out of FreeList buffer range");
+        return;
     }
 
     FreeListAllocHeader* header_ptr = static_cast<FreeListAllocHeader*>(ptr_step_bytes_backward(block, sizeof(FreeListAllocHeader)));
@@ -195,22 +182,22 @@ void FreeList<Config>::free(void* block) noexcept {
     coallescense_nodes(prev, free_node);
 }
 
-template<FreeListConfig Config>
-void FreeList<Config>::free_handle(usize handle) noexcept {
+template<bool RESIZABLE>
+void FreeList<RESIZABLE>::free_handle(usize handle) noexcept {
     void* ptr = turn_handle_into_ptr(handle, _buffer);
     free(ptr);
 }
 
-template<FreeListConfig Config>
-void FreeList<Config>::clear() noexcept {
+template<bool RESIZABLE>
+void FreeList<RESIZABLE>::clear() noexcept {
     FreeListNode* first_node = reinterpret_cast<FreeListNode*>(_buffer);
     first_node->size = _capacity;
     first_node->next = 0;
     _head = first_node;
 }
 
-template<FreeListConfig Config>
-void FreeList<Config>::resize(u32 new_capacity) noexcept {
+template<bool RESIZABLE>
+void FreeList<RESIZABLE>::resize(u32 new_capacity) noexcept {
     u8* new_buffer = static_cast<u8*>(sf_mem_realloc(_buffer, new_capacity));
 
     // append node at the back
@@ -262,8 +249,8 @@ void FreeList<Config>::resize(u32 new_capacity) noexcept {
     _capacity = new_capacity;
 }
 
-template<FreeListConfig Config>
-void FreeList<Config>::insert_node(FreeListNode* prev, FreeListNode* node_to_insert) noexcept {
+template<bool RESIZABLE>
+void FreeList<RESIZABLE>::insert_node(FreeListNode* prev, FreeListNode* node_to_insert) noexcept {
     if (prev) {
         node_to_insert->next = prev->next;
         prev->next = node_to_insert;
@@ -277,8 +264,8 @@ void FreeList<Config>::insert_node(FreeListNode* prev, FreeListNode* node_to_ins
     }
 }
 
-template<FreeListConfig Config>
-void FreeList<Config>::remove_node(FreeListNode* prev, FreeListNode* node_to_remove) noexcept {
+template<bool RESIZABLE>
+void FreeList<RESIZABLE>::remove_node(FreeListNode* prev, FreeListNode* node_to_remove) noexcept {
     if (prev) {
         prev->next = node_to_remove->next;
     } else {
@@ -286,9 +273,9 @@ void FreeList<Config>::remove_node(FreeListNode* prev, FreeListNode* node_to_rem
     }
 }
 
-template<FreeListConfig Config>
-void FreeList<Config>::coallescense_nodes(FreeListNode* prev, FreeListNode* free_node) noexcept {
-    if (free_node->next && ptr_step_bytes_forward(free_node, free_node->size) == free_node->next) {
+template<bool RESIZABLE>
+void FreeList<RESIZABLE>::coallescense_nodes(FreeListNode* prev, FreeListNode* free_node) noexcept {
+    if (free_node && free_node->next && ptr_step_bytes_forward(free_node, free_node->size) == free_node->next) {
         free_node->size += free_node->next->size;
         remove_node(free_node, free_node->next);
     }
@@ -299,8 +286,8 @@ void FreeList<Config>::coallescense_nodes(FreeListNode* prev, FreeListNode* free
     }
 }
 
-template<FreeListConfig Config>
-u32 FreeList<Config>::get_remain_space() noexcept {
+template<bool RESIZABLE>
+u32 FreeList<RESIZABLE>::get_remain_space() noexcept {
     FreeListNode* curr = _head;
     u32 remain_space{0};
 
@@ -310,6 +297,28 @@ u32 FreeList<Config>::get_remain_space() noexcept {
     }
 
     return remain_space;
+}
+
+template<bool RESIZABLE>
+void* FreeList<RESIZABLE>::handle_to_ptr(usize handle) const noexcept {
+#ifdef SF_DEBUG
+    if (!is_handle_in_range(_buffer, _capacity, handle) || handle == INVALID_ALLOC_HANDLE) {
+        return nullptr;
+    }
+#endif
+    
+    return _buffer + handle;
+}
+
+template<bool RESIZABLE>
+usize FreeList<RESIZABLE>::ptr_to_handle(void* ptr) const noexcept {
+#ifdef SF_DEBUG
+    if (!is_address_in_range(_buffer, _capacity, ptr) || ptr == nullptr) {
+        return INVALID_ALLOC_HANDLE;
+    }
+#endif
+
+    return turn_ptr_into_handle(ptr, _buffer);
 }
 
 } // sf

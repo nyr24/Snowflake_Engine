@@ -1,5 +1,4 @@
 #include "sf_vulkan/device.hpp"
-#include "sf_allocators/linear_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_core/application.hpp"
 #include "sf_core/asserts_sf.hpp"
@@ -150,13 +149,13 @@ bool VulkanDevice::select(VulkanContext& context, FixedArray<const char*, DEVICE
 
         VulkanDeviceQueueFamilyInfo queue_family_info;
 
-        VulkanSwapchainSupportInfo swapchain_support_info;
-        swapchain_support_info.set_allocator(context.render_system_allocator);
+        auto& main_alloc = application_get_main_allocator();
+        VulkanSwapchainSupportInfo swapchain_support_info{};
 
         bool meets_requirements = VulkanDevice::meet_requirements(
             physical_devices[i], context.surface, physical_device_properties,
             physical_device_features, physical_device_requirements, queue_family_info,
-            swapchain_support_info, context.render_system_allocator
+            swapchain_support_info
         );
 
         if (meets_requirements) {
@@ -254,8 +253,7 @@ bool VulkanDevice::meet_requirements(
     const VkPhysicalDeviceFeatures& features,
     const VulkanPhysicalDeviceRequirements& requirements,
     VulkanDeviceQueueFamilyInfo& out_queue_family_info,
-    VulkanSwapchainSupportInfo& out_swapchain_support_info,
-    LinearAllocator& render_system_allocator
+    VulkanSwapchainSupportInfo& out_swapchain_support_info
 ) {
     if (requirements.flags & VULKAN_PHYSICAL_DEVICE_REQUIREMENT_DISCRETE_GPU) {
         if (properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
@@ -338,7 +336,7 @@ bool VulkanDevice::meet_requirements(
         sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, nullptr));
 
         if (available_extension_count) {
-            DynamicArray<VkExtensionProperties, StackAllocator> available_extensions(available_extension_count, available_extension_count, &application_get_temp_allocator());
+            DynamicArrayBacked<VkExtensionProperties, StackAllocator, true> available_extensions(available_extension_count, available_extension_count, &application_get_temp_allocator());
             sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, available_extensions.data()));
 
             for (const auto* required_extension : requirements.device_extension_names) {
@@ -368,10 +366,11 @@ bool VulkanDevice::meet_requirements(
     return true;
 }
 
-void VulkanSwapchainSupportInfo::set_allocator(LinearAllocator& allocator)
+VulkanSwapchainSupportInfo::VulkanSwapchainSupportInfo()
 {
-    formats.set_allocator(&allocator);
-    present_modes.set_allocator(&allocator);
+    auto& main_alloc = application_get_main_allocator();
+    formats.set_allocator(&main_alloc);
+    present_modes.set_allocator(&main_alloc);
 }
 
 bool VulkanDevice::detect_depth_format() {

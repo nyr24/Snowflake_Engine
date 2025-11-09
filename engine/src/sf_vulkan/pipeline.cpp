@@ -479,7 +479,7 @@ void VulkanDescriptorSetLayout::destroy(const VulkanDevice& device) {
 }
 
 Result<VkShaderModule> create_shader_module(const VulkanDevice& device, fs::path&& shader_file_path) {
-    Result<DynamicArray<char, StackAllocator>> shader_file_contents = read_file(shader_file_path, application_get_temp_allocator());
+    Result<DynamicArrayBacked<char, StackAllocator>> shader_file_contents = read_file(shader_file_path, application_get_temp_allocator());
 
     if (shader_file_contents.is_err()) {
         return {ResultError::VALUE};

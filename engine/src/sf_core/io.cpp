@@ -1,5 +1,4 @@
 #include "sf_core/io.hpp"
-#include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
 #include <string_view>
 

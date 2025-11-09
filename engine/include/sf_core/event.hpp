@@ -1,7 +1,5 @@
 #pragma once
 
-#include "sf_allocators/linear_allocator.hpp"
-#include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_containers/optional.hpp"
@@ -51,13 +49,9 @@ struct Event {
 
 struct EventSystemState {
     static constexpr u32 MAX_EVENT_COUNT{50};
-    FixedArray<DynamicArray<Event, LinearAllocator>, static_cast<u32>(SystemEventCode::COUNT)> event_lists;
+    FixedArray<FixedArray<Event, MAX_EVENT_COUNT>, static_cast<u32>(SystemEventCode::COUNT)> event_lists;
 
-    static consteval u32 get_memory_requirement() {
-        return sizeof(Event) * MAX_EVENT_COUNT * SystemEventCode::COUNT;
-    }
-    
-    static void create(LinearAllocator& system_allocator, EventSystemState& out_system);
+    static void create(EventSystemState& out_system);
     ~EventSystemState() {
         for (auto& list : event_lists) {
             list.clear();

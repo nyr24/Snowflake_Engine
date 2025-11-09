@@ -1,4 +1,5 @@
 #include "sf_vulkan/buffer.hpp"
+#include "sf_allocators/arena_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/memory_sf.hpp"
@@ -71,7 +72,7 @@ void VulkanBuffer::destroy(const VulkanDevice& device) {
     }
 }
 
-bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, Mesh&& mesh, LinearAllocator& render_system_allocator, VulkanVertexIndexBuffer& out_buffer) {
+bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, Mesh&& mesh, ArenaAllocator& render_system_allocator, VulkanVertexIndexBuffer& out_buffer) {
     out_buffer.data.set_allocator(&render_system_allocator);
     out_buffer.data.resize(mesh.vertices.size_in_bytes() + mesh.indices.size_in_bytes());
     out_buffer.indeces_count = mesh.indices.count();

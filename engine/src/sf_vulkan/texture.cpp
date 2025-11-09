@@ -1,5 +1,5 @@
 #include "sf_vulkan/texture.hpp"
-#include "sf_allocators/linear_allocator.hpp"
+#include "sf_allocators/arena_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/asserts_sf.hpp"
@@ -207,7 +207,7 @@ void Texture::destroy(const VulkanDevice& device) {
 
 static TextureSystemState* state_ptr;
 
-void TextureSystemState::create(LinearAllocator& allocator, const VulkanDevice& device, TextureSystemState& out_system) {
+void TextureSystemState::create(ArenaAllocator& allocator, const VulkanDevice& device, TextureSystemState& out_system) {
     out_system.textures.set_allocator(&allocator);
     out_system.textures.resize(MAX_TEXTURE_AMOUNT);
     out_system.texture_lookup_table.set_allocator(&allocator);

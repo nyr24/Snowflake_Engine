@@ -1,6 +1,4 @@
 #include "sf_core/application.hpp"
-#include "sf_allocators/general_purpose_allocator.hpp"
-#include "sf_allocators/linear_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
@@ -19,17 +17,17 @@ namespace sf {
 static const u32 TEMP_ALLOCATOR_INIT_PAGES{ 16 };
 
 static ApplicationState state;
-static GeneralPurposeAllocator gpa;
 
 ApplicationState::ApplicationState()
-    : system_allocator{ TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement() + EventSystemState::get_memory_requirement() }
-    , temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
-{}
+    : temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
+{
+    main_allocator.reserve(TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement());
+}
 
 void application_init_internal_state(const VulkanDevice& device) {
-    EventSystemState::create(state.system_allocator, state.event_system);
-    TextureSystemState::create(state.system_allocator, device, state.texture_system);
-    MaterialSystemState::create(state.system_allocator, state.material_system);
+    EventSystemState::create(state.event_system);
+    TextureSystemState::create(state.main_allocator, device, state.texture_system);
+    MaterialSystemState::create(state.main_allocator, state.material_system);
 
     event_system_init_internal_state(&state.event_system);
     texture_system_init_internal_state(&state.texture_system);
@@ -172,12 +170,12 @@ bool application_on_key(u8 code, void* sender, void* listener_inst, Option<Event
     return false;
 }
 
-StackAllocator& application_get_temp_allocator() {
-    return state.temp_allocator;
+ArenaAllocator& application_get_main_allocator() {
+    return state.main_allocator;
 }
 
-GeneralPurposeAllocator& application_get_gpa() {
-    return gpa;
+StackAllocator& application_get_temp_allocator() {
+    return state.temp_allocator;
 }
 
 } // sf

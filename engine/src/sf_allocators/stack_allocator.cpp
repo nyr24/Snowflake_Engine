@@ -1,4 +1,5 @@
 #include "sf_allocators/stack_allocator.hpp"
+#include "sf_containers/traits.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/memory_sf.hpp"
 
@@ -85,16 +86,16 @@ usize StackAllocator::allocate_handle(u32 size, u16 alignment) noexcept
     return turn_ptr_into_handle(ptr, _buffer);  
 }
 
-void* StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment) noexcept
+ReallocReturn StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment) noexcept
 {
     if (addr == nullptr) {
-        return allocate(new_size, alignment);
+        return {allocate(new_size, alignment), false};
     } else if (new_size == 0 && is_address_in_range(_buffer, _capacity, addr)) {
         free(addr);
-        return nullptr;
+        return {nullptr, false};
     } else {
         if (!is_address_in_range(_buffer, _capacity, addr)) {
-            return nullptr;
+            return {nullptr, false};
         }
         // check if it is the last allocation -> just grow/shrink this chunk of memory
         StackAllocatorHeader* header = static_cast<StackAllocatorHeader*>(ptr_step_bytes_backward(addr, sizeof(StackAllocatorHeader)));
@@ -110,38 +111,31 @@ void* StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment) noexce
                     resize(_capacity * 2);
                 }
                 _count += size_diff;
-                return addr;
+                return {addr, false};
             }
             // shrink
             else {
                 u32 size_diff = prev_size - new_size;
                 _count -= size_diff;
-                return addr;
+                return {addr, false};
             }
         } else {
+            // NOTE: don't free old block, because user maybe needs to memcpy it
             // alloc new memory block
-            free(addr);
-            return allocate(new_size, alignment);
+            return {allocate(new_size, alignment), true};
         }
     }
 }
 
-usize StackAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept
+ReallocReturnHandle StackAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept
 {
     if (handle == INVALID_ALLOC_HANDLE) {
         void* addr = allocate(new_size, alignment);
-        if (!addr) {
-            return INVALID_ALLOC_HANDLE;
-        }
-        return turn_ptr_into_handle(addr, _buffer);
+        return {turn_ptr_into_handle(addr, _buffer), false};
     }
     
-    void* addr = reallocate(turn_handle_into_ptr(handle, _buffer), new_size, alignment);
-    if (!addr) {
-        return INVALID_ALLOC_HANDLE;
-    }
-    
-    return turn_ptr_into_handle(addr, _buffer);
+    ReallocReturn realloc_res = reallocate(turn_handle_into_ptr(handle, _buffer), new_size, alignment);
+    return {turn_ptr_into_handle(realloc_res.ptr, _buffer), realloc_res.should_mem_copy};
 }
 
 void StackAllocator::clear() noexcept
@@ -170,12 +164,24 @@ void StackAllocator::resize(u32 new_capacity) noexcept {
     _buffer = new_buffer;
 }
 
-void* StackAllocator::get_mem_with_handle(usize handle) const noexcept {
-    if (!is_handle_in_range(_buffer, _capacity, handle)) {
+void* StackAllocator::handle_to_ptr(usize handle) const noexcept {
+#ifdef SF_DEBUG
+    if (!is_handle_in_range(_buffer, _capacity, handle) || handle == INVALID_ALLOC_HANDLE) {
         return nullptr;
     }
+#endif
 
     return _buffer + handle;
+}
+
+usize StackAllocator::ptr_to_handle(void* ptr) const noexcept {
+#ifdef SF_DEBUG
+    if (!is_address_in_range(_buffer, _capacity, ptr) || ptr == nullptr) {
+        return INVALID_ALLOC_HANDLE;
+    }
+#endif
+
+    return turn_ptr_into_handle(ptr, _buffer);
 }
 
 void StackAllocator::free_handle(usize handle) noexcept {

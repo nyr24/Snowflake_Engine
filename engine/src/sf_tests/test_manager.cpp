@@ -10,7 +10,6 @@
 #include "sf_allocators/free_list_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_core/clock.hpp"
-#include "sf_containers/dynamic_array_self_managed.hpp"
 #include <string_view>
 
 namespace sf {
@@ -60,27 +59,38 @@ void fixed_array_test() {
 void dyn_array_test() {
     Clock clock;
 
-    constexpr u32 BIG_SIZE = 99999999;
+    constexpr u32 BIG_SIZE = 1'000'0;
 
     {
         GeneralPurposeAllocator al;
-        DynamicArray<u32> arr(32, &al);
+        DynamicArrayBacked<u32, GeneralPurposeAllocator, true> arr(32, &al);
         clock.restart();
         for (u32 i{0}; i < BIG_SIZE; ++i) {
             arr.append(rand());
         }
         auto time = clock.update_and_get_delta();
-        LOG_FATAL("new dyn array: {}", time);
+        LOG_FATAL("new dyn array (handle): {}", time);
     }
 
     {
-        DynamicArraySelfManaged<u32> arr(32);
+        GeneralPurposeAllocator al;
+        DynamicArrayBacked<u32, GeneralPurposeAllocator, false> arr(32, &al);
         clock.restart();
         for (u32 i{0}; i < BIG_SIZE; ++i) {
             arr.append(rand());
         }
         auto time = clock.update_and_get_delta();
-        LOG_FATAL("dyn array: {}", time);
+        LOG_FATAL("new dyn array (no handle): {}", time);
+    }
+
+    {
+        DynamicArray<u32> arr(32);
+        clock.restart();
+        for (u32 i{0}; i < BIG_SIZE; ++i) {
+            arr.append(rand());
+        }
+        auto time = clock.update_and_get_delta();
+        LOG_FATAL("default dyn array: {}", time);
     }
 }
 
@@ -89,31 +99,38 @@ void stack_allocator_test() {
     StackAllocator alloc{500};
 
     {
-        DynamicArray<u8, StackAllocator> arr(&alloc);
+        DynamicArrayBacked<u8, StackAllocator> arr(&alloc);
         arr.reserve(200);
         expect(alloc.count() >= 200 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
 
-        DynamicArray<u8, StackAllocator> arr2(&alloc);
+        DynamicArrayBacked<u8, StackAllocator> arr2(&alloc);
         arr2.reserve(200);
         expect(alloc.count() >= 400 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
 
-        DynamicArray<u8, StackAllocator> arr3(&alloc);
+        DynamicArrayBacked<u8, StackAllocator> arr3(&alloc);
         arr3.reserve(300);
         expect(alloc.count() >= 700 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
     }
 }
 
 void freelist_allocator_test() {
-    FreeList<{ true, true }> list(1024);
-    u32 h1 = list.allocate_handle(448, 8);
-    u32 h3 = list.allocate_handle(224, 8);
-    u32 h2 = list.allocate_handle(628, 8);
-    u32 h4 = list.allocate_handle(94, 8);
+    FreeList alloc(512);
 
-    list.free_handle(h1);
-    list.free_handle(h3);
-    list.free_handle(h2);
-    list.free_handle(h4);
+    DynamicArrayBacked<u8, FreeList<true>> arr(500, &alloc);
+
+    // lookup data
+    for (u32 i{0}; i < 30; ++i) {
+        arr.append(i);
+    }
+
+    // trigger resize on first array
+    arr.resize(600);
+
+    // log lookup data
+    LOG_DEBUG("lookup data after resize: ");
+    for (u32 i{0}; i < 30; ++i) {
+        LOG_INFO("{} ", arr[i]);
+    }
 }
 
 void linear_allocator_test() {
@@ -121,23 +138,25 @@ void linear_allocator_test() {
     LinearAllocator alloc{500};
 
     {
-        DynamicArray<u8, LinearAllocator> arr(&alloc);
+        DynamicArrayBacked<u8, LinearAllocator> arr(&alloc);
         arr.reserve(200);
         expect(alloc.count() >= 200 * sizeof(u8), counter);
 
-        DynamicArray<u8, LinearAllocator> arr2(&alloc);
+        DynamicArrayBacked<u8, LinearAllocator> arr2(&alloc);
         arr2.reserve(200);
         expect(alloc.count() >= 400 * sizeof(u8), counter);
 
-        DynamicArray<u8, LinearAllocator> arr3(&alloc);
+        DynamicArrayBacked<u8, LinearAllocator> arr3(&alloc);
         arr3.reserve(300);
         expect(alloc.count() >= 700 * sizeof(u8), counter);
     }
 }
 
 void hashmap_test() {
+    TestCounter counter("HashMap");
+    
     LinearAllocator alloc(1024 * sizeof(u32));
-    HashMap<std::string_view, u32, LinearAllocator> map(&alloc); 
+    HashMapBacked<std::string_view, u32, LinearAllocator> map(&alloc); 
     map.reserve(32);
 
     std::string_view key1 = "kate_age";
@@ -148,6 +167,17 @@ void hashmap_test() {
 
     auto age1 = map.get(key1);
     auto age2 = map.get(key2);
+
+    expect(age1.is_some(), counter);
+    expect(age2.is_some(), counter);
+
+    auto del1 = map.remove(key1);
+    auto del2 = map.remove(key1);
+    auto del3 = map.remove(key2);
+
+    expect(del1, counter);
+    expect(!del2, counter);
+    expect(del3, counter);
 }
 
 void TestManager::collect_all_tests() {

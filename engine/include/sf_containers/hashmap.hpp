@@ -11,17 +11,16 @@
 #include "sf_containers/iterator.hpp"
 #include "sf_containers/optional.hpp"
 #include <cstring>
-#include <functional>
 #include <string_view>
 #include <utility>
 
 namespace sf {
 
 template<typename K>
-using HashFn = std::function<u64(ConstLRefOrValType<K>)>;
+using HashFn = u64(*)(ConstLRefOrValType<K>);
 
 template<typename K>
-using EqualFn = std::function<bool(ConstLRefOrValType<K>, ConstLRefOrValType<K>)>;
+using EqualFn = bool(*)(ConstLRefOrValType<K>, ConstLRefOrValType<K>);
 
 template<typename K>
 u64 hashfn_default(ConstLRefOrValType<K> key) noexcept;
@@ -106,7 +105,7 @@ static HashMapConfig<K> get_default_config() {
     };
 }
 
-template<typename K, typename V, AllocatorTrait Allocator = GeneralPurposeAllocator>
+template<typename K, typename V, u32 DEFAULT_INIT_CAPACITY = 8>
 struct HashMap {
 public:
     using KeyType = K;
@@ -126,60 +125,356 @@ public:
 
 private:
     // 1 capacity = 1 count = sizeof(Bucket<K, V>)
-    Allocator*          _allocator;
-    usize               _data;
     u32                 _capacity;
     u32                 _count;
+    Bucket*             _buffer;
     HashMapConfig<K>    _config;
 
 public:
     HashMap()
-        : _allocator{nullptr}
-        , _data{INVALID_ALLOC_HANDLE}
-        , _capacity{0}
+        : _capacity{DEFAULT_INIT_CAPACITY}
+        , _buffer{ sf_mem_alloc_typed<Bucket, true>(DEFAULT_INIT_CAPACITY) }
         , _count{0}
         , _config{ get_default_config<K>() }
-    {}
+    {
+        init_data_empty(_buffer, _capacity);
+    }
 
-    HashMap(Allocator* allocator)
-        : _allocator{allocator}
-        , _data{INVALID_ALLOC_HANDLE}
-        , _capacity{0}
-        , _count{0}
-        , _config{ get_default_config<K>() }
-    {}
-    
-    HashMap(u32 prealloc_count, Allocator* allocator, const HashMapConfig<K>& config = get_default_config<K>())
-        : _allocator{ allocator }
-        , _data{ allocator->allocate_handle(prealloc_count * sizeof(Bucket), alignof(Bucket)) }
-        , _capacity{ prealloc_count }
+    HashMap(u32 prealloc_count, const HashMapConfig<K>& config = get_default_config<K>())
+        : _capacity{ prealloc_count }
+        , _buffer{ sf_mem_alloc_typed<Bucket, true>(_capacity) }
         , _count{ 0 }
         , _config{ config }
     {
-        init_data_empty(_data, _capacity);
+        init_data_empty(_buffer, _capacity);
     }
 
-    HashMap(HashMap<K, V, Allocator>&& rhs) noexcept
-        : _allocator{ rhs._allocator }
-        , _data{ rhs._data }
-        , _capacity{ rhs._capacity }
+    HashMap(HashMap<K, V>&& rhs) noexcept
+        : _capacity{ rhs._capacity }
+        , _buffer{ rhs._buffer }
         , _count{ rhs._count }
         , _config{ rhs._config }
     {
-        rhs._allocator = nullptr;
-        rhs._data = INVALID_ALLOC_HANDLE;
         rhs._capacity = 0;
         rhs._count = 0;
+        rhs._buffer = nullptr;
     }
 
-    HashMap<K, V, Allocator>& operator=(HashMap<K, V, Allocator>&& rhs) noexcept
+    HashMap<K, V>& operator=(HashMap<K, V>&& rhs) noexcept
     {
         if (this == &rhs) {
             return *this;
         }
 
-        if (_data != INVALID_ALLOC_HANDLE) {
-            _allocator->free_handle(_data);
+        if (_buffer) {
+            sf_mem_free_typed<Bucket, true>(_buffer);
+        }
+        
+        _capacity = rhs._capacity;
+        _buffer = rhs._buffer;
+        _count = rhs._count;
+        _config = rhs._config;
+
+        rhs._capacity = 0;
+        rhs._count = 0;
+        rhs._buffer = nullptr;
+    }
+    
+    HashMap(const HashMap<K, V>& rhs) = delete;
+    HashMap<K, V>& operator=(const HashMap<K, V>& rhs) = delete;
+
+    ~HashMap() {
+        if (_buffer) {
+            sf_mem_free_typed<Bucket, true>(_buffer);
+            _buffer = nullptr;
+        }
+    }
+
+    // updates entry with the same key
+    template<typename Key, typename Val>
+    requires SameTypes<K, Key> && SameTypes<V, Val>
+    void put(Key&& key, Val&& val) noexcept {
+        if (_count > static_cast<u32>(_capacity * _config.load_factor)) {
+            resize(_capacity * _config.grow_factor);
+        }
+
+        u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
+
+        while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
+            ++index;
+            index %= _capacity;
+        }
+
+        if (_buffer[index].state != Bucket::FILLED) {
+            _buffer[index] = Bucket{ .key = std::forward<Key>(key), .value = std::forward<Val>(val), .state = Bucket::FILLED };
+            ++_count;
+        } else {
+            _buffer[index].value = std::forward<Val>(val);
+        }
+    }
+
+    // asserts if hashmap needs reallocate buffer
+    template<typename Key, typename Val>
+    requires SameTypes<K, Key> && SameTypes<V, Val>
+    bool put_assume_capacity(K&& key, V&& val) noexcept {
+        u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
+
+        while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
+            ++index;
+            index %= _capacity;
+        }
+
+        if (_buffer[index].state != Bucket::FILLED) {
+            if (_count > static_cast<u32>(_capacity * _config.load_factor)) {
+                LOG_ERROR("Not enough capacity in HashMap");
+                return false;
+            }
+            _buffer[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
+            ++_count;
+        } else {
+            _buffer[index].value = std::move(val);
+        }
+
+        return true;
+    }
+
+    // put without update
+    template<typename Key, typename Val>
+    requires SameTypes<K, Key> && SameTypes<V, Val>
+    bool put_if_empty(K&& key, V&& val) noexcept {
+        if (_count > static_cast<u32>(_capacity * _config.load_factor)) {
+            resize(_capacity * _config.grow_factor);
+        }
+
+        u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
+
+        while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key)) {
+            ++index;
+            index %= _capacity;
+        }
+
+        if (_buffer[index].state == Bucket::FILLED) {
+            return false;
+        } else {
+            ++_count;
+            _buffer[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
+            return true;
+        }
+    }
+
+    Option<V*> get(ConstLRefOrValType<K> key) noexcept {
+        Option<Bucket*> maybe_bucket = find_bucket(key);
+        if (maybe_bucket.is_none()) {
+            return {None::VALUE};
+        }
+
+        return &maybe_bucket.unwrap_ref()->value;
+    }
+
+    bool remove(ConstLRefOrValType<K> key) noexcept {
+        Option<Bucket*> maybe_bucket = find_bucket(key);
+        if (maybe_bucket.is_none()) {
+            return false;
+        }
+
+        Bucket* bucket = maybe_bucket.unwrap_copy();
+        bucket->state = Bucket::TOMBSTONE;
+        --_count;
+
+        return true;
+    }
+
+    void reserve(u32 new_capacity) noexcept {
+        if (is_empty()) {
+            resize_empty(new_capacity);
+        } else {
+            resize(new_capacity);
+        }
+    }
+
+    void fill(ConstLRefOrValType<V> val) noexcept {
+        for (u32 i{0}; i < _capacity; ++i) {
+            _buffer[i].value = val;
+        }
+        _count = _capacity;
+    }
+
+    bool is_empty() const { return _buffer == nullptr && _capacity == 0 && _count == 0; }
+
+    constexpr PtrRandomAccessIterator<Bucket> begin() noexcept {
+        return PtrRandomAccessIterator<Bucket>(_buffer);
+    }
+
+    constexpr PtrRandomAccessIterator<Bucket> end() noexcept {
+        return PtrRandomAccessIterator<Bucket>(_buffer + _capacity);
+    }
+private:
+    void resize_empty(u32 new_capacity) {
+        if (_buffer) {
+            return;
+        }
+        if (new_capacity < DEFAULT_INIT_CAPACITY) {
+            new_capacity = DEFAULT_INIT_CAPACITY;
+        }
+
+        while (_capacity < new_capacity) {
+            _capacity *= _config.grow_factor;
+        }
+
+        _buffer = sf_mem_alloc_typed<Bucket, true>(_capacity);
+        init_data_empty(_buffer, _capacity);
+    }
+
+    void resize(u32 new_capacity) noexcept {
+        if (_capacity == 0) {
+            _capacity = DEFAULT_INIT_CAPACITY;
+        }
+        while (_capacity < new_capacity) {
+            _capacity *= _config.grow_factor;
+        }
+
+        _buffer = sf_mem_realloc_typed<Bucket, true>(_buffer, _capacity);
+
+        for (u32 i{0}; i < _capacity; ++i) {
+            Bucket&& bucket{ std::move(_buffer[i]) };
+            if (bucket.state != Bucket::FILLED) {
+                bucket.state = Bucket::EMPTY;
+                continue;
+            }
+
+            u64 hash = _config.hash_fn(bucket.key);
+            u32 new_index = hash % new_capacity;
+
+            while (_buffer[new_index].state == Bucket::FILLED) {
+                ++new_index;
+                new_index %= new_capacity;
+            }
+
+            _buffer[new_index] = std::move(bucket);
+        }
+    }
+
+    void init_data_empty(Bucket* buffer, u32 capacity) {
+        if (!buffer) {
+            return;
+        }
+        sf_mem_zero(buffer, _capacity * sizeof(Bucket));
+    }
+
+    // returns "some" if only state of bucket is "FILLED"
+    Option<Bucket*> find_bucket(ConstLRefOrValType<K> key) noexcept {
+        u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
+        u32 search_count = 0;
+
+        while (_buffer[index].state == Bucket::FILLED && !_config.equal_fn(key, _buffer[index].key) && search_count < _capacity) {
+            ++index;
+            index %= _capacity;
+            ++search_count;
+        }
+
+        if (_buffer[index].state == Bucket::FILLED && search_count < _capacity) {
+            return &_buffer[index];
+        } else {
+            return None::VALUE;
+        }
+    }
+};
+
+// Backed (by allocator) version
+
+template<typename K, typename V, AllocatorTrait Allocator = GeneralPurposeAllocator, bool USE_HANDLE = false, u32 DEFAULT_INIT_CAPACITY = 8>
+struct HashMapBacked {
+public:
+    using KeyType = K;
+    using ValueType = V;
+
+    struct Bucket {
+        enum BucketState : u8 {
+            EMPTY,
+            FILLED,
+            TOMBSTONE
+        };
+
+        K key;
+        V value;
+        BucketState state;
+    };
+
+    union Data {
+        Bucket* ptr;
+        usize   handle; 
+    };
+private:
+    // 1 capacity = 1 count = sizeof(Bucket<K, V>)
+    Allocator*          _allocator;
+    Data                _data;
+    u32                 _capacity;
+    u32                 _count;
+    HashMapConfig<K>    _config;
+
+public:
+    HashMapBacked()
+        : _allocator{nullptr}
+        , _capacity{0}
+        , _count{0}
+        , _config{ get_default_config<K>() }
+    {
+        if constexpr (USE_HANDLE) {
+            _data.handle = INVALID_ALLOC_HANDLE;
+        } else {
+            _data.ptr = nullptr;
+        }
+    }
+
+    HashMapBacked(Allocator* allocator)
+        : _allocator{allocator}
+        , _capacity{0}
+        , _count{0}
+        , _config{ get_default_config<K>() }
+    {
+        if constexpr (USE_HANDLE) {
+            _data.handle = INVALID_ALLOC_HANDLE;
+        } else {
+            _data.ptr = nullptr;
+        }
+    }
+    
+    HashMapBacked(u32 prealloc_count, Allocator* allocator, const HashMapConfig<K>& config = get_default_config<K>())
+        : _allocator{allocator}
+        , _capacity{prealloc_count}
+        , _count{0}
+        , _config{config}
+    {
+        init_buffer_empty(access_data(), _capacity);
+    }
+
+    HashMapBacked(HashMapBacked<K, V, Allocator>&& rhs) noexcept
+        : _allocator{rhs._allocator}
+        , _data{rhs._data}
+        , _capacity{rhs._capacity}
+        , _count{rhs._count}
+        , _config{rhs._config}
+    {
+        rhs._allocator = nullptr;
+        if constexpr (USE_HANDLE) {
+            rhs._data.handle = INVALID_ALLOC_HANDLE;
+        } else {
+            rhs._data.ptr = nullptr;
+        }
+        rhs._buffer = nullptr;
+        rhs._capacity = 0;
+        rhs._count = 0;
+    }
+
+    HashMapBacked<K, V, Allocator>& operator=(HashMapBacked<K, V, Allocator>&& rhs) noexcept
+    {
+        if (this == &rhs) {
+            return *this;
+        }
+
+        Bucket* data = access_data();
+        if (_allocator && data) {
+            _allocator->free(data);
         }
         
         _allocator = rhs._allocator;
@@ -189,18 +484,30 @@ public:
         _config = rhs._config;
 
         rhs._allocator = nullptr;
-        rhs._data = INVALID_ALLOC_HANDLE;
+        if constexpr (USE_HANDLE) {
+            rhs._data.handle = INVALID_ALLOC_HANDLE;
+        } else {
+            rhs._data.ptr = nullptr;
+        }
+        rhs._buffer = nullptr;
         rhs._capacity = 0;
         rhs._count = 0;
     }
     
-    HashMap(const HashMap<K, V, Allocator>& rhs) = delete;
-    HashMap<K, V, Allocator>& operator=(const HashMap<K, V, Allocator>& rhs) = delete;
+    HashMapBacked(const HashMapBacked<K, V, Allocator>& rhs) = delete;
+    HashMapBacked<K, V, Allocator>& operator=(const HashMapBacked<K, V, Allocator>& rhs) = delete;
 
-    ~HashMap() {
-        if (_data != INVALID_ALLOC_HANDLE) {
-            _allocator->free_handle(_data);
-            _data = INVALID_ALLOC_HANDLE;
+    ~HashMapBacked() {
+        if constexpr (USE_HANDLE) {
+            if (_data.handle != INVALID_ALLOC_HANDLE) {
+                _allocator->free_handle(_data.handle);
+                _data.handle = INVALID_ALLOC_HANDLE;
+            }
+        } else {
+            if (_data.ptr) {
+                _allocator->free(_data.ptr);
+                _data.ptr = nullptr;
+            }
         }
     }
 
@@ -214,48 +521,47 @@ public:
     requires SameTypes<K, Key> && SameTypes<V, Val>
     void put(Key&& key, Val&& val) noexcept {
         SF_ASSERT_MSG(_allocator, "Should be valid pointer");
-        if (_count >= static_cast<u32>(_capacity * _config.load_factor)) {
-            resize();
+        if (_count > static_cast<u32>(_capacity * _config.load_factor)) {
+            resize(_capacity * _config.grow_factor);
         }
 
-        Bucket* data_ptr{ handle_to_ptr(_data) };
+        Bucket* data = access_data();
         u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
 
-        while (data_ptr[index].state == Bucket::FILLED && !_config.equal_fn(key, data_ptr[index].key)) {
+        while (data[index].state == Bucket::FILLED && !_config.equal_fn(key, data[index].key)) {
             ++index;
             index %= _capacity;
         }
 
-        if (data_ptr[index].state != Bucket::FILLED) {
-            data_ptr[index] = Bucket{ .key = std::forward<Key>(key), .value = std::forward<Val>(val), .state = Bucket::FILLED };
+        if (data[index].state != Bucket::FILLED) {
+            data[index] = Bucket{ .key = std::forward<Key>(key), .value = std::forward<Val>(val), .state = Bucket::FILLED };
             ++_count;
         } else {
-            data_ptr[index].value = std::forward<Val>(val);
+            data[index].value = std::forward<Val>(val);
         }
     }
 
-    // asserts if hashmap needs reallocate buffer
+    // put without resize, if can
     template<typename Key, typename Val>
     requires SameTypes<K, Key> && SameTypes<V, Val>
     bool put_assume_capacity(K&& key, V&& val) noexcept {
-        if (_count <= static_cast<u32>(_capacity * _config.load_factor)) {
-            LOG_ERROR("Not enough capacity in HashMap");
-            return false;
-        }
-
-        Bucket* data_ptr{ handle_to_ptr(_data) };
+        Bucket* data = access_data();
         u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
 
-        while (data_ptr[index].state == Bucket::FILLED && !_config.equal_fn(key, data_ptr[index].key)) {
+        while (data[index].state == Bucket::FILLED && !_config.equal_fn(key, data[index].key)) {
             ++index;
             index %= _capacity;
         }
 
-        if (data_ptr[index].state != Bucket::FILLED) {
-            data_ptr[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
+        if (data[index].state != Bucket::FILLED) {
+            if (_count > static_cast<u32>(_capacity * _config.load_factor)) {
+                LOG_ERROR("Not enough capacity in HashMapBacked");
+                return false;
+            }
+            data[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
             ++_count;
         } else {
-            data_ptr[index].value = std::move(val);
+            data[index].value = std::move(val);
         }
 
         return true;
@@ -266,23 +572,23 @@ public:
     requires SameTypes<K, Key> && SameTypes<V, Val>
     bool put_if_empty(K&& key, V&& val) noexcept {
         SF_ASSERT_MSG(_allocator, "Should be valid pointer");
-        if (_count >= static_cast<u32>(_capacity * _config.load_factor)) {
-            resize();
+        if (_count > static_cast<u32>(_capacity * _config.load_factor)) {
+            resize(_capacity * _config.grow_factor);
         }
 
-        Bucket* data_ptr{ handle_to_ptr(_data) };
+        Bucket* data = access_data();
         u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
 
-        while (data_ptr[index].state == Bucket::FILLED && !_config.equal_fn(key, data_ptr[index].key)) {
+        while (data[index].state == Bucket::FILLED && !_config.equal_fn(key, data[index].key)) {
             ++index;
             index %= _capacity;
         }
 
-        if (data_ptr[index].state == Bucket::FILLED) {
+        if (data[index].state == Bucket::FILLED) {
             return false;
         } else {
             ++_count;
-            data_ptr[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
+            data[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
             return true;
         }
     }
@@ -320,114 +626,119 @@ public:
     }
 
     void fill(ConstLRefOrValType<V> val) noexcept {
-        Bucket* data_ptr{ handle_to_ptr(_data) };
+        Bucket* data = access_data();
         for (u32 i{0}; i < _capacity; ++i) {
-            data_ptr[i].value = val;
+            data[i].value = val;
         }
         _count = _capacity;
     }
 
-    bool is_empty() const { return _data == INVALID_ALLOC_HANDLE && _capacity == 0 && _count == 0; }
+    bool is_empty() const {
+        if constexpr (USE_HANDLE) {
+            return _data.handle == INVALID_ALLOC_HANDLE && _capacity == 0 && _count == 0;
+        } else {
+            return _data.ptr == nullptr && _capacity == 0 && _count == 0;
+        }
+    }
 
     constexpr PtrRandomAccessIterator<Bucket> begin() noexcept {
-        return PtrRandomAccessIterator<Bucket>(handle_to_ptr(_data));
+        return PtrRandomAccessIterator<Bucket>(access_data());
     }
 
     constexpr PtrRandomAccessIterator<Bucket> end() noexcept {
-        return PtrRandomAccessIterator<Bucket>(handle_to_ptr(_data) + _capacity);
+        return PtrRandomAccessIterator<Bucket>(access_data() + _capacity);
     }
 private:
-    constexpr Bucket* handle_to_ptr(usize handle) const {
-        return static_cast<Bucket*>(_allocator->get_mem_with_handle(handle));
+    Bucket* access_data() {
+        if constexpr (USE_HANDLE) {
+            return _allocator->handle_to_ptr(_data.handle);
+        } else {
+            return _data.ptr;
+        }
     }
 
     void resize_empty(u32 new_capacity) {
-        if (new_capacity <= _capacity || _data != INVALID_ALLOC_HANDLE) {
-            return;
-        }
-
-        Option<usize> maybe_handle = _allocator->reallocate_handle(_data, new_capacity, alignof(Bucket));
-        if (maybe_handle.is_none()) {
-            LOG_ERROR("Failed to realloc handle: HashMap :: resize_empty");
-            return;
-        }
-        
-        _data = maybe_handle.unwrap_copy();
-        _capacity = new_capacity;
-        init_data_empty(_data, new_capacity);
-    }
-
-    void resize(Option<u32> capacity_hint = None::VALUE) noexcept {
         SF_ASSERT_MSG(_allocator, "Should be valid pointer");
 
-        u32 new_capacity;
-        u32 grow_factor_capacity = _capacity * _config.grow_factor;
-
-        if (capacity_hint.is_some() && capacity_hint.unwrap_copy() > grow_factor_capacity) {
-            new_capacity = capacity_hint.unwrap_copy();
+        _capacity = DEFAULT_INIT_CAPACITY;
+        while (_capacity < new_capacity) {
+            _capacity *= _config.grow_factor;
+        }
+        if constexpr (USE_HANDLE) {
+            _data.handle = _allocator->allocate_handle(_capacity * sizeof(Bucket), alignof(Bucket));
+            init_buffer_empty(_data.ptr, _capacity);
         } else {
-            new_capacity = grow_factor_capacity;
+            _data.ptr = static_cast<Bucket*>(_allocator->allocate(_capacity * sizeof(Bucket), alignof(Bucket)));
+            init_buffer_empty(_data.ptr, _capacity);
+        }
+    }
+
+    void resize(u32 new_capacity) noexcept {
+        SF_ASSERT_MSG(_allocator, "Should be valid pointer");
+
+        u32 old_capacity = _capacity;
+        if (_capacity == 0) {
+            _capacity = DEFAULT_INIT_CAPACITY;
+        }
+        while (_capacity < new_capacity) {
+            _capacity *= _config.grow_factor;
         }
 
-        usize maybe_handle = _allocator->reallocate_handle(_data, new_capacity * sizeof(Bucket), alignof(Bucket));
-        if (maybe_handle == INVALID_ALLOC_HANDLE) {
-            LOG_ERROR("Failed to realloc handle: HashMap :: resize");
-            return;
+        Bucket* old_buffer = access_data();
+        ReallocReturn realloc_res = _allocator->reallocate(static_cast<void*>(old_buffer), _capacity * sizeof(Bucket), alignof(Bucket));
+        Bucket* new_buffer = static_cast<Bucket*>(realloc_res.ptr);
+        if (realloc_res.should_mem_copy && old_buffer != new_buffer) {
+            sf_mem_copy((void*)new_buffer, (void*)old_buffer, old_capacity * sizeof(Bucket));
         }
-        
-        usize new_data = maybe_handle;
-        init_data_empty(new_data, new_capacity);
 
-        Bucket* data_ptr{ handle_to_ptr(new_data) };
-
+        // copy old nodes
         for (u32 i{0}; i < _capacity; ++i) {
-            Bucket&& bucket{ std::move(data_ptr[i]) };
+            Bucket&& bucket{ std::move(new_buffer[i]) };
             if (bucket.state != Bucket::FILLED) {
+                bucket.state = Bucket::EMPTY;
                 continue;
             }
 
             u64 hash = _config.hash_fn(bucket.key);
-            u32 new_index = hash % new_capacity;
+            u32 new_index = hash % _capacity;
 
-            while (data_ptr[new_index].state == Bucket::FILLED) {
+            while (new_buffer[new_index].state == Bucket::FILLED) {
                 ++new_index;
-                new_index %= new_capacity;
+                new_index %= _capacity;
             }
 
-            data_ptr[new_index] = std::move(bucket);
+            new_buffer[new_index] = std::move(bucket);
         }
 
-        if (new_data != _data) {
-            _allocator->free_handle(_data);
+        if constexpr (USE_HANDLE) {
+            _data.handle = _allocator->ptr_to_handle(new_buffer);
+        } else {
+            _data.ptr = new_buffer;
         }
-
-        _capacity = new_capacity;
-        _data = new_data;
     }
 
-    void init_data_empty(usize new_data, u32 capacity) {
-        if (new_data == INVALID_ALLOC_HANDLE) {
+    void init_buffer_empty(Bucket* new_buffer, u32 capacity) {
+        if (!new_buffer) {
             return;
         }
 
-        Bucket* data_ptr = handle_to_ptr(new_data);
-        sf_mem_zero(data_ptr, capacity);
+        sf_mem_zero(new_buffer, capacity * sizeof(Bucket));
     }
 
     // returns "some" if only state of bucket is "FILLED"
     Option<Bucket*> find_bucket(ConstLRefOrValType<K> key) noexcept {
         u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
         u32 search_count = 0;
-        Bucket* data_ptr{ handle_to_ptr(_data) };
 
-        while (data_ptr[index].state == Bucket::FILLED && !_config.equal_fn(key, handle_to_ptr(_data)[index].key) && search_count < _capacity) {
+        Bucket* data = access_data();
+        while (data[index].state == Bucket::FILLED && !_config.equal_fn(key, data[index].key) && search_count < _capacity) {
             ++index;
             index %= _capacity;
             ++search_count;
         }
 
-        if (data_ptr[index].state == Bucket::FILLED && search_count < _capacity) {
-            return &data_ptr[index];
+        if (data[index].state == Bucket::FILLED && search_count < _capacity) {
+            return &data[index];
         } else {
             return None::VALUE;
         }

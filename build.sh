@@ -56,7 +56,8 @@ for arg in "$@"; do
     X11_BUILD_FLAG_SPECIFIED=1
     ;;
   --test | -t)
-    BUILD_TESTS=1
+    echo "Building tests..."
+    CMAKE_OPTS+=" -DSF_BUILD_TESTS=1"
     ;;
   --gcc)
     echo "Using gcc compiler"
@@ -83,13 +84,6 @@ else
   CMAKE_OPTS+=" -DSF_BUILD_X11=1"
   X11_BUILD_FLAG_SPECIFIED=1
   echo "Building for linux (x11)..."
-fi
-
-if [ $BUILD_TESTS -eq 1 ]; then
-  CMAKE_OPTS+=" -DSF_BUILD_TESTS=1"
-  echo "Building tests..."
-else
-  CMAKE_OPTS+=" -DSF_BUILD_TESTS=0"
 fi
 
 if [ $WAYLAND_BUILD_FLAG_SPECIFIED -eq 1 && $X11_BUILD_FLAG_SPECIFIED -eq 1 ]; then

@@ -1,18 +1,16 @@
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/event.hpp"
-#include "sf_containers/dynamic_array.hpp"
 
 namespace sf {
 
 static EventSystemState* state_ptr{nullptr};
 
-void EventSystemState::create(LinearAllocator& system_allocator, EventSystemState& out_system) {
+void EventSystemState::create(EventSystemState& out_system) {
     out_system.event_lists.resize_to_capacity();
 
     for (auto& list : out_system.event_lists) {
-        list.set_allocator(&system_allocator);
-        list.reserve(MAX_EVENT_COUNT);
+        list.resize_to_capacity();
     }
 }
 
@@ -57,6 +55,12 @@ SF_EXPORT bool event_system_fire_event(u8 code, void* sender, Option<EventContex
     }
 
     return false;
+}
+
+void event_system_reset() {
+    for (auto& list : state_ptr->event_lists) {
+        list.clear();
+    }
 }
 
 } // sf;

@@ -21,8 +21,8 @@ private:
     T   _buffer[Capacity];
 
 public:
-    using ValueType = T;
-    using Pointer   = T*;
+    using ValueType     = T;
+    using PointerType   = T*;
 
 public:
     constexpr FixedArray() noexcept
@@ -39,11 +39,14 @@ public:
         : _count{ 0 }
     {
         SF_ASSERT_MSG(init_list.size() <= Capacity, "Initializer list size don't fit for specified capacity");
-        allocate(init_list.size());
-
+        move_forward(init_list.size());
         u32 i{0};
-        for (auto curr = init_list.begin(); curr != init_list.end(); ++curr, ++i) {
-            construct_at(_buffer + i, *curr);
+        for (auto it = init_list.begin(); it != init_list.end(); ++it, ++i) {
+            if constexpr (std::is_trivial_v<T>) {
+                _buffer[i] = *it;
+            } else {
+                construct_at(_buffer + i, *it);
+            }
         }
     }
 
@@ -114,15 +117,25 @@ public:
 
     template<typename ...Args>
     constexpr void append_emplace(Args&&... args) noexcept {
-        allocate_and_construct(std::forward<Args>(args)...);
+        move_forward_and_construct(std::forward<Args>(args)...);
     }
 
     constexpr void append(const T& item) noexcept {
-        allocate_and_construct(item);
+        if constexpr (std::is_trivial_v<T>) {
+            move_forward(1);
+            _buffer[_count - 1] = item;
+        } else {
+            move_forward_and_construct(item);
+        }
     }
 
     constexpr void append(T&& item) noexcept {
-        allocate_and_construct(std::move(item));
+        if constexpr (std::is_trivial_v<T>) {
+            move_forward(1);
+            _buffer[_count - 1] = item;
+        } else {
+            move_forward_and_construct(std::move(item));
+        }
     }
 
     constexpr void append(std::span<T> sp) noexcept {
@@ -134,7 +147,7 @@ public:
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         if (index == _count - 1) {
-            deallocate(1);
+            move_ptr_backwards(1);
             return;
         }
 
@@ -154,7 +167,7 @@ public:
         SF_ASSERT_MSG(index >= 0 && index < _count, "Out of bounds");
 
         if (index == _count - 1) {
-            deallocate(1);
+            move_ptr_backwards(1);
             return;
         }
 
@@ -165,7 +178,12 @@ public:
             item->~T();
         }
 
-        *item = *last;
+        if constexpr (std::is_move_assignable_v<T>) {
+            *item = std::move(*last);
+        } else {
+            *item = *last;
+        }
+
         --_count;
     }
 
@@ -180,16 +198,16 @@ public:
     }
 
     constexpr void pop() noexcept {
-        deallocate(1);
+        move_ptr_backwards(1);
     }
 
     constexpr void pop_range(u32 count) noexcept {
         SF_ASSERT_MSG(count <= _count, "Can't pop more than have");
-        deallocate(count);
+        move_ptr_backwards(count);
     }
 
     constexpr void clear() noexcept {
-        deallocate(_count);
+        move_ptr_backwards(_count);
     }
 
     constexpr void fill(ConstLRefOrValType<T> val) noexcept {
@@ -288,18 +306,24 @@ public:
     }
 
 private:
-    constexpr T* allocate(u32 alloc_count) noexcept
+    constexpr T* move_forward_and_get_ptr(u32 alloc_count) noexcept
     {
         u32 free_capacity = Capacity - _count;
-
         if (free_capacity < alloc_count) {
             panic("Not enough memory in array buffer");
         }
-
         T* return_memory = _buffer + _count;
         _count += alloc_count;
-
         return return_memory;
+    }
+
+    constexpr void move_forward(u32 alloc_count) noexcept
+    {
+        u32 free_capacity = Capacity - _count;
+        if (free_capacity < alloc_count) {
+            panic("Not enough memory in array buffer");
+        }
+        _count += alloc_count;
     }
 
     template<typename ...Args>
@@ -314,19 +338,19 @@ private:
     }
 
     template<typename ...Args>
-    constexpr void allocate_and_construct(Args&&... args) noexcept
+    constexpr void move_forward_and_construct(Args&&... args) noexcept
     {
-        T* place_ptr = allocate(1);
+        T* place_ptr = move_forward_and_get_ptr(1);
         construct_at(place_ptr, std::forward<Args>(args)...);
     }
 
-    constexpr void allocate_and_default_construct(u32 count) noexcept
+    constexpr void move_forward_and_default_construct(u32 count) noexcept
     {
-        T* place_ptr = allocate(count);
+        T* place_ptr = move_forward_and_get_ptr(count);
         default_construct_at(place_ptr);
     }
 
-    constexpr void deallocate(u32 dealloc_count) noexcept
+    constexpr void move_ptr_backwards(u32 dealloc_count) noexcept
     {
         SF_ASSERT_MSG((dealloc_count) <= _count, "Can't deallocate more than all current elements");
 

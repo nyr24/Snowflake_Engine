@@ -2,7 +2,6 @@
 
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
-#include "sf_allocators/linear_allocator.hpp"
 #include "sf_core/application.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_containers/fixed_array.hpp"
@@ -33,7 +32,6 @@ struct VulkanContext {
 public:
     VkInstance                            instance;
     VulkanAllocator                       allocator;
-    LinearAllocator                       render_system_allocator;
     VulkanDevice                          device;
     VkSurfaceKHR                          surface;
 #ifdef SF_DEBUG

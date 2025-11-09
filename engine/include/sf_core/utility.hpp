@@ -3,7 +3,6 @@
 #include "sf_core/asserts_sf.hpp"
 #include <concepts>
 #include <format>
-#include <span>
 #include <string_view>
 #include <type_traits>
 
@@ -52,7 +51,7 @@ template<typename First, typename Second>
 concept SameTypes = std::same_as<std::remove_cv_t<std::remove_reference_t<First>>, std::remove_cv_t<std::remove_reference_t<Second>>>;
 
 template<typename T>
-T sf_clamp(ConstLRefOrValType<T> val, ConstLRefOrValType<T> min, ConstLRefOrValType<T> max) noexcept {
+constexpr T sf_clamp(ConstLRefOrValType<T> val, ConstLRefOrValType<T> min, ConstLRefOrValType<T> max) noexcept {
     SF_ASSERT_MSG(min <= max, "Min can't be bigger than max");
     if (val < min) {
         return min;
@@ -61,11 +60,6 @@ T sf_clamp(ConstLRefOrValType<T> val, ConstLRefOrValType<T> min, ConstLRefOrValT
         return max;
     }
     return val;
-}
-
-template<typename T>
-bool cmp_slices(std::span<T> first, std::span<T> sec) noexcept {
-    
 }
 
 } // sf

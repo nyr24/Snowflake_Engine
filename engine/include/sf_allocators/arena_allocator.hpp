@@ -1,0 +1,45 @@
+#pragma once
+
+#include "sf_containers/traits.hpp"
+#include "sf_core/defines.hpp"
+#include "sf_containers/dynamic_array.hpp"
+
+namespace sf {
+
+struct ArenaAllocator {
+public:
+    static constexpr u32 DEFAULT_ALIGNMENT{sizeof(usize)};
+    static constexpr u32 DEFAULT_REGIONS_INIT_CAPACITY{10};
+    static constexpr u32 DEFAULT_REGION_CAPACITY_PAGES{4};
+
+    struct Snapshot {
+        u32 region_index;
+        u32 region_offset;
+    };
+
+    struct Region {
+        u8* data;
+        u32 capacity;
+        u32 offset;  
+    };
+private:
+    DynamicArray<Region> regions;
+    u32                  current_region_index;
+public:
+    ArenaAllocator();
+    ~ArenaAllocator();
+    void* allocate(u32 size, u16 alignment);
+    usize allocate_handle(u32 size, u16 alignment);
+    ReallocReturn reallocate(void* ptr, u32 size, u16 alignment);
+    ReallocReturnHandle reallocate_handle(usize handle, u32 size, u16 alignment);
+    void* handle_to_ptr(usize handle) const;
+    usize ptr_to_handle(void* ptr) const;
+    void  free(void* addr);
+    void  free_handle(usize hanlde);
+    void  reserve(u32 capacity);
+    void  clear();
+    void  rewind(Snapshot snapshot);
+    Snapshot make_snapshot() const;
+};
+
+} // sf

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sf_allocators/linear_allocator.hpp"
+#include "sf_allocators/arena_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/hashmap.hpp"
@@ -89,15 +89,15 @@ struct TextureRef {
 struct TextureSystemState {
 public:
     static constexpr u32 MAX_TEXTURE_AMOUNT{ 65536 };
-    using TextureHashMap = HashMap<std::string_view, TextureRef, LinearAllocator>;
+    using TextureHashMap = HashMapBacked<std::string_view, TextureRef, ArenaAllocator>;
 
-    DynamicArray<Texture, LinearAllocator>    textures;
-    TextureHashMap                            texture_lookup_table;
+    DynamicArrayBacked<Texture, ArenaAllocator>   textures;
+    TextureHashMap                                texture_lookup_table;
     const VulkanDevice*    device;
     u32                    id_counter;
 public:
     static consteval u32 get_memory_requirement() { return MAX_TEXTURE_AMOUNT * sizeof(Texture) + MAX_TEXTURE_AMOUNT * sizeof(TextureHashMap::Bucket); }
-    static void create(LinearAllocator& allocator, const VulkanDevice& device, TextureSystemState& out_system);
+    static void create(ArenaAllocator& allocator, const VulkanDevice& device, TextureSystemState& out_system);
     ~TextureSystemState();
 };
 

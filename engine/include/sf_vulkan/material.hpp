@@ -1,7 +1,7 @@
 #pragma once
 
 #include "glm/ext/vector_float4.hpp"
-#include "sf_allocators/linear_allocator.hpp"
+#include "sf_allocators/arena_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/constants.hpp"
@@ -44,14 +44,14 @@ struct MaterialRef {
 struct MaterialSystemState {
     static constexpr std::string_view DEFAULT_NAME{ "default_mat.sfmt" };
     static constexpr u32 MAX_MATERIAL_AMOUNT{ 4096 };
-    using MaterialHashMap = HashMap<std::string_view, MaterialRef, LinearAllocator>;
+    using MaterialHashMap = HashMapBacked<std::string_view, MaterialRef, ArenaAllocator>;
 
-    DynamicArray<Material, LinearAllocator>    materials;
-    MaterialHashMap                            material_lookup_table;
-    u32                                        id_counter;
+    DynamicArrayBacked<Material, ArenaAllocator>    materials;
+    MaterialHashMap                                 material_lookup_table;
+    u32                                             id_counter;
 
     static consteval u32 get_memory_requirement() { return MAX_MATERIAL_AMOUNT * sizeof(Material) + MAX_MATERIAL_AMOUNT * sizeof(MaterialHashMap::Bucket); }
-    static void create(LinearAllocator& system_allocator, MaterialSystemState& out_system);
+    static void create(ArenaAllocator& system_allocator, MaterialSystemState& out_system);
     ~MaterialSystemState();
 };
 
