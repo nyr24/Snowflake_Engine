@@ -21,6 +21,7 @@ static ApplicationState state;
 ApplicationState::ApplicationState()
     : temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
 {
+    // TODO: add geometry + device to memory requirement
     main_allocator.reserve(TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement());
 }
 

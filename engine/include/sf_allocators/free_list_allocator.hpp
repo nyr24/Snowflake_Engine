@@ -8,50 +8,50 @@
 namespace sf {
 
 struct FreeListAllocHeader {
-    u32 size;
+    usize size;
     // padding includes header
-    u32 padding;
+    usize padding;
 };
 
 struct FreeListNode {
     FreeListNode* next;
-    u32 size;
+    usize size;
 };
 
 template<bool RESIZABLE = true>
 struct FreeList {
 private:
-    u8* _buffer;
+    u8*           _buffer;
     FreeListNode* _head;
-    u32 _capacity;
+    usize         _capacity;
 
 public:
     static constexpr usize MIN_ALLOC_SIZE = sizeof(FreeListNode);
 
-    FreeList(u32 capacity) noexcept;
-    FreeList(void* data, u32 capacity) noexcept;
+    FreeList(usize capacity) noexcept;
+    FreeList(void* data, usize capacity) noexcept;
     ~FreeList() noexcept;
-    void* allocate(u32 size, u16 alignment) noexcept;
-    usize allocate_handle(u32 size, u16 alignment) noexcept;
+    void* allocate(usize size, u16 alignment) noexcept;
+    usize allocate_handle(usize size, u16 alignment) noexcept;
     void* handle_to_ptr(usize handle) const noexcept;
     usize ptr_to_handle(void* ptr) const noexcept;
-    ReallocReturn reallocate(void* addr, u32 new_size, u16 alignment) noexcept;
-    ReallocReturnHandle reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept;
+    ReallocReturn reallocate(void* addr, usize new_size, u16 alignment) noexcept;
+    ReallocReturnHandle reallocate_handle(usize handle, usize new_size, u16 alignment) noexcept;
     void free(void* ptr) noexcept;
     void free_handle(usize handle) noexcept;
     void clear() noexcept;
     void insert_node(FreeListNode* prev, FreeListNode* node_to_insert) noexcept;
     void coallescense_nodes(FreeListNode* prev, FreeListNode* free_node) noexcept;
     void remove_node(FreeListNode* prev, FreeListNode* node_to_remove) noexcept;
-    u32 get_remain_space() noexcept;
-    void resize(u32 new_capacity) noexcept;
+    usize get_remain_space() noexcept;
+    void resize(usize new_capacity) noexcept;
     constexpr u8* begin() noexcept { return _buffer; }
-    constexpr u32 total_size() noexcept { return _capacity; };
+    constexpr usize total_size() noexcept { return _capacity; };
 };
 
 template<bool RESIZABLE>
 FreeList<RESIZABLE>
-::FreeList(u32 capacity) noexcept
+::FreeList(usize capacity) noexcept
     : _buffer{ static_cast<u8*>(sf_mem_alloc(capacity)) }
     , _head{ reinterpret_cast<FreeListNode*>(_buffer) }
     , _capacity{ capacity }
@@ -70,7 +70,7 @@ FreeList<RESIZABLE>
 }
 
 template<bool RESIZABLE>
-void* FreeList<RESIZABLE>::allocate(u32 size, u16 alignment) noexcept {
+void* FreeList<RESIZABLE>::allocate(usize size, u16 alignment) noexcept {
     if (size < MIN_ALLOC_SIZE) {
         size = MIN_ALLOC_SIZE;
     }
@@ -80,8 +80,8 @@ void* FreeList<RESIZABLE>::allocate(u32 size, u16 alignment) noexcept {
 
     FreeListNode* curr = _head;
     FreeListNode* prev = nullptr;
-    u32 padding;
-    u32 required_space;
+    usize padding;
+    usize required_space;
 
     while (curr) {
         // padding including FreeListAllocHeader
@@ -105,8 +105,8 @@ void* FreeList<RESIZABLE>::allocate(u32 size, u16 alignment) noexcept {
         }
     }
 
-    u32 padding_to_alloc_header = padding - sizeof(FreeListAllocHeader);
-    u32 remain_space = curr->size - required_space;
+    usize padding_to_alloc_header = padding - sizeof(FreeListAllocHeader);
+    usize remain_space = curr->size - required_space;
 
     if (remain_space > MIN_ALLOC_SIZE + sizeof(FreeListNode)) {
         FreeListNode* new_node = ptr_step_bytes_forward(curr, required_space);
@@ -124,13 +124,13 @@ void* FreeList<RESIZABLE>::allocate(u32 size, u16 alignment) noexcept {
 }
 
 template<bool RESIZABLE>
-usize FreeList<RESIZABLE>::allocate_handle(u32 size, u16 alignment) noexcept {
+usize FreeList<RESIZABLE>::allocate_handle(usize size, u16 alignment) noexcept {
     void* res = allocate(size, alignment);
     return turn_ptr_into_handle(res, _buffer);
 }
 
 template<bool RESIZABLE>
-ReallocReturn FreeList<RESIZABLE>::reallocate(void* addr, u32 new_size, u16 alignment) noexcept {
+ReallocReturn FreeList<RESIZABLE>::reallocate(void* addr, usize new_size, u16 alignment) noexcept {
     if (!is_address_in_range(_buffer, _capacity, addr)) {
         return {nullptr, false};
     }
@@ -144,7 +144,7 @@ ReallocReturn FreeList<RESIZABLE>::reallocate(void* addr, u32 new_size, u16 alig
 }
 
 template<bool RESIZABLE>
-ReallocReturnHandle FreeList<RESIZABLE>::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
+ReallocReturnHandle FreeList<RESIZABLE>::reallocate_handle(usize handle, usize new_size, u16 alignment) noexcept {
     if (!is_handle_in_range(_buffer, _capacity, handle)) {
         return {INVALID_ALLOC_HANDLE, false};
     }
@@ -197,7 +197,7 @@ void FreeList<RESIZABLE>::clear() noexcept {
 }
 
 template<bool RESIZABLE>
-void FreeList<RESIZABLE>::resize(u32 new_capacity) noexcept {
+void FreeList<RESIZABLE>::resize(usize new_capacity) noexcept {
     u8* new_buffer = static_cast<u8*>(sf_mem_realloc(_buffer, new_capacity));
 
     // append node at the back
@@ -287,9 +287,9 @@ void FreeList<RESIZABLE>::coallescense_nodes(FreeListNode* prev, FreeListNode* f
 }
 
 template<bool RESIZABLE>
-u32 FreeList<RESIZABLE>::get_remain_space() noexcept {
+usize FreeList<RESIZABLE>::get_remain_space() noexcept {
     FreeListNode* curr = _head;
-    u32 remain_space{0};
+    usize remain_space{0};
 
     while (curr) {
         remain_space += curr->size;

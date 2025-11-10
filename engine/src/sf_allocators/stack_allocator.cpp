@@ -12,7 +12,7 @@ StackAllocator::StackAllocator() noexcept
     , _prev_count{ 0 }
 {}
 
-StackAllocator::StackAllocator(u32 capacity) noexcept
+StackAllocator::StackAllocator(usize capacity) noexcept
     : _buffer{ static_cast<u8*>(sf_mem_alloc(capacity)) }
     , _capacity{ capacity }
     , _count{ 0 }
@@ -62,13 +62,17 @@ StackAllocator::~StackAllocator() noexcept
     }
 }
 
-void* StackAllocator::allocate(u32 size, u16 alignment) noexcept
+void* StackAllocator::allocate(usize size, u16 alignment) noexcept
 {
-    u32 padding = calc_padding_with_header(_buffer + _count, alignment, sizeof(StackAllocatorHeader));
-    while (_count + padding + size > _capacity) {
-        _capacity *= 2;
+    usize padding = calc_padding_with_header(_buffer + _count, alignment, sizeof(StackAllocatorHeader));
+
+    if (_count + padding + size > _capacity) {
+        u32 new_capacity = _capacity == 0 ? DEFAULT_INIT_CAPACITY : _capacity * 2;
+        while (_count + padding + size > new_capacity) {
+            new_capacity *= 2;
+        }
+        resize(new_capacity);
     }
-    resize(_capacity);
 
     StackAllocatorHeader* header = reinterpret_cast<StackAllocatorHeader*>(_buffer + _count + (padding - sizeof(StackAllocatorHeader)));
     header->diff = _count - _prev_count;
@@ -80,13 +84,13 @@ void* StackAllocator::allocate(u32 size, u16 alignment) noexcept
     return ptr_to_ret;
 }
 
-usize StackAllocator::allocate_handle(u32 size, u16 alignment) noexcept
+usize StackAllocator::allocate_handle(usize size, u16 alignment) noexcept
 {
     void* ptr = allocate(size, alignment);
     return turn_ptr_into_handle(ptr, _buffer);  
 }
 
-ReallocReturn StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment) noexcept
+ReallocReturn StackAllocator::reallocate(void* addr, usize new_size, u16 alignment) noexcept
 {
     if (addr == nullptr) {
         return {allocate(new_size, alignment), false};
@@ -99,14 +103,14 @@ ReallocReturn StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment
         }
         // check if it is the last allocation -> just grow/shrink this chunk of memory
         StackAllocatorHeader* header = static_cast<StackAllocatorHeader*>(ptr_step_bytes_backward(addr, sizeof(StackAllocatorHeader)));
-        u32 prev_offset = turn_ptr_into_handle(static_cast<StackAllocatorHeader*>(ptr_step_bytes_backward(addr, header->padding)), _buffer);
+        usize prev_offset = turn_ptr_into_handle(static_cast<StackAllocatorHeader*>(ptr_step_bytes_backward(addr, header->padding)), _buffer);
 
         if (_prev_count == prev_offset) {
-            u32 prev_size = _count - _prev_count;
+            usize prev_size = _count - _prev_count;
             // grow
             if (new_size > prev_size) {
-                u32 size_diff = new_size - prev_size;
-                u32 remain_space = _capacity - _count;
+                usize size_diff = new_size - prev_size;
+                usize remain_space = _capacity - _count;
                 if (remain_space < size_diff) {
                     resize(_capacity * 2);
                 }
@@ -115,7 +119,7 @@ ReallocReturn StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment
             }
             // shrink
             else {
-                u32 size_diff = prev_size - new_size;
+                usize size_diff = prev_size - new_size;
                 _count -= size_diff;
                 return {addr, false};
             }
@@ -127,7 +131,7 @@ ReallocReturn StackAllocator::reallocate(void* addr, u32 new_size, u16 alignment
     }
 }
 
-ReallocReturnHandle StackAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept
+ReallocReturnHandle StackAllocator::reallocate_handle(usize handle, usize new_size, u16 alignment) noexcept
 {
     if (handle == INVALID_ALLOC_HANDLE) {
         void* addr = allocate(new_size, alignment);
@@ -149,7 +153,7 @@ void StackAllocator::free(void* addr) noexcept {
     }
 
     StackAllocatorHeader* header = static_cast<StackAllocatorHeader*>(ptr_step_bytes_backward(addr, sizeof(StackAllocatorHeader)));
-    u32 prev_offset = turn_ptr_into_handle(static_cast<StackAllocatorHeader*>(ptr_step_bytes_backward(addr, header->padding)), _buffer);
+    usize prev_offset = turn_ptr_into_handle(static_cast<StackAllocatorHeader*>(ptr_step_bytes_backward(addr, header->padding)), _buffer);
     if (_prev_count != prev_offset) {
         return;
     }
@@ -158,7 +162,7 @@ void StackAllocator::free(void* addr) noexcept {
     _prev_count -= header->diff;
 }
 
-void StackAllocator::resize(u32 new_capacity) noexcept {
+void StackAllocator::resize(usize new_capacity) noexcept {
     u8* new_buffer = static_cast<u8*>(sf_mem_realloc(_buffer, new_capacity));
     _capacity = new_capacity;
     _buffer = new_buffer;

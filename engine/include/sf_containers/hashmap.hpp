@@ -31,8 +31,8 @@ bool equal_fn_default(ConstLRefOrValType<K> first, ConstLRefOrValType<K> second)
 };
 
 // fnv1a hash function
-static constexpr u64 PRIME = 1099511628211u;
-static constexpr u64 OFFSET_BASIS = 14695981039346656037u;
+static constexpr u64 PRIME = 1099511628211ull;
+static constexpr u64 OFFSET_BASIS = 14695981039346656037ull;
 
 template<typename K>
 u64 hashfn_default(ConstLRefOrValType<K> key) noexcept {
@@ -402,7 +402,7 @@ public:
 
     union Data {
         Bucket* ptr;
-        usize   handle; 
+        u32   handle; 
     };
 private:
     // 1 capacity = 1 count = sizeof(Bucket<K, V>)
@@ -687,7 +687,7 @@ private:
         Bucket* old_buffer = access_data();
         ReallocReturn realloc_res = _allocator->reallocate(static_cast<void*>(old_buffer), _capacity * sizeof(Bucket), alignof(Bucket));
         Bucket* new_buffer = static_cast<Bucket*>(realloc_res.ptr);
-        if (realloc_res.should_mem_copy && old_buffer != new_buffer) {
+        if (realloc_res.should_mem_copy && old_buffer != new_buffer && old_capacity > 0) {
             sf_mem_copy((void*)new_buffer, (void*)old_buffer, old_capacity * sizeof(Bucket));
         }
 

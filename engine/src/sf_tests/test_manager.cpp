@@ -27,11 +27,11 @@ void TestManager::run_all_tests() const {
 TestCounter::TestCounter(std::string_view name)
     : test_name{ name }
 {
-    LOG_INFO("Tests for {} started: ", name);
+    LOG_TEST("Tests for {} started: ", name);
 }
 
 TestCounter::~TestCounter() {
-    LOG_DEBUG("Tests for {} ended:\t\n{} all, passed: {}, failed: {}", test_name, all, passed, failed);
+    LOG_TEST("Tests for {} ended:\t\n{} all, passed: {}, failed: {}", test_name, all, passed, failed);
 }
 
 // Tests
@@ -59,38 +59,38 @@ void fixed_array_test() {
 void dyn_array_test() {
     Clock clock;
 
-    constexpr u32 BIG_SIZE = 1'000'0;
+    constexpr usize BIG_SIZE = 1'000'000;
 
     {
-        GeneralPurposeAllocator al;
-        DynamicArrayBacked<u32, GeneralPurposeAllocator, true> arr(32, &al);
+        LinearAllocator al;
+        DynamicArrayBacked<u8, LinearAllocator, true> arr(32, &al);
         clock.restart();
-        for (u32 i{0}; i < BIG_SIZE; ++i) {
+        for (usize i{0}; i < BIG_SIZE; ++i) {
             arr.append(rand());
         }
         auto time = clock.update_and_get_delta();
-        LOG_FATAL("new dyn array (handle): {}", time);
+        LOG_TEST("new dyn array (handle): {}", time);
     }
 
     {
         GeneralPurposeAllocator al;
-        DynamicArrayBacked<u32, GeneralPurposeAllocator, false> arr(32, &al);
+        DynamicArrayBacked<u8, GeneralPurposeAllocator, false> arr(32, &al);
         clock.restart();
-        for (u32 i{0}; i < BIG_SIZE; ++i) {
+        for (usize i{0}; i < BIG_SIZE; ++i) {
             arr.append(rand());
         }
         auto time = clock.update_and_get_delta();
-        LOG_FATAL("new dyn array (no handle): {}", time);
+        LOG_TEST("new dyn array (no handle): {}", time);
     }
 
     {
-        DynamicArray<u32> arr(32);
+        DynamicArray<u8> arr(32);
         clock.restart();
-        for (u32 i{0}; i < BIG_SIZE; ++i) {
+        for (usize i{0}; i < BIG_SIZE; ++i) {
             arr.append(rand());
         }
         auto time = clock.update_and_get_delta();
-        LOG_FATAL("default dyn array: {}", time);
+        LOG_TEST("default dyn array: {}", time);
     }
 }
 
@@ -119,7 +119,7 @@ void freelist_allocator_test() {
     DynamicArrayBacked<u8, FreeList<true>> arr(500, &alloc);
 
     // lookup data
-    for (u32 i{0}; i < 30; ++i) {
+    for (usize i{0}; i < 30; ++i) {
         arr.append(i);
     }
 
@@ -127,9 +127,9 @@ void freelist_allocator_test() {
     arr.resize(600);
 
     // log lookup data
-    LOG_DEBUG("lookup data after resize: ");
-    for (u32 i{0}; i < 30; ++i) {
-        LOG_INFO("{} ", arr[i]);
+    LOG_TEST("lookup data after resize: ");
+    for (usize i{0}; i < 30; ++i) {
+        LOG_TEST("{} ", arr[i]);
     }
 }
 
@@ -155,15 +155,15 @@ void linear_allocator_test() {
 void hashmap_test() {
     TestCounter counter("HashMap");
     
-    LinearAllocator alloc(1024 * sizeof(u32));
-    HashMapBacked<std::string_view, u32, LinearAllocator> map(&alloc); 
+    LinearAllocator alloc(1024 * sizeof(usize));
+    HashMapBacked<std::string_view, usize, LinearAllocator> map(&alloc); 
     map.reserve(32);
 
     std::string_view key1 = "kate_age";
     std::string_view key2 = "paul_age";
     
-    map.put(key1, 18u);
-    map.put(key2, 20u);
+    map.put(key1, 18ul);
+    map.put(key2, 20ul);
 
     auto age1 = map.get(key1);
     auto age2 = map.get(key2);

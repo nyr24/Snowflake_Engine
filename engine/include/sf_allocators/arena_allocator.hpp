@@ -13,30 +13,30 @@ public:
     static constexpr u32 DEFAULT_REGION_CAPACITY_PAGES{4};
 
     struct Snapshot {
-        u32 region_index;
         u32 region_offset;
+        u16 region_index;
     };
 
     struct Region {
         u8* data;
         u32 capacity;
-        u32 offset;  
+        u32 offset;
     };
 private:
     DynamicArray<Region> regions;
-    u32                  current_region_index;
+    u16                  current_region_index;
 public:
     ArenaAllocator();
     ~ArenaAllocator();
-    void* allocate(u32 size, u16 alignment);
-    usize allocate_handle(u32 size, u16 alignment);
-    ReallocReturn reallocate(void* ptr, u32 size, u16 alignment);
-    ReallocReturnHandle reallocate_handle(usize handle, u32 size, u16 alignment);
+    void* allocate(usize size, u16 alignment);
+    usize allocate_handle(usize size, u16 alignment);
+    ReallocReturn reallocate(void* ptr, usize size, u16 alignment);
+    ReallocReturnHandle reallocate_handle(usize handle, usize size, u16 alignment);
     void* handle_to_ptr(usize handle) const;
     usize ptr_to_handle(void* ptr) const;
     void  free(void* addr);
     void  free_handle(usize hanlde);
-    void  reserve(u32 capacity);
+    void  reserve(usize capacity);
     void  clear();
     void  rewind(Snapshot snapshot);
     Snapshot make_snapshot() const;

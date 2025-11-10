@@ -8,10 +8,6 @@ static EventSystemState* state_ptr{nullptr};
 
 void EventSystemState::create(EventSystemState& out_system) {
     out_system.event_lists.resize_to_capacity();
-
-    for (auto& list : out_system.event_lists) {
-        list.resize_to_capacity();
-    }
 }
 
 void event_system_init_internal_state(EventSystemState* event_state) {

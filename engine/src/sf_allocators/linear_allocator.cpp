@@ -12,7 +12,7 @@ LinearAllocator::LinearAllocator() noexcept
     , _buffer{ static_cast<u8*>(sf_mem_alloc(_capacity)) }
 {}
 
-LinearAllocator::LinearAllocator(u32 capacity) noexcept
+LinearAllocator::LinearAllocator(usize capacity) noexcept
     : _capacity{ capacity }
     , _count{ 0 }
     , _buffer{ static_cast<u8*>(sf_mem_alloc(capacity)) }
@@ -57,13 +57,17 @@ LinearAllocator::~LinearAllocator() noexcept
     }
 }
 
-void* LinearAllocator::allocate(u32 size, u16 alignment) noexcept
+void* LinearAllocator::allocate(usize size, u16 alignment) noexcept
 {
     usize padding = sf_calc_padding(_buffer + _count, alignment);
-    while (_count + padding + size > _capacity) {
-        _capacity *= 2;
+
+    if (_count + padding + size > _capacity) {
+        u32 new_capacity = _capacity == 0 ? DEFAULT_INIT_CAPACITY : _capacity * 2;
+        while (_count + padding + size > new_capacity) {
+            new_capacity *= 2;
+        }
+        resize(new_capacity);
     }
-    resize(_capacity);
 
     void* addr_to_return = _buffer + _count + padding;
     _count += padding + size;
@@ -71,12 +75,12 @@ void* LinearAllocator::allocate(u32 size, u16 alignment) noexcept
     return addr_to_return;
 }
 
-usize LinearAllocator::allocate_handle(u32 size, u16 alignment) noexcept
+usize LinearAllocator::allocate_handle(usize size, u16 alignment) noexcept
 {
     return turn_ptr_into_handle(allocate(size, alignment), _buffer);
 }
 
-ReallocReturn LinearAllocator::reallocate(void* addr, u32 new_size, u16 alignment) noexcept {
+ReallocReturn LinearAllocator::reallocate(void* addr, usize new_size, u16 alignment) noexcept {
     if (!is_address_in_range(_buffer, _capacity, addr)) {
         return {nullptr, true};
     }
@@ -84,7 +88,7 @@ ReallocReturn LinearAllocator::reallocate(void* addr, u32 new_size, u16 alignmen
     return {allocate(new_size, alignment), true};
 }
 
-ReallocReturnHandle LinearAllocator::reallocate_handle(usize handle, u32 new_size, u16 alignment) noexcept {
+ReallocReturnHandle LinearAllocator::reallocate_handle(usize handle, usize new_size, u16 alignment) noexcept {
     if (handle == INVALID_ALLOC_HANDLE) {
         return {allocate_handle(new_size, alignment), true};
     }
@@ -94,7 +98,7 @@ ReallocReturnHandle LinearAllocator::reallocate_handle(usize handle, u32 new_siz
     return {allocate_handle(new_size, alignment), true};
 }
 
-void LinearAllocator::resize(u32 new_capacity) noexcept {
+void LinearAllocator::resize(usize new_capacity) noexcept {
     _buffer = static_cast<u8*>(sf_mem_realloc(_buffer, new_capacity));
     _capacity = new_capacity;
 }

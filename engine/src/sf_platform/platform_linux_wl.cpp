@@ -29,19 +29,19 @@ void* platform_mem_alloc(u64 byte_size, u16 alignment = 0) {
     }
 }
 
-static const FixedArray<std::string_view, static_cast<u8>(LogLevel::COUNT)> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;28"};
+static const FixedArray<std::string_view, static_cast<u8>(LogLevel::COUNT)> color_strings = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;28", "45;37"};
 
 void platform_console_write(char* message_buff, u16 written_count, u8 color) {
-    // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
+    // FATAL,ERROR,WARN,INFO,DEBUG,TRACE,TEST
     char message_buff2[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
-    const std::format_to_n_result res = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "\033[{}m{}\033[0m", color_strings[color], const_cast<const char*>(message_buff));
+    const std::format_to_n_result res = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "\033[{}m{}\033[0m\n", color_strings[color], const_cast<const char*>(message_buff));
     std::cout << std::string_view(const_cast<const char*>(message_buff2), res.out);
 }
 
 void platform_console_write_error(char* message_buff, u16 written_count, u8 color) {
-    // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
+    // FATAL,ERROR,WARN,INFO,DEBUG,TRACE,TEST
     char message_buff2[OUTPUT_PRINT_BUFFER_CAPACITY] = {0};
-    const std::format_to_n_result res = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "\033[{}m{}\033[0m", color_strings[color], const_cast<const char*>(message_buff));
+    const std::format_to_n_result res = std::format_to_n(message_buff2, OUTPUT_PRINT_BUFFER_CAPACITY, "\033[{}m{}\033[0m\n", color_strings[color], const_cast<const char*>(message_buff));
     std::cerr << std::string_view(const_cast<const char*>(message_buff2), res.out);
 }
 

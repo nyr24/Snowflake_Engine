@@ -12,16 +12,14 @@ namespace sf {
 
 ArenaAllocator::ArenaAllocator()
     : regions(DEFAULT_REGIONS_INIT_CAPACITY)
-{
-}
+{}
 
-void* ArenaAllocator::allocate(u32 size, u16 alignment) {
-    const u32 aligned_size = (size + alignment - 1) & ~(alignment - 1);
+void* ArenaAllocator::allocate(usize size, u16 alignment) {
+    const usize aligned_size = (size + alignment - 1) & ~(alignment - 1);
     Region* region;
     bool found_region = false;
-    u32 padding;
 
-    for (u32 i = current_region_index; i < regions.count(); ++i) {
+    for (usize i = current_region_index; i < regions.count(); ++i) {
         region = &regions[i];
         if (region->data == nullptr || (region->offset + aligned_size) <= region->capacity) {
             found_region = true;
@@ -37,7 +35,7 @@ void* ArenaAllocator::allocate(u32 size, u16 alignment) {
     }
 
     if (region->data == nullptr) {
-        const u32 alloc_size = std::max(aligned_size, platform_get_mem_page_size() * DEFAULT_REGION_CAPACITY_PAGES);
+        const usize alloc_size = std::max(aligned_size, platform_get_mem_page_size() * static_cast<usize>(DEFAULT_REGION_CAPACITY_PAGES));
         region->data = static_cast<u8*>(sf_mem_alloc(alloc_size, DEFAULT_ALIGNMENT));
         region->offset = 0;
         region->capacity = alloc_size;
@@ -48,12 +46,12 @@ void* ArenaAllocator::allocate(u32 size, u16 alignment) {
     return return_ptr;
 }
 
-usize ArenaAllocator::allocate_handle(u32 size, u16 alignment) {
+usize ArenaAllocator::allocate_handle(usize size, u16 alignment) {
     SF_ASSERT_MSG(false, "You are using ArenaAllocator with handles");
     return INVALID_ALLOC_HANDLE;
 }
 
-ReallocReturn ArenaAllocator::reallocate(void* ptr, u32 size, u16 alignment) {
+ReallocReturn ArenaAllocator::reallocate(void* ptr, usize size, u16 alignment) {
     if (size == 0) {
         return {nullptr, false};
     }
@@ -61,7 +59,7 @@ ReallocReturn ArenaAllocator::reallocate(void* ptr, u32 size, u16 alignment) {
     return {allocate(size, alignment), true};
 }
 
-ReallocReturnHandle ArenaAllocator::reallocate_handle(usize handle, u32 size, u16 alignment) {
+ReallocReturnHandle ArenaAllocator::reallocate_handle(usize handle, usize size, u16 alignment) {
     SF_ASSERT_MSG(false, "You are using ArenaAllocator with handles");
     return {INVALID_ALLOC_HANDLE, false};
 }
@@ -91,16 +89,29 @@ void ArenaAllocator::clear() {
     }
 }
 
-void ArenaAllocator::reserve(u32 needed_capacity) {
-    for (u32 i{current_region_index}; i < regions.count(); ++i) {
-        auto& region{ regions[i] };
-        if (!region.data) {
-            allocate(needed_capacity, DEFAULT_ALIGNMENT);
+void ArenaAllocator::reserve(usize needed_capacity) {
+    Region* region;
+    i32 founded_region{-1};
+
+    for (i32 i{current_region_index}; i < regions.count(); ++i) {
+        region = &regions[i];
+        if (!region->data) {
+            founded_region = i;
         }
-        else if ((region.offset - region.capacity) >= needed_capacity) {
-            region.offset += needed_capacity;
+        else if ((region->offset - region->capacity) >= needed_capacity) {
+            founded_region = i;
         }
     }
+
+    if (founded_region == -1) {
+        regions.append(Region{});
+        region = regions.last_ptr();
+    }
+
+    const usize alloc_size = std::max(needed_capacity, platform_get_mem_page_size() * static_cast<usize>(DEFAULT_REGION_CAPACITY_PAGES));
+    region->data = static_cast<u8*>(sf_mem_alloc(alloc_size, DEFAULT_ALIGNMENT));
+    region->offset = 0;
+    region->capacity = alloc_size;
 }
 
 ArenaAllocator::~ArenaAllocator() {
@@ -114,7 +125,7 @@ void ArenaAllocator::rewind(Snapshot snapshot) {
     {
         Region* r = &regions[snapshot.region_index];
         r->offset = snapshot.region_offset;
-        for (u32 i = snapshot.region_index + 1; i < regions.count(); ++i)
+        for (usize i = snapshot.region_index + 1; i < regions.count(); ++i)
         {
             regions[i].offset = 0;
         }

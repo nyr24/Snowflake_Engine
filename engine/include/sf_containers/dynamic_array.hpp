@@ -422,11 +422,11 @@ struct DynamicArrayBacked {
 private:
     union Data {
         T*    ptr;
-        usize handle;
+        u32 handle;
     };
     
-    Allocator* _allocator;
-    Data       _data;
+    Allocator*   _allocator;
+    Data         _data;
     u32        _capacity;
     u32        _count;
 
@@ -667,9 +667,9 @@ public:
     }
 
     void append(const T& item) noexcept {
-        T* data = access_data();
         if constexpr (std::is_trivial_v<T>) {
             move_forward(1);
+            T* data = access_data();
             data[_count - 1] = item;
         } else {
             move_forward_and_construct(item);
@@ -677,9 +677,9 @@ public:
     }
 
     void append(T&& item) noexcept {
-        T* data = access_data();
         if constexpr (std::is_trivial_v<T>) {
             move_forward(1);
+            T* data = access_data();
             data[_count - 1] = item;
         } else {
             move_forward_and_construct(std::move(item));
@@ -881,13 +881,13 @@ public:
 
             if constexpr (USE_HANDLE) {
                 ReallocReturnHandle realloc_res = _allocator->reallocate_handle(_data.handle, _capacity * sizeof(T), alignof(T));
-                if (realloc_res.should_mem_copy) {
+                if (realloc_res.should_mem_copy && old_capacity > 0) {
                     sf_mem_copy((void*)(_allocator->handle_to_ptr(realloc_res.handle)), (void*)(_allocator->handle_to_ptr(_data.handle)), old_capacity);
                 }
                 _data.handle = realloc_res.handle;
             } else {
                 ReallocReturn realloc_res = _allocator->reallocate(_data.ptr, _capacity * sizeof(T), alignof(T));
-                if (realloc_res.should_mem_copy) {
+                if (realloc_res.should_mem_copy && old_capacity > 0) {
                     sf_mem_copy((void*)realloc_res.ptr, (void*)_data.ptr, old_capacity);
                 }
                 _data.ptr = static_cast<T*>(realloc_res.ptr);
