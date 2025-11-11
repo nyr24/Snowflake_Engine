@@ -53,8 +53,7 @@ struct ObjectShaderState {
     FixedArray<VulkanDescriptorState, OBJECT_SHADER_DESCRIPTOR_COUNT>            descriptor_states;
 };
 
-struct GeometryRenderData {
-    glm::mat4                model;
+struct MaterialUpdateData {
     Material*                material;
     u32                      descriptor_state_index;
 };
@@ -103,7 +102,8 @@ public:
     void destroy(const VulkanDevice& device);
     void bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_frame);
     void bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame);
-    void update_object_state(VulkanContext& context, GeometryRenderData& render_data);
+    void update_model(VulkanCommandBuffer& cmd_buffer, glm::mat4& model);
+    void update_material(VulkanContext& context, MaterialUpdateData& render_data);
     u32  acquire_resouces(const VulkanDevice& device);
     void release_resouces(const VulkanDevice& device, u32 descriptor_state_index);
     static bool handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> context);

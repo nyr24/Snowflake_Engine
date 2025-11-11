@@ -43,7 +43,7 @@ static VulkanRenderer vk_renderer{};
 static VulkanContext vk_context{};
 
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
-static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 2 };
+static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 3 };
 static constexpr u32 OBJECT_RENDER_COUNT{ 256 };
 static const char*   MAIN_SHADER_FILE_NAME{"shader.spv"};
 
@@ -54,7 +54,7 @@ static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES
 static FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> material_load_configs{ MaterialSystemState::DEFAULT_NAME };
 static FixedArray<Texture*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> textures(texture_load_configs.count());
 static FixedArray<Material*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> materials(material_load_configs.count());
-static FixedArray<GeometryRenderData, OBJECT_RENDER_COUNT> object_render_data;
+static FixedArray<MaterialUpdateData, OBJECT_RENDER_COUNT> object_material_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
 void create_debugger();
@@ -73,7 +73,7 @@ void create_descriptor_layouts_and_sets_for_ubo(
 );
 static bool create_main_shader_pipeline();
 static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer);
-static void init_object_render_data(VulkanShaderPipeline& shader, const VulkanDevice& device);
+static void init_object_material_data(VulkanShaderPipeline& shader, const VulkanDevice& device);
 static void update_global_state();
 static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
 static void init_global_descriptors(const VulkanDevice& device);
@@ -126,11 +126,6 @@ VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_s
     VulkanCommandPool::create(vk_context, VulkanCommandPoolType::TRANSFER, vk_context.device.queue_family_info.transfer_family_index,
         static_cast<VkCommandPoolCreateFlagBits>(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT), vk_context.transfer_command_pool);
 
-    if (!VulkanVertexIndexBuffer::create(vk_context.device, Mesh::get_cube_mesh(application_get_temp_allocator()), application_get_main_allocator(), vk_context.vertex_index_buffer)) {
-        LOG_FATAL("Failed to create vertex buffer");
-        return nullptr;
-    }
-
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {vk_context.graphics_command_buffers.data(), vk_context.graphics_command_buffers.capacity()}, true);
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.graphics_command_pool.handle, {&vk_context.texture_load_command_buffer, 1}, true);
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.transfer_command_pool.handle, {vk_context.transfer_command_buffers.data(), vk_context.transfer_command_buffers.capacity()}, true);
@@ -140,15 +135,20 @@ VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_s
     return &vk_context.device;
 }
 
-// NOTE: texture, material, event systems should be available at the moment of call
+// NOTE: main systems should be available at the moment of call
 bool renderer_post_init() {
+    if (!VulkanVertexIndexBuffer::create(vk_context.device, mesh_system_get_default_mesh(), vk_context.vertex_index_buffer)) {
+        LOG_FATAL("Failed to create vertex buffer");
+        return false;
+    }
+
     preload_textures_and_materials(vk_context.device, vk_context.texture_load_command_buffer);
     
     if (!create_main_shader_pipeline()) {
         return false;
     }
 
-    init_object_render_data(vk_context.pipeline, vk_context.device);
+    init_object_material_data(vk_context.pipeline, vk_context.device);
 
     event_system_add_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
     event_system_add_listener(SystemEventCode::MOUSE_MOVED, nullptr, renderer_handle_mouse_move_event);
@@ -210,13 +210,13 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     VkBufferCopy vertex_copy_region{
         .srcOffset = 0,
         .dstOffset = 0,
-        .size = vk_context.vertex_index_buffer.indeces_offset 
+        .size = vk_context.vertex_index_buffer.mesh->indeces_offset 
     };
 
     VkBufferCopy index_copy_region{
-        .srcOffset = vk_context.vertex_index_buffer.indeces_offset,
-        .dstOffset = vk_context.vertex_index_buffer.indeces_offset,
-        .size = vk_context.vertex_index_buffer.indeces_count * sizeof(u16)
+        .srcOffset = vk_context.vertex_index_buffer.mesh->indeces_offset,
+        .dstOffset = vk_context.vertex_index_buffer.mesh->indeces_offset,
+        .size = vk_context.vertex_index_buffer.mesh->indeces_count * sizeof(u16)
     };
     
     curr_transfer_buffer.copy_data_between_buffers(vk_context.vertex_index_buffer.staging_buffer.handle, vk_context.vertex_index_buffer.main_buffer.handle, vertex_copy_region);
@@ -527,11 +527,16 @@ static bool create_main_shader_pipeline() {
     attrib_descriptions[0].location = 0;
     attrib_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     attrib_descriptions[0].offset = 0;
-    // Texture sampler
+    // Normal
     attrib_descriptions[1].binding = 0;
     attrib_descriptions[1].location = 1;
-    attrib_descriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
     attrib_descriptions[1].offset = sizeof(glm::vec3);
+    // Texture sampler
+    attrib_descriptions[2].binding = 0;
+    attrib_descriptions[2].location = 2;
+    attrib_descriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+    attrib_descriptions[2].offset = sizeof(glm::vec3) * 2;
 
     VkViewport viewport{ vk_context.get_viewport() };
     VkRect2D scissors{ vk_context.get_scissors() };
@@ -709,13 +714,12 @@ static void preload_textures_and_materials(const VulkanDevice& device, VulkanCom
     vkQueueWaitIdle(vk_context.device.graphics_queue);
 }
 
-static void init_object_render_data(VulkanShaderPipeline& shader, const VulkanDevice& device) {
-    object_render_data.resize_to_capacity();
+static void init_object_material_data(VulkanShaderPipeline& shader, const VulkanDevice& device) {
+    object_material_data.resize_to_capacity();
 
-    for (auto& render_data : object_render_data) {
-        render_data.descriptor_state_index = shader.acquire_resouces(device);
-        // NOTE: TEMP
-        render_data.material = materials[0];
+    for (auto& material_data : object_material_data) {
+        material_data.descriptor_state_index = shader.acquire_resouces(device);
+        material_data.material = materials[0];
     }
 }
 
@@ -725,26 +729,27 @@ static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_
 
     glm::mat4 rotate_mat;
     glm::mat4 translate_mat;
+    glm::mat4 result_mat;
 
     for (u32 i{0}; i < ROW_COUNT; ++i) {
         for (u32 j{0}; j < ROW_COUNT; ++j) {
             const u32 ind{ j + i * ROW_COUNT };
-            if (!object_render_data[ind].material) {
+            if (!object_material_data[ind].material) {
                 continue;
             }
 
-            GeometryRenderData render_data{};
             f32 mult_x = ((j & 0b1) == 0b1) ? -STEP : STEP;
             f32 mult_y = ((i & 0b1) == 0b1) ? -STEP : STEP;
             rotate_mat = glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f),
                 ((i & 0b1) == 0b1) ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f));
             translate_mat = glm::translate(glm::mat4(1.0f), glm::vec3(mult_x * j, mult_y * i, 1.0f));
+            result_mat = { translate_mat * rotate_mat };
+            shader.update_model(vk_context.curr_frame_graphics_cmd_buffer(), result_mat);
 
-            render_data.model = { translate_mat * rotate_mat };
-            render_data.descriptor_state_index = object_render_data[ind].descriptor_state_index;
-            render_data.material = object_render_data[ind].material;
-
-            shader.update_object_state(vk_context, render_data);
+            MaterialUpdateData material_data{};
+            material_data.descriptor_state_index = object_material_data[ind].descriptor_state_index;
+            material_data.material = object_material_data[ind].material;
+            shader.update_material(vk_context, material_data);
             vk_context.vertex_index_buffer.draw(cmd_buffer);
         }
     }

@@ -8,6 +8,7 @@
 #include "sf_platform/platform.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/material.hpp"
+#include "sf_vulkan/mesh.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/texture.hpp"
 #include "sf_platform/glfw3.h"
@@ -21,14 +22,14 @@ static ApplicationState state;
 ApplicationState::ApplicationState()
     : temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
 {
-    // TODO: add geometry + device to memory requirement
-    main_allocator.reserve(TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement());
+    main_allocator.reserve(TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement() + MeshSystemState::get_memory_requirement() + platform_get_mem_page_size());
 }
 
 void application_init_internal_state(const VulkanDevice& device) {
     EventSystemState::create(state.event_system);
     TextureSystemState::create(state.main_allocator, device, state.texture_system);
     MaterialSystemState::create(state.main_allocator, state.material_system);
+    MeshSystemState::create(state.main_allocator, state.temp_allocator, state.mesh_system);
 
     event_system_init_internal_state(&state.event_system);
     texture_system_init_internal_state(&state.texture_system);

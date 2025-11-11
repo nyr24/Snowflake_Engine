@@ -2,7 +2,7 @@
 
 #include "glm/ext/matrix_float4x4.hpp"
 #include "sf_allocators/arena_allocator.hpp"
-#include "sf_containers/dynamic_array.hpp"
+// #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_vulkan/mesh.hpp"
@@ -29,16 +29,15 @@ public:
 
 struct VulkanVertexIndexBuffer {
 public:
-    DynamicArrayBacked<u8, ArenaAllocator>     data;
     VulkanBuffer                               staging_buffer;
     VulkanBuffer                               main_buffer;
-    u32                                        indeces_offset;
-    u16                                        indeces_count;
+    Mesh*                                      mesh;
 public:
-    static bool create(const VulkanDevice& device, Mesh&& mesh, ArenaAllocator& render_system_allocator, VulkanVertexIndexBuffer& out_buffer);
+    static bool create(const VulkanDevice& device, Mesh* mesh, VulkanVertexIndexBuffer& out_buffer);
     bool copy_data_to_staging_buffer(const VulkanDevice& device);
     void destroy(const VulkanDevice& device);
     void bind(const VulkanCommandBuffer& cmd_buffer);
+    void set_mesh(const VulkanDevice& device, Mesh* mesh);
     void draw(const VulkanCommandBuffer& cmd_buffer);
 };
 
@@ -76,7 +75,6 @@ struct VulkanLocalUniformBufferObject {
     VulkanBuffer              buffer;
     void*                     mapped_memory;
 
-    // VulkanLocalUniformBufferObject();
     static bool create(const VulkanDevice& device, VulkanLocalUniformBufferObject& out_local_ubo);
     void destroy(const VulkanDevice& device);
     void update(u32 offset, glm::vec4 diffuse_color);

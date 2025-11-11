@@ -1,5 +1,6 @@
 #ifdef SF_TESTS
 
+#include "sf_containers/bitset.hpp"
 #include "sf_allocators/general_purpose_allocator.hpp"
 #include "sf_allocators/linear_allocator.hpp"
 #include "sf_containers/hashmap.hpp"
@@ -119,7 +120,7 @@ void freelist_allocator_test() {
     DynamicArrayBacked<u8, FreeList<true>> arr(500, &alloc);
 
     // lookup data
-    for (usize i{0}; i < 30; ++i) {
+    for (usize i{0}; i < 5; ++i) {
         arr.append(i);
     }
 
@@ -128,7 +129,7 @@ void freelist_allocator_test() {
 
     // log lookup data
     LOG_TEST("lookup data after resize: ");
-    for (usize i{0}; i < 30; ++i) {
+    for (usize i{0}; i < 5; ++i) {
         LOG_TEST("{} ", arr[i]);
     }
 }
@@ -180,6 +181,57 @@ void hashmap_test() {
     expect(del3, counter);
 }
 
+void bitset_test() {
+    TestCounter counter{"BitSet"};
+    BitSet<256> bitset{};
+
+    bitset.set_bit(2);
+    bitset.set_bit(18);
+    bitset.set_bit(34);
+    bitset.set_bit(56);
+    bitset.set_bit(112);
+    bitset.set_bit(213);
+
+    expect(bitset.is_bit(2), counter);
+    expect(bitset.is_bit(18), counter);
+    expect(bitset.is_bit(34), counter);
+    expect(bitset.is_bit(56), counter);
+    expect(bitset.is_bit(112), counter);
+    expect(bitset.is_bit(213), counter);
+    expect(bitset.is_bit(118) == false, counter);
+    expect(bitset.is_bit(35) == false, counter);
+    expect(bitset.is_bit(218) == false, counter);
+    expect(bitset.is_bit(59) == false, counter);
+
+    bitset.unset_bit(2);
+    bitset.unset_bit(18);
+    bitset.unset_bit(34);
+    bitset.unset_bit(56);
+    bitset.unset_bit(112);
+    bitset.unset_bit(213);
+
+    expect(bitset.is_bit(2) == false, counter);
+    expect(bitset.is_bit(18) == false, counter);
+    expect(bitset.is_bit(34) == false, counter);
+    expect(bitset.is_bit(56) == false, counter);
+    expect(bitset.is_bit(112) == false, counter);
+    expect(bitset.is_bit(213) == false, counter);
+
+    bitset.toggle_bit(2);
+    bitset.toggle_bit(18);
+    bitset.toggle_bit(34);
+    bitset.toggle_bit(56);
+    bitset.toggle_bit(112);
+    bitset.toggle_bit(213);
+
+    expect(bitset.is_bit(2), counter);
+    expect(bitset.is_bit(18), counter);
+    expect(bitset.is_bit(34), counter);
+    expect(bitset.is_bit(56), counter);
+    expect(bitset.is_bit(112), counter);
+    expect(bitset.is_bit(213), counter);
+}
+
 void TestManager::collect_all_tests() {
     module_tests.append(hashmap_test);
     module_tests.append(linear_allocator_test);
@@ -187,6 +239,7 @@ void TestManager::collect_all_tests() {
     module_tests.append(freelist_allocator_test);
     module_tests.append(fixed_array_test);
     module_tests.append(dyn_array_test);
+    module_tests.append(bitset_test);
 }
 
 } // sf

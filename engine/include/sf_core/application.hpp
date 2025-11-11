@@ -7,6 +7,7 @@
 #include "sf_core/event.hpp"
 #include "sf_platform/platform.hpp"
 #include "sf_vulkan/material.hpp"
+#include "sf_vulkan/mesh.hpp"
 #include "sf_vulkan/texture.hpp"
 
 namespace sf {
@@ -28,6 +29,7 @@ public:
     EventSystemState            event_system;
     TextureSystemState          texture_system;
     MaterialSystemState         material_system;
+    MeshSystemState             mesh_system;
     PlatformState               platform_state;
     GameInstance*               game_inst;
     Clock                       clock;

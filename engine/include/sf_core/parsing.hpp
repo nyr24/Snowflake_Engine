@@ -48,6 +48,8 @@ public:
         return false;
     }
 
+    bool end_reached() { return offset >= str.count(); }
+
     void skip_ws() {
         while (offset < str.count() && std::isspace(str[offset])) {
             ++offset;

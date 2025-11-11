@@ -1,10 +1,12 @@
 struct VSInput {
     float3 pos;
+    float3 normal;
     float2 texture_coord;
 }
 
 struct VSOutput {
     float4 pos: SV_Position;
+    float3 normal;
     float2 texture_coord;
 };
 

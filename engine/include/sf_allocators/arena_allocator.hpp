@@ -24,7 +24,6 @@ public:
     };
 private:
     DynamicArray<Region> regions;
-    u16                  current_region_index;
 public:
     ArenaAllocator();
     ~ArenaAllocator();

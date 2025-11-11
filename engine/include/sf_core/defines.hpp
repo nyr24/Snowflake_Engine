@@ -31,6 +31,7 @@ typedef long long isize;
 // Floating point types
 typedef float f32;
 typedef double f64;
+typedef long double f128;
 
 typedef size_t usize;
 
@@ -47,6 +48,7 @@ static_assert(sizeof(i64) == 8, "Expected i64 to be 8 bytes.");
 
 static_assert(sizeof(f32) == 4, "Expected f32 to be 4 bytes.");
 static_assert(sizeof(f64) == 8, "Expected f64 to be 8 bytes.");
+static_assert(sizeof(f128) == 16, "Expected f128 to be 16 bytes.");
 
 #if defined(__x86_64__) || defined(_M_X64)
 static_assert(sizeof(usize) == 8, "Expected usize to be 8 bytes on x86_64 arch");

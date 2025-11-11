@@ -218,11 +218,13 @@ void VulkanShaderPipeline::bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_
     vkCmdSetScissor(cmd_buffer.handle, 0, 1, &scissors);
 }
 
-void VulkanShaderPipeline::update_object_state(VulkanContext& context, GeometryRenderData& render_data) {
+void VulkanShaderPipeline::update_model(VulkanCommandBuffer& cmd_buffer, glm::mat4& model) {
+    vkCmdPushConstants(cmd_buffer.handle, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &model);
+}
+
+void VulkanShaderPipeline::update_material(VulkanContext& context, MaterialUpdateData& render_data) {
     VulkanCommandBuffer& curr_cmd_buffer{ context.curr_frame_graphics_cmd_buffer() };    
     SF_ASSERT_MSG(curr_cmd_buffer.state == VulkanCommandBufferState::RECORDING_BEGIN, "Should be in recording state");
-
-    vkCmdPushConstants(curr_cmd_buffer.handle, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &render_data.model);
 
     ObjectShaderState& object_state{ object_shader_states[render_data.descriptor_state_index] };
 

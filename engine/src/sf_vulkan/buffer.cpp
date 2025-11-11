@@ -1,6 +1,6 @@
 #include "sf_vulkan/buffer.hpp"
-#include "sf_allocators/arena_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
+#include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_vulkan/command_buffer.hpp"
@@ -72,27 +72,33 @@ void VulkanBuffer::destroy(const VulkanDevice& device) {
     }
 }
 
-bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, Mesh&& mesh, ArenaAllocator& render_system_allocator, VulkanVertexIndexBuffer& out_buffer) {
-    out_buffer.data.set_allocator(&render_system_allocator);
-    out_buffer.data.resize(mesh.vertices.size_in_bytes() + mesh.indices.size_in_bytes());
-    out_buffer.indeces_count = mesh.indices.count();
-    out_buffer.indeces_offset = mesh.vertices.size_in_bytes(); 
-    sf_mem_copy(out_buffer.data.data(), mesh.vertices.data(), mesh.vertices.size_in_bytes());
-    sf_mem_copy(out_buffer.data.data() + out_buffer.indeces_offset, mesh.indices.data(), mesh.indices.size_in_bytes());
+bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, Mesh* mesh, VulkanVertexIndexBuffer& out_buffer) {
+    SF_ASSERT_MSG(mesh, "Should be valid pointer");
+    out_buffer.mesh = mesh;
 
     VulkanBuffer::create(
-        device, out_buffer.data.size_in_bytes(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        device, out_buffer.mesh->data.size_in_bytes(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
         out_buffer.staging_buffer
     );
 
     VulkanBuffer::create(
-        device, out_buffer.data.size_in_bytes(), static_cast<VkBufferUsageFlagBits>(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
+        device, out_buffer.mesh->data.size_in_bytes(), static_cast<VkBufferUsageFlagBits>(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
         out_buffer.main_buffer
     );
 
-    return out_buffer.staging_buffer.copy_data(device, out_buffer.data.data(), out_buffer.data.size_in_bytes());
+    return out_buffer.staging_buffer.copy_data(device, out_buffer.mesh->data.data(), out_buffer.mesh->data.size_in_bytes());
+}
+
+void VulkanVertexIndexBuffer::set_mesh(const VulkanDevice& device, Mesh* mesh) {
+    staging_buffer.copy_data(device, mesh->data.data(), mesh->data.size_in_bytes());
+}
+
+void VulkanVertexIndexBuffer::bind(const VulkanCommandBuffer& cmd_buffer) {
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(cmd_buffer.handle, 0, 1, &main_buffer.handle, offsets);
+    vkCmdBindIndexBuffer(cmd_buffer.handle, main_buffer.handle, mesh->indeces_offset, VK_INDEX_TYPE_UINT16);
 }
 
 void VulkanVertexIndexBuffer::destroy(const VulkanDevice& device) {
@@ -100,14 +106,8 @@ void VulkanVertexIndexBuffer::destroy(const VulkanDevice& device) {
     main_buffer.destroy(device);
 }
 
-void VulkanVertexIndexBuffer::bind(const VulkanCommandBuffer& cmd_buffer) {
-    VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(cmd_buffer.handle, 0, 1, &main_buffer.handle, offsets);
-    vkCmdBindIndexBuffer(cmd_buffer.handle, main_buffer.handle, indeces_offset, VK_INDEX_TYPE_UINT16);
-}
-
 void VulkanVertexIndexBuffer::draw(const VulkanCommandBuffer& cmd_buffer) {
-    vkCmdDrawIndexed(cmd_buffer.handle, indeces_count, 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmd_buffer.handle, mesh->indeces_count, 1, 0, 0, 0);
 }
 
 bool VulkanGlobalUniformBufferObject::create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo) {

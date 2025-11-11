@@ -81,6 +81,10 @@ usize LinearAllocator::allocate_handle(usize size, u16 alignment) noexcept
 }
 
 ReallocReturn LinearAllocator::reallocate(void* addr, usize new_size, u16 alignment) noexcept {
+    if (addr == nullptr) {
+        return {allocate(new_size, alignment), true};
+    }
+
     if (!is_address_in_range(_buffer, _capacity, addr)) {
         return {nullptr, true};
     }

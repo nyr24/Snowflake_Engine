@@ -63,6 +63,5 @@ void event_system_init_internal_state(EventSystemState* state);
 SF_EXPORT bool event_system_add_listener(u8 code, void* listener, OnEventFn on_event);
 SF_EXPORT bool event_system_remove_listener(u8 code, void* listener, OnEventFn on_event);
 SF_EXPORT bool event_system_fire_event(u8 code, void* sender, Option<EventContext> context);
-void event_system_reset();
 
 } // sf

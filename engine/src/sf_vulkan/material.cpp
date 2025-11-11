@@ -168,7 +168,7 @@ static bool material_parse_config(std::string_view file_name, MaterialConfig& ou
     // bitwise
     u8 parsed_state{0};
 
-    while (parser.offset < file_contents.count() && !is_all_config_parsed(parsed_state)) {
+    while (!parser.end_reached() && !is_all_config_parsed(parsed_state)) {
         parser.skip_ws();
 
         // parse key

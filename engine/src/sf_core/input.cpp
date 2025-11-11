@@ -1,5 +1,4 @@
 #include "sf_core/clock.hpp"
-#include "sf_platform/defines.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_core/event.hpp"
@@ -7,9 +6,8 @@
 
 namespace sf {
 
-#ifdef SF_PLATFORM_WAYLAND
 static constexpr f32 KEY_REPEAT_RATE{2.5f};
-static constexpr f32 KEY_REPEAT_DELAY{200.0f};
+static constexpr f32 KEY_REPEAT_DELAY{80.0f};
 
 struct KeyRepeatGlobalState {
     f32     rate{KEY_REPEAT_RATE};
@@ -20,7 +18,6 @@ struct KeyRepeatTimer {
     Clock   clock;
     bool    passed_delay;
 };
-#endif
 
 // down = true, up = false
 struct KeyboardState {
@@ -39,10 +36,8 @@ struct InputState {
     KeyboardState   kb_curr;
     KeyboardState   kb_prev;
     MouseDelta      mouse_delta;
-#ifdef SF_PLATFORM_WAYLAND
     KeyRepeatGlobalState key_repeat_state;
     KeyRepeatTimer       key_repeat_timers[static_cast<u32>(GLFW_KEY_LAST)];
-#endif
 };
 
 static InputState state;
@@ -51,8 +46,6 @@ void input_update() {
     sf_mem_copy(&state.kb_prev, &state.kb_curr, sizeof(KeyboardState));
     sf_mem_copy(&state.mouse_prev, &state.mouse_curr, sizeof(MouseState));
 
-// repeat key event for wayland
-#ifdef SF_PLATFORM_WAYLAND
     for (i32 i{0}; i < GLFW_KEY_LAST; ++i) {
         if (state.kb_prev.keys[i]) {
             KeyRepeatTimer& timer = state.key_repeat_timers[i];
@@ -82,7 +75,6 @@ void input_update() {
             }
        }
     }
-#endif
 }
 
 // keyboard input

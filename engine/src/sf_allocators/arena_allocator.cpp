@@ -19,11 +19,10 @@ void* ArenaAllocator::allocate(usize size, u16 alignment) {
     Region* region;
     bool found_region = false;
 
-    for (usize i = current_region_index; i < regions.count(); ++i) {
+    for (u32 i{0}; i < regions.count(); ++i) {
         region = &regions[i];
         if (region->data == nullptr || (region->offset + aligned_size) <= region->capacity) {
             found_region = true;
-            current_region_index = i;
             break;
         }
     }
@@ -31,7 +30,6 @@ void* ArenaAllocator::allocate(usize size, u16 alignment) {
     if (!found_region) {
         regions.append(Region{});
         region = regions.last_ptr();
-        current_region_index = regions.count() - 1;
     }
 
     if (region->data == nullptr) {
@@ -93,7 +91,7 @@ void ArenaAllocator::reserve(usize needed_capacity) {
     Region* region;
     i32 founded_region{-1};
 
-    for (i32 i{current_region_index}; i < regions.count(); ++i) {
+    for (i32 i{0}; i < regions.count(); ++i) {
         region = &regions[i];
         if (!region->data) {
             founded_region = i;

@@ -53,10 +53,4 @@ SF_EXPORT bool event_system_fire_event(u8 code, void* sender, Option<EventContex
     return false;
 }
 
-void event_system_reset() {
-    for (auto& list : state_ptr->event_lists) {
-        list.clear();
-    }
-}
-
 } // sf;
