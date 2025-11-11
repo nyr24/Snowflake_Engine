@@ -114,9 +114,11 @@ target_compile_definitions(
   $<$<CONFIG:Debug>:
     -DSF_DEBUG
     -DSF_ASSERTS_ENABLED
+    -DGLM_FORCE_DEPTH_ZERO_TO_ONE
   >
   $<$<CONFIG:Release>:
     -DSF_RELEASE
+    -DGLM_FORCE_DEPTH_ZERO_TO_ONE
   >
 )
 

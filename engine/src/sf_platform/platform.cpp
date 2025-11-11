@@ -28,7 +28,6 @@ bool PlatformState::create(const ApplicationConfig& config, PlatformState& out_s
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     out_state.window = glfwCreateWindow(config.window_width, config.window_height, config.name, nullptr, nullptr);
     if (!out_state.window) {
@@ -55,18 +54,13 @@ void PlatformState::attach_event_callbacks() {
     mouse_wheel_callback = &platform_mouse_wheel_callback;
 }
 
-// void platform_set_glfw_user_state(GLFWwindow* window, GameState *game_state) {
-//     glfwSetWindowUserPointer(window, game_state);
-// }
-
 static void platform_key_callback(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mode)
 {
     if (action == GLFW_REPEAT) {
         return;
     }
 
-    bool pressed = action == GLFW_PRESS;
-    input_process_key(key, pressed);
+    input_process_key(key, action == GLFW_PRESS);
 }
 
 static void platform_mouse_move_callback(GLFWwindow* window, f64 x, f64 y)

@@ -79,14 +79,31 @@ void VulkanCommandBuffer::begin_rendering(const VulkanContext& context) {
         VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
         0,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        false
+    );
+
+    VulkanImage::transition_layout(
+        context.swapchain.depth_image.handle,
+        *this,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        0,
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        true
     );
 
     VkClearColorValue clear_color{
-        .float32{ 0.0f, 0.0f, 0.0f, 1.0f }
+        .float32{ 0.0f, 0.0f, 0.15f, 1.0f }
     };
 
-    VkRenderingAttachmentInfo attachment_info{
+    VkClearColorValue clear_depth{
+        .float32{ 1.0f }
+    };
+
+    VkRenderingAttachmentInfo color_attachment_info{
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = context.swapchain.views[context.image_index],
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -95,12 +112,22 @@ void VulkanCommandBuffer::begin_rendering(const VulkanContext& context) {
         .clearValue{ clear_color },
     };
 
+    VkRenderingAttachmentInfo depth_attachment_info{
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = context.swapchain.depth_image.view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue{ clear_depth },
+    };
+
     VkRenderingInfo rendering_info{
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea{ .offset = { 0, 0 }, .extent{ context.framebuffer_width, context.framebuffer_height } },
         .layerCount = 1,
         .colorAttachmentCount = 1,
-        .pColorAttachments = &attachment_info,
+        .pColorAttachments = &color_attachment_info,
+        .pDepthAttachment = &depth_attachment_info,
     };
 
     vkCmdBeginRendering(handle, &rendering_info);
@@ -117,7 +144,20 @@ void VulkanCommandBuffer::end_rendering(const VulkanContext& context) {
         VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
         0,
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        false
+    );
+
+    VulkanImage::transition_layout(
+        context.swapchain.depth_image.handle,
+        *this,
+        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        0,
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        true
     );
 }
 

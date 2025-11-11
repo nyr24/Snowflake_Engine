@@ -256,7 +256,7 @@ bool renderer_draw_frame(const RenderPacket& packet) {
         .pSignalSemaphores = &curr_render_finished_semaphore.handle,
     };
 
-    curr_graphics_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, Option<VulkanFence>{curr_draw_fence});
+    curr_graphics_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, curr_draw_fence);
 
     if (!curr_transfer_fence.wait(vk_context)) {
         return false;

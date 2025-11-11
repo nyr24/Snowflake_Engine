@@ -183,7 +183,19 @@ bool VulkanShaderPipeline::create(
     VkPipelineRenderingCreateInfo rendering_create_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &context.swapchain.image_format.format
+        .pColorAttachmentFormats = &context.swapchain.image_format.format,
+        .depthAttachmentFormat = context.device.depth_format
+    };
+
+    VkPipelineDepthStencilStateCreateInfo depth_stencil_state{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .pNext = nullptr,
+        .depthTestEnable = true,
+        .depthWriteEnable = true,
+        // lower depth => write pixel
+        .depthCompareOp = VK_COMPARE_OP_LESS,
+        .depthBoundsTestEnable = false,
+        .stencilTestEnable = false,
     };
 
     VkGraphicsPipelineCreateInfo pipeline_create_info{
@@ -196,6 +208,7 @@ bool VulkanShaderPipeline::create(
         .pViewportState = &viewport_create_info,
         .pRasterizationState = &rasterization_create_info,
         .pMultisampleState = &multisample_create_info,
+        .pDepthStencilState = &depth_stencil_state,
         .pColorBlendState = &color_blending_state,
         .pDynamicState = &dynamic_create_info,
         .layout = out_pipeline.pipeline_layout,

@@ -382,6 +382,7 @@ bool VulkanDevice::detect_depth_format() {
     };
 
     u32 flags = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
     for (u32 i{0}; i < CANDIDATES_COUNT; ++i) {
         VkFormatProperties properties;
         vkGetPhysicalDeviceFormatProperties(physical_device, candidates[i], &properties);

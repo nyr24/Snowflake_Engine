@@ -39,7 +39,8 @@ public:
         VkPipelineStageFlags2 src_stage_mask,
         VkAccessFlags2 src_access_mask,
         VkPipelineStageFlags2 dst_stage_mask,
-        VkAccessFlags2 dst_access_mask
+        VkAccessFlags2 dst_access_mask,
+        bool is_depth_image
     );
 
     static VkImageView create_view(

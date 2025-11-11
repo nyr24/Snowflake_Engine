@@ -203,7 +203,7 @@ bool VulkanSwapchain::create_inner(
     // Create depth image and its view.
     bool create_result = VulkanImage::create(
         device,
-        swapchain.depth_attachment,
+        swapchain.depth_image,
         VK_IMAGE_TYPE_2D,
         swapchain_extent.width,
         swapchain_extent.height,
@@ -225,7 +225,7 @@ bool VulkanSwapchain::create_inner(
 }
 
 void VulkanSwapchain::destroy(const VulkanDevice& device) {
-    depth_attachment.destroy(device);
+    depth_image.destroy(device);
 
     for (u32 i{0}; i < views.count(); ++i) {
         // TODO: custom allocator

@@ -17,7 +17,7 @@ public:
     FixedArray<VkImage, MAX_IMAGE_COUNT>        images;
     FixedArray<VkImageView, MAX_IMAGE_COUNT>    views;
     VkSwapchainKHR                      handle;
-    VulkanImage                         depth_attachment;
+    VulkanImage                         depth_image;
     VkSurfaceFormatKHR                  image_format;
     bool                                is_recreating;
 

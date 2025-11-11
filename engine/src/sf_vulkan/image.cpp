@@ -74,7 +74,8 @@ void VulkanImage::transition_layout(
     VkImage image, const VulkanCommandBuffer& cmd_buffer,
     VkImageLayout old_layout, VkImageLayout new_layout,
     VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
-    VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask
+    VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask,
+    bool is_depth_image
 ) {
     VkImageMemoryBarrier2 barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -88,7 +89,7 @@ void VulkanImage::transition_layout(
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = image,
         .subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .aspectMask = is_depth_image ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
             .levelCount = VK_REMAINING_MIP_LEVELS,
             .baseArrayLayer = 0,
