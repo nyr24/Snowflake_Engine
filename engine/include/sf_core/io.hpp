@@ -5,29 +5,27 @@
 #include "sf_containers/result.hpp"
 #include "sf_containers/traits.hpp"
 #include <fstream>
-#include <filesystem>
+#include <string_view>
 
 namespace sf {
 
-namespace fs = std::filesystem;
-
 template<AllocatorTrait Allocator>
-Result<StringBacked<Allocator>> read_file(const fs::path& file_path, Allocator& allocator) noexcept {
-    std::ifstream file(file_path, std::ios::ate | std::ios::binary);
+Result<StringBacked<Allocator>> read_file(std::string_view file_path, Allocator& allocator) noexcept {
+    std::ifstream file(file_path.data(), std::ios::ate | std::ios::binary);
 
     if (!file.is_open()) {
         return {ResultError::VALUE};
     }
 
-    DynamicArrayBacked<char, Allocator> file_contents(file.tellg(), file.tellg(), &allocator);
+    StringBacked<Allocator> file_contents(file.tellg(), file.tellg(), &allocator);
     file.seekg(0, std::ios::beg);
     file.read(file_contents.data(), static_cast<std::streamsize>(file_contents.count()));
 
-    return {std::move(file_contents)};
+    return std::move(file_contents);
 }
 
 template<u32 ARR_LEN>
-FixedArray<char, ARR_LEN>& strip_extension_from_file_name(FixedArray<char, ARR_LEN>& file_name) {
+FixedString<ARR_LEN>& strip_extension_from_file_name(FixedString<ARR_LEN>& file_name) {
     u32 last_dot_ind{0};
     u32 curr{0};
 

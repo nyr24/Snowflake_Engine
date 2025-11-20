@@ -1,4 +1,5 @@
 #include "sf_core/application.hpp"
+#include "sf_allocators/general_purpose_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
@@ -22,18 +23,14 @@ static ApplicationState state;
 ApplicationState::ApplicationState()
     : temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
 {
-    main_allocator.reserve(TextureSystemState::get_memory_requirement() + MaterialSystemState::get_memory_requirement() + MeshSystemState::get_memory_requirement() + platform_get_mem_page_size());
+    main_allocator.reserve(TextureSystem::get_memory_requirement() + MaterialSystem::get_memory_requirement() + GeometrySystem::get_memory_requirement() + platform_get_mem_page_size());
 }
 
 void application_init_internal_state(const VulkanDevice& device) {
-    EventSystemState::create(state.event_system);
-    TextureSystemState::create(state.main_allocator, device, state.texture_system);
-    MaterialSystemState::create(state.main_allocator, state.material_system);
-    MeshSystemState::create(state.main_allocator, state.temp_allocator, state.mesh_system);
-
-    event_system_init_internal_state(&state.event_system);
-    texture_system_init_internal_state(&state.texture_system);
-    material_system_init_internal_state(&state.material_system);
+    EventSystem::create(state.event_system);
+    TextureSystem::create(state.main_allocator, device, state.texture_system);
+    MaterialSystem::create(state.main_allocator, state.material_system);
+    GeometrySystem::create(state.main_allocator, state.temp_allocator, state.geometry_system);
 }
 
 bool application_create(GameInstance* game_inst) {
@@ -64,7 +61,7 @@ bool application_create(GameInstance* game_inst) {
 
     application_init_internal_state(*device);
 
-    if (!renderer_post_init()) {
+    if (!renderer_post_init(state.main_allocator, state.temp_allocator)) {
         LOG_FATAL("Renderer failed to post-initialize");
         return false;
     }
@@ -178,6 +175,10 @@ ArenaAllocator& application_get_main_allocator() {
 
 StackAllocator& application_get_temp_allocator() {
     return state.temp_allocator;
+}
+
+GeneralPurposeAllocator& application_get_gpa() {
+    return state.gpa;
 }
 
 } // sf

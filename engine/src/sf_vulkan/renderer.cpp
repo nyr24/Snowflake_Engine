@@ -1,4 +1,6 @@
 #include "glm/geometric.hpp"
+#include "sf_allocators/arena_allocator.hpp"
+#include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/optional.hpp"
 #include "sf_core/application.hpp"
 #include "sf_core/constants.hpp"
@@ -6,6 +8,7 @@
 #include "sf_core/event.hpp"
 #include "sf_core/input.hpp"
 #include "sf_core/memory_sf.hpp"
+#include "sf_core/model.hpp"
 #include "sf_core/utility.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_vulkan/command_buffer.hpp"
@@ -28,6 +31,7 @@
 #include <algorithm>
 #include <cmath>
 #include <span>
+#include <string_view>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 #include <glm/ext/matrix_clip_space.hpp>
@@ -45,15 +49,19 @@ static VulkanContext vk_context{};
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 3 };
 static constexpr u32 OBJECT_RENDER_COUNT{ 256 };
-static const char*   MAIN_SHADER_FILE_NAME{"shader.spv"};
+static constexpr u32 MAX_MODEL_COUNT{ 16 };
+static std::string_view MAIN_SHADER_FILE_NAME{"shader.spv"};
 
+// TODO: move to renderer struct
 static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_load_configs{
     {"grass.jpg"}, {"liquid_1.jpg"}, {"liquid_2.jpg"}, {"metal.jpg"}, {"painting.jpg"}, {"rock_wall.jpg"},
     {"soil.jpg"}, {"water.jpg"}, {"stones.jpg"}, {"tree.jpg"}, {"sand.jpg"}
 };
-static FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> material_load_configs{ MaterialSystemState::DEFAULT_NAME };
+static FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> material_load_configs{ MaterialSystem::DEFAULT_NAME };
+static FixedArray<std::string_view, 10> model_names{ "viking_room.obj" };
 static FixedArray<Texture*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> textures(texture_load_configs.count());
 static FixedArray<Material*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> materials(material_load_configs.count());
+static FixedArray<Model, MAX_MODEL_COUNT> models(MAX_MODEL_COUNT);
 static FixedArray<MaterialUpdateData, OBJECT_RENDER_COUNT> object_material_data;
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
@@ -72,9 +80,8 @@ void create_descriptor_layouts_and_sets_for_ubo(
     std::span<VkDescriptorSet> out_sets
 );
 static bool create_main_shader_pipeline();
-static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer);
+static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc);
 static void init_object_material_data(VulkanShaderPipeline& shader, const VulkanDevice& device);
-static void update_global_state();
 static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
 static void init_global_descriptors(const VulkanDevice& device);
 static void update_global_descriptors(const VulkanDevice& device);
@@ -93,6 +100,15 @@ VulkanContext::VulkanContext()
     draw_fences.resize_to_capacity();
     transfer_fences.resize_to_capacity();
     global_descriptor_sets.resize_to_capacity();
+}
+
+static void renderer_create_default_mesh(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& temp_alloc) {
+    Geometry& default_geometry = GeometrySystem::get_default_geometry();
+    MaterialSystem::create_default_material(device, cmd_buffer, temp_alloc);
+    Material& default_material = MaterialSystem::get_default_material();
+    Mesh new_mesh;
+    Mesh::create_from_existing_data(&default_geometry, &default_material, new_mesh);
+    vk_renderer.meshes.append(new_mesh);
 }
 
 // returns poitnter to static variable
@@ -131,24 +147,35 @@ VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_s
     VulkanCommandBuffer::allocate(vk_context.device, vk_context.transfer_command_pool.handle, {vk_context.transfer_command_buffers.data(), vk_context.transfer_command_buffers.capacity()}, true);
     
     init_synch_primitives(vk_context);
-    
+
     return &vk_context.device;
 }
 
 // NOTE: main systems should be available at the moment of call
-bool renderer_post_init() {
-    if (!VulkanVertexIndexBuffer::create(vk_context.device, mesh_system_get_default_mesh(), vk_context.vertex_index_buffer)) {
+bool renderer_post_init(ArenaAllocator& main_alloc, StackAllocator& temp_alloc) {
+    preload_textures_and_materials(vk_context.device, vk_context.texture_load_command_buffer, temp_alloc);
+
+    SF_ASSERT_MSG(vk_renderer.meshes[0].has_geometry(), "Default mesh shoult exist");
+
+    if (!VulkanVertexIndexBuffer::create(vk_context.device, vk_renderer.meshes[0].geometry, vk_context.vertex_index_buffer)) {
         LOG_FATAL("Failed to create vertex buffer");
         return false;
     }
-
-    preload_textures_and_materials(vk_context.device, vk_context.texture_load_command_buffer);
     
     if (!create_main_shader_pipeline()) {
         return false;
     }
 
     init_object_material_data(vk_context.pipeline, vk_context.device);
+
+    // NOTE: TEMP >>
+    if (!Model::load(model_names[0], main_alloc, temp_alloc, vk_context.device, vk_context.texture_load_command_buffer, models[0])) {
+        LOG_ERROR("Model with name {} fails to load", model_names[0]);
+    }
+    for (auto& mesh : models[0].meshes) {
+        vk_renderer.meshes.append(mesh);
+    }
+    // NOTE: TEMP <<
 
     event_system_add_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
     event_system_add_listener(SystemEventCode::MOUSE_MOVED, nullptr, renderer_handle_mouse_move_event);
@@ -210,13 +237,13 @@ bool renderer_draw_frame(const RenderPacket& packet) {
     VkBufferCopy vertex_copy_region{
         .srcOffset = 0,
         .dstOffset = 0,
-        .size = vk_context.vertex_index_buffer.mesh->indeces_offset 
+        .size = vk_context.vertex_index_buffer.geometry->indeces_offset 
     };
 
     VkBufferCopy index_copy_region{
-        .srcOffset = vk_context.vertex_index_buffer.mesh->indeces_offset,
-        .dstOffset = vk_context.vertex_index_buffer.mesh->indeces_offset,
-        .size = vk_context.vertex_index_buffer.mesh->indeces_count * sizeof(u16)
+        .srcOffset = vk_context.vertex_index_buffer.geometry->indeces_offset,
+        .dstOffset = vk_context.vertex_index_buffer.geometry->indeces_offset,
+        .size = vk_context.vertex_index_buffer.geometry->indeces_count * sizeof(u32)
     };
     
     curr_transfer_buffer.copy_data_between_buffers(vk_context.vertex_index_buffer.staging_buffer.handle, vk_context.vertex_index_buffer.main_buffer.handle, vertex_copy_region);
@@ -540,6 +567,7 @@ static bool create_main_shader_pipeline() {
 
     VkViewport viewport{ vk_context.get_viewport() };
     VkRect2D scissors{ vk_context.get_scissors() };
+    auto& temp_alloc = application_get_temp_allocator();
 
     return VulkanShaderPipeline::create(
         vk_context,
@@ -550,7 +578,8 @@ static bool create_main_shader_pipeline() {
         viewport,
         scissors,
         textures.to_span(),
-        vk_context.pipeline
+        vk_context.pipeline,
+        temp_alloc
     );
 }
 
@@ -697,11 +726,13 @@ static void update_global_descriptors(const VulkanDevice& device) {
     }
 }
 
-static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer) {
+static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& temp_alloc) {
     cmd_buffer.begin_recording(0);
 
-    texture_system_load_textures(device, cmd_buffer, texture_load_configs.to_span(), textures.to_span());
-    material_system_load_from_file_many(device, cmd_buffer, material_load_configs.to_span(), materials.to_span());
+    TextureSystem::get_or_load_textures_many(device, cmd_buffer, temp_alloc, texture_load_configs.to_span(), textures.to_span());
+    MaterialSystem::load_material_from_file_many(device, cmd_buffer, temp_alloc, material_load_configs.to_span(), materials.to_span());
+
+    renderer_create_default_mesh(vk_context.device, vk_context.texture_load_command_buffer, temp_alloc);
 
     VkSubmitInfo submit_info{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,

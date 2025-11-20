@@ -1,91 +1,215 @@
 #include "sf_vulkan/mesh.hpp"
+#include "sf_allocators/arena_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
+#include "sf_containers/optional.hpp"
+#include "sf_core/asserts_sf.hpp"
 #include "sf_core/constants.hpp"
+#include "sf_vulkan/material.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <initializer_list>
-#include <tuple>
 #include <vulkan/vulkan_core.h>
+
+// TODO: adding geometries to render queue/array
 
 namespace sf {
 
-static MeshSystemState* state_ptr{nullptr};
+static GeometrySystem* state_ptr{nullptr};
 
-void MeshSystemState::create(ArenaAllocator& main_allocator, StackAllocator& temp_allocator, MeshSystemState &out_state) {
-    state_ptr = &out_state;
-    out_state.meshes.set_allocator(&main_allocator);
-    out_state.meshes.resize(MESH_INIT_CAPACITY);
-    for (u32 i{0}; i < out_state.meshes.count(); ++i) {
-        auto& mesh = out_state.meshes[i];
-        mesh.data.set_allocator(&main_allocator);
-        mesh.data.reserve(Mesh::get_memory_requirement());
-        mesh.id = i;
-        mesh.generation = INVALID_ID;
-        mesh.auto_release = false;
-        mesh.ref_count = 0;
-    }
-    out_state.default_mesh.data.set_allocator(&main_allocator);
-    out_state.default_mesh.data.reserve(Mesh::get_memory_requirement());
-    out_state.create_default_mesh(temp_allocator);
+void Geometry::create_empty(
+    u32 id,
+    ArenaAllocator& alloc,
+    Geometry& out_geometry
+) {
+    sf_mem_zero(&out_geometry, sizeof(Geometry));
+    out_geometry.id = id;
+    out_geometry.generation = INVALID_ID;
+    out_geometry.data.set_allocator(&alloc);
+    out_geometry.data.reserve(Geometry::get_memory_requirement());
 }
 
-void MeshSystemState::create_default_mesh(StackAllocator& temp_allocator) {
-    default_mesh.id = INVALID_ID;
-    default_mesh.generation = INVALID_ID;
-    default_mesh.auto_release = false;
-    default_mesh.ref_count = 0;
-    auto vertices = define_cube_vertices(temp_allocator);
-    auto indices = define_cube_indices(temp_allocator);
-    default_mesh.init_from_vertices_and_indices(std::move(vertices), std::move(indices));
+void Geometry::create_from_vertices_and_indices(
+    u32 id,
+    ArenaAllocator& alloc,
+    DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
+    DynamicArrayBacked<u32, StackAllocator>&& indices,
+    Geometry& out_geometry
+) {
+    Geometry::create_empty(id, alloc, out_geometry);
+    out_geometry.set_vertices_and_indices(std::move(vertices), std::move(indices));
 }
-
-Mesh* mesh_system_get_mesh(u32 id) {
-    auto& mesh{ state_ptr->meshes[id] };
-    mesh.ref_count++;
-    if (mesh.generation == INVALID_ID) {
-        mesh.generation = 0;
-    } else {
-        mesh.generation++;
-    }
-    return &state_ptr->meshes[id];
-}
-
-Mesh* mesh_system_get_default_mesh() { 
-    auto& default_mesh{ state_ptr->default_mesh };
-    default_mesh.ref_count++;
-    if (default_mesh.generation == INVALID_ID) {
-        default_mesh.generation = 0;
-    } else {
-        default_mesh.generation++;
-    }
-    return &state_ptr->default_mesh;
-}
-
-void mesh_system_free_mesh(u32 id) {
-    auto& mesh{ state_ptr->meshes[id] };
-
-    if (mesh.ref_count > 0) {
-        mesh.ref_count--;
-        if (mesh.ref_count < 1 && mesh.auto_release) {
-            mesh.destroy();
-        }
-    }
-}
-
-void Mesh::init_from_vertices_and_indices(DynamicArrayBacked<Vertex, StackAllocator>&& vertices, DynamicArrayBacked<u16, StackAllocator>&& indices) {
+    
+void Geometry::set_vertices_and_indices(
+    DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
+    DynamicArrayBacked<u32, StackAllocator>&& indices
+) {
     data.resize(vertices.size_in_bytes() + indices.size_in_bytes());
     indeces_count = indices.count();
     indeces_offset = vertices.size_in_bytes(); 
     sf_mem_copy(data.data(), vertices.data(), vertices.size_in_bytes());
-    sf_mem_copy(data.data() + indeces_offset, indices.data(), indices.size_in_bytes());
+    sf_mem_copy(data.data_offset(indeces_offset), indices.data(), indices.size_in_bytes());
+}
+
+void Geometry::destroy() {
+    data.free();    
+    id = INVALID_ID;
+    indeces_count = 0;
+    indeces_offset = 0;
+}
+
+// GeometrySystem
+
+void GeometrySystem::create(ArenaAllocator& main_allocator, StackAllocator& temp_allocator, GeometrySystem &out_state) {
+    state_ptr = &out_state;
+    out_state.geometries.set_allocator(&main_allocator);
+    out_state.geometries.resize(INIT_CAPACITY);
+    out_state.alloc = &main_allocator;
+    
+    for (u32 i{0}; i < out_state.geometries.count(); ++i) {
+        auto& geometry = out_state.geometries[i];
+        Geometry::create_empty(i, main_allocator, geometry);
+    }
+
+    Geometry::create_empty(-1, main_allocator, out_state.default_geometry);
+    out_state.create_default_geometry(temp_allocator);
+}
+
+void GeometrySystem::create_default_geometry(StackAllocator& temp_allocator) {
+    auto vertices = define_cube_vertices(temp_allocator);
+    auto indices = define_cube_indices(temp_allocator);
+    default_geometry.set_vertices_and_indices(std::move(vertices), std::move(indices));
+}
+
+Geometry& GeometrySystem::get_empty_slot() {
+    SF_ASSERT_MSG(state_ptr && state_ptr->alloc, "Should be valid ptrs");
+
+    auto& geometries = state_ptr->geometries;
+    auto* alloc = state_ptr->alloc;
+    u32 count{ geometries.count() };
+    
+    for (u32 i{0}; i < count; ++i) {
+        if (geometries[i].generation == INVALID_ID) {
+            geometries[i].generation = 0;
+            return geometries[i];
+        }
+    }
+    // empty slot not found, do resizing
+    u32 free_slot = geometries.count();
+    geometries.resize_exponent(free_slot + 1);
+
+    Geometry::create_empty(free_slot, *alloc, geometries[free_slot]);
+    count = geometries.count();
+
+    for (u32 i{free_slot + 1}; i < count; ++i) {
+        Geometry::create_empty(i, *alloc, geometries[i]);
+    }
+
+    return geometries[free_slot];
+}
+
+Geometry& GeometrySystem::create_geometry_and_get(
+    DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
+    DynamicArrayBacked<u32, StackAllocator>&& indices
+) {
+    Geometry& new_geometry = GeometrySystem::get_empty_slot();
+    new_geometry.set_vertices_and_indices(std::move(vertices), std::move(indices));
+    return new_geometry;
+}
+
+Option<Geometry*> GeometrySystem::get_geometry_by_id(u32 id) {
+    SF_ASSERT_MSG(state_ptr, "Should be valid ptr");
+
+    if (id < 0 || id >= state_ptr->geometries.count()) {
+        return {None::VALUE};
+    }
+
+    auto& geometry{ state_ptr->geometries[id] };
+    geometry.ref_count++;
+    if (geometry.generation == INVALID_ID) {
+        geometry.generation = 0;
+    } else {
+        geometry.generation++;
+    }
+    return &geometry;
+}
+
+Geometry& GeometrySystem::get_default_geometry() { 
+    SF_ASSERT_MSG(state_ptr, "Should be valid ptr");
+
+    auto& default_geometry{ state_ptr->default_geometry };
+    default_geometry.ref_count++;
+    if (default_geometry.generation == INVALID_ID) {
+        default_geometry.generation = 0;
+    } else {
+        default_geometry.generation++;
+    }
+    return state_ptr->default_geometry;
+}
+
+void GeometrySystem::free_geometry(u32 id) {
+    auto& geometry{ state_ptr->geometries[id] };
+
+    if (geometry.ref_count > 0) {
+        geometry.ref_count--;
+        if (geometry.ref_count < 1 && geometry.auto_release) {
+            geometry.destroy();
+        }
+    }
+}
+
+// Mesh (geometry + material)
+
+void Mesh::create_from_existing_data(
+    Geometry* geometry,
+    Material* material,
+    Mesh& out_mesh
+) {
+    out_mesh.geometry = geometry;
+    out_mesh.material = material;
+}
+
+void Mesh::set_geometry(Geometry* input_geometry) {
+    SF_ASSERT_MSG(geometry && input_geometry, "Should be valid ptrs");
+    geometry = input_geometry;
+}
+
+void Mesh::init_geometry(
+    DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
+    DynamicArrayBacked<u32, StackAllocator>&& indices
+) {
+    SF_ASSERT_MSG(geometry, "Should be valid ptr");
+    geometry->set_vertices_and_indices(std::move(vertices), std::move(indices));
+}
+
+void Mesh::set_material(Material* input_material) {
+    SF_ASSERT_MSG(material && input_material, "Should be valid ptrs");
+    material = input_material;
+}
+
+// void Mesh::draw(
+//     const VulkanDevice& device,
+//     VulkanVertexIndexBuffer& vbo,
+//     VulkanShaderPipeline& shader,
+// ) {
+//     vbo.set_geometry(device, *this);
+ // shader.
+// }
+
+bool Mesh::has_geometry() const {
+    return geometry != nullptr;
+}
+
+bool Mesh::has_material() const {
+    return material != nullptr;    
 }
 
 void Mesh::destroy() {
-    data.clear();
-    id = INVALID_ID;
-    generation = INVALID_ID;
-    ref_count = 0;
+    if (geometry) {
+        geometry->destroy();
+    }
+    if (material) {
+        material->destroy();
+    }
 }
 
 // Positions
@@ -122,7 +246,7 @@ void Mesh::destroy() {
 #define PURPLE  0.5f, 0.0f, 0.5f
 #define YELLOW  1.0f, 1.0f, 0.0f
 
-DynamicArrayBacked<Vertex, StackAllocator> MeshSystemState::define_cube_vertices(StackAllocator& allocator) {
+DynamicArrayBacked<Vertex, StackAllocator> GeometrySystem::define_cube_vertices(StackAllocator& allocator) {
     return std::tuple<StackAllocator*, std::initializer_list<Vertex>>{
         &allocator,
         {
@@ -165,8 +289,8 @@ DynamicArrayBacked<Vertex, StackAllocator> MeshSystemState::define_cube_vertices
     };
 }
 
-DynamicArrayBacked<u16, StackAllocator> MeshSystemState::define_cube_indices(StackAllocator& allocator) {
-    return std::tuple<StackAllocator*, std::initializer_list<u16>>{
+DynamicArrayBacked<u32, StackAllocator> GeometrySystem::define_cube_indices(StackAllocator& allocator) {
+    return std::tuple<StackAllocator*, std::initializer_list<u32>>{
         &allocator,
         {
             0, 1, 2,        0, 2, 3,

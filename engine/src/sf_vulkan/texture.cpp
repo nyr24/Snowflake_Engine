@@ -1,5 +1,5 @@
-#include "sf_vulkan/texture.hpp"
 #include "sf_allocators/arena_allocator.hpp"
+#include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/asserts_sf.hpp"
@@ -10,29 +10,34 @@
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/image.hpp"
-#include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include <string_view>
 
 #define STB_IMAGE_IMPLEMENTATION
 
 #include <stb_image.h>
-#include <filesystem>
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
 
-static u32 get_new_texture_id();
+static TextureSystem* state_ptr;
 
+void Texture::create_empty(u32 id, Texture& out_texture) {
+    out_texture.id = id;
+    out_texture.generation = INVALID_ID;
+    out_texture.state = TextureState::NOT_LOADED;
+}
+    
 bool Texture::load(
     const VulkanDevice& device,
     VulkanCommandBuffer& cmd_buffer,
-    Texture& out_texture,
-    TextureInputConfig config
+    TextureInputConfig config,
+    StackAllocator& alloc,
+    Texture& out_texture
 )
 {
     if (out_texture.state == TextureState::NOT_LOADED) {
-        if (!out_texture.load_from_disk(config.file_name)) {
+        if (!out_texture.load_from_disk(config.file_name, alloc)) {
             return false;
         }
         if (!out_texture.upload_to_gpu(device, cmd_buffer)) {
@@ -52,17 +57,23 @@ bool Texture::load(
 
     return true;
 }
-    
-bool Texture::load_from_disk(std::string_view file_name) {
+
+bool Texture::load_from_disk(std::string_view file_name, StackAllocator& alloc) {
 #ifdef SF_DEBUG
-    fs::path texture_path = fs::current_path() / "build" / "debug/engine/assets/textures" / file_name;
+    std::string_view init_path = "build/debug/engine/assets/textures/";
 #else
-    fs::path texture_path = fs::current_path() / "build" / "release/engine/assets/textures" / file_name;
+    std::string_view init_path = "build/release/engine/assets/textures/";
 #endif
+    StringBacked<StackAllocator> texture_path(init_path.size() + file_name.size() + 1, &alloc);
+    texture_path.append_sv(init_path);
+    texture_path.append_sv(file_name);
+    texture_path.append('\0');
 
     // detect format
-    std::string_view extension{ extract_extension_from_file_name({ texture_path.c_str() }) };
+    std::string_view extension{ extract_extension_from_file_name(texture_path.to_string_view()) };
     Result<ImageFormat> maybe_format = Texture::map_extension_to_format(extension);
+
+    texture_path.append('\0');
 
     if (maybe_format.is_err()) {
         LOG_ERROR("Should be valid image format");
@@ -72,7 +83,7 @@ bool Texture::load_from_disk(std::string_view file_name) {
     format = maybe_format.unwrap_copy();
     constexpr u32 REQUIRED_CHANNEL_COUNT{ 4 };
 
-    pixels = stbi_load(texture_path.c_str(), reinterpret_cast<i32*>(&width),
+    pixels = stbi_load(texture_path.data(), reinterpret_cast<i32*>(&width),
         reinterpret_cast<i32*>(&height), reinterpret_cast<i32*>(&channel_count), REQUIRED_CHANNEL_COUNT);
 
     if (!pixels) {
@@ -83,7 +94,6 @@ bool Texture::load_from_disk(std::string_view file_name) {
         return false;
     }
 
-    id = get_new_texture_id();
     generation = 0;
     size = width * height * REQUIRED_CHANNEL_COUNT;
 
@@ -207,26 +217,28 @@ void Texture::destroy(const VulkanDevice& device) {
 
 // Texture System State
 
-static TextureSystemState* state_ptr;
-
-void TextureSystemState::create(ArenaAllocator& allocator, const VulkanDevice& device, TextureSystemState& out_system) {
+void TextureSystem::create(ArenaAllocator& allocator, const VulkanDevice& device, TextureSystem& out_system) {
+    state_ptr = &out_system;
     out_system.textures.set_allocator(&allocator);
     out_system.textures.resize(MAX_TEXTURE_AMOUNT);
     out_system.texture_lookup_table.set_allocator(&allocator);
     out_system.texture_lookup_table.reserve(MAX_TEXTURE_AMOUNT);
     out_system.device = &device;
 
-    for (auto& t : out_system.textures) {
-        t.id = INVALID_ID;
-        t.generation = INVALID_ID;
-        t.state = TextureState::NOT_LOADED;
+    auto& textures = out_system.textures;
+    u32 cap = textures.capacity();
+
+    for (u32 i{0}; i < cap; ++i) {
+        Texture::create_empty(i, textures[i]);
     }
     for (auto& t : out_system.texture_lookup_table) {
         t.value.handle = INVALID_ID;
     }
+
+    stbi_set_flip_vertically_on_load(true);
 }
 
-TextureSystemState::~TextureSystemState()
+TextureSystem::~TextureSystem()
 {
     if (device) {
         for (auto& t : textures) {
@@ -235,37 +247,44 @@ TextureSystemState::~TextureSystemState()
     }
 }
 
-void texture_system_init_internal_state(TextureSystemState* state) {
-    state_ptr = state;
-}
-
-static bool load_texture_and_put_into_table(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, TextureInputConfig config) {
-    Texture new_texture;
-    if (!Texture::load(device, cmd_buffer, new_texture, config)) {
-        LOG_ERROR("Texture with name {} fails to load", config.file_name);
-        return false;
-    }
-
+Texture& TextureSystem::get_empty_slot() {
+    SF_ASSERT_MSG(state_ptr, "Should be valid ptr");
+    
     auto& textures{ state_ptr->textures };
-    u32 handle{0};
+    u32 count{ textures.count() };
 
-    for (u32 i{0}; i < textures.capacity(); ++i) {
-        if (textures[i].id == INVALID_ID) {
-            textures[i] = new_texture;
-            handle = i;
-            break;
+    for (u32 i{0}; i < count; ++i) {
+        if (textures[i].generation == INVALID_ID) {
+            textures[i].generation = 0;
+            return textures[i];
         }
     }
 
-    if (handle >= textures.capacity()) {
-        LOG_ERROR("Not enough space to load texture: {}", config.file_name);
+    // empty slot not found, do resizing
+    u32 new_id = textures.count();
+    textures.resize_exponent(textures.count() + 1);
+    Texture::create_empty(new_id, textures[new_id]);
+
+    count = textures.count();
+    
+    for (u32 i{new_id + 1}; i < count; ++i) {
+        Texture::create_empty(i, textures[i]);
+    }
+
+    return textures[new_id];
+}
+
+static bool load_texture_and_put_into_table(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, TextureInputConfig config, StackAllocator& alloc) {
+    Texture& new_texture = TextureSystem::get_empty_slot();
+    if (!Texture::load(device, cmd_buffer, config, alloc, new_texture)) {
+        LOG_ERROR("Texture with name {} fails to load", config.file_name);
         return false;
     }
 
     std::string_view texture_name{ strip_extension_from_file_name(config.file_name) };
 
     TextureRef texture_ref{
-        .handle = handle,
+        .handle = new_texture.id,
         .ref_count = 0,
         .auto_release = config.auto_release,
     };
@@ -274,33 +293,17 @@ static bool load_texture_and_put_into_table(const VulkanDevice& device, VulkanCo
     return true;
 }
 
-void texture_system_load_textures(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, std::span<const TextureInputConfig> configs, std::span<Texture*> out_textures) {
-    SF_ASSERT(configs.size() == out_textures.size());
-    stbi_set_flip_vertically_on_load(true);
-
-    for (u32 i{0}; i < configs.size(); ++i) {
-        std::string_view texture_name{ strip_extension_from_file_name(configs[i].file_name) };
-        Option<TextureRef*> maybe_texture = state_ptr->texture_lookup_table.get(texture_name);
-        if (maybe_texture.is_some()) {
-            LOG_WARN("Texture with name {} already exists", texture_name);
-            continue;
-        }
-        load_texture_and_put_into_table(device, cmd_buffer, configs[i]);
-        out_textures[i] = texture_system_get_texture(configs[i].file_name);
-    }
-}
-
-Texture* texture_system_get_or_load_texture(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, const TextureInputConfig config) {
+Texture* TextureSystem::get_or_load_texture(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, const TextureInputConfig config, StackAllocator& alloc) {
     std::string_view texture_name{ strip_extension_from_file_name(config.file_name) };
     Option<TextureRef*> maybe_texture = state_ptr->texture_lookup_table.get(texture_name);
 
     if (maybe_texture.is_none()) {
-        if (!load_texture_and_put_into_table(device, cmd_buffer, config)) {
+        if (!load_texture_and_put_into_table(device, cmd_buffer, config, alloc)) {
             return nullptr;
         }
-        TextureRef* newly_created_texture = state_ptr->texture_lookup_table.get(texture_name).unwrap_copy();
-        newly_created_texture->ref_count++;
-        return &state_ptr->textures[newly_created_texture->handle];
+        TextureRef* newly_created_texture_ref = state_ptr->texture_lookup_table.get(texture_name).unwrap_copy();
+        newly_created_texture_ref->ref_count++;
+        return &state_ptr->textures[newly_created_texture_ref->handle];
     }
 
     TextureRef* texture_ref{ maybe_texture.unwrap_copy() };
@@ -308,11 +311,25 @@ Texture* texture_system_get_or_load_texture(const VulkanDevice& device, VulkanCo
     return &state_ptr->textures[texture_ref->handle];
 }
 
-Texture* texture_system_get_texture(std::string_view file_name) {
+void TextureSystem::get_or_load_textures_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc,  std::span<TextureInputConfig> configs, std::span<Texture*> out_textures) {
+#ifdef SF_DEBUG
+    if (configs.size() > out_textures.size()) {
+        LOG_WARN("Texture configs array has more items than can fit into out_textures array: {} - {}", configs.size(), out_textures.size());
+    }
+#endif
+
+    const u32 min_len = std::min(configs.size(), out_textures.size());
+    
+    for (u32 i{0}; i < min_len; ++i) {
+        out_textures[i] = TextureSystem::get_or_load_texture(device, cmd_buffer, configs[i], alloc);
+    }
+}
+
+Texture* TextureSystem::get_texture(std::string_view file_name) {
     std::string_view texture_name{ strip_extension_from_file_name(file_name) };
     Option<TextureRef*> maybe_texture = state_ptr->texture_lookup_table.get(texture_name);
     if (maybe_texture.is_none()) {
-        LOG_ERROR("texture_system_get_texture: don't have a texture with a name: {}", file_name);
+        LOG_ERROR("TextureSystem::get_texture: don't have a texture with a name: {}", file_name);
         return nullptr;
     }
     
@@ -322,7 +339,7 @@ Texture* texture_system_get_texture(std::string_view file_name) {
 }
 
 // only frees the texture if ref_count was 1
-void texture_system_free_texture(const VulkanDevice& device, std::string_view file_name) {
+void TextureSystem::free_texture(const VulkanDevice& device, std::string_view file_name) {
     std::string_view texture_name{ strip_extension_from_file_name(file_name) };
     Option<TextureRef*> maybe_texture = state_ptr->texture_lookup_table.get(texture_name);
 
@@ -340,10 +357,6 @@ void texture_system_free_texture(const VulkanDevice& device, std::string_view fi
         texture.destroy(device); 
         state_ptr->texture_lookup_table.remove(texture_name);
     }
-}
-
-static u32 get_new_texture_id() {
-    return state_ptr->id_counter++;
 }
 
 } // sf

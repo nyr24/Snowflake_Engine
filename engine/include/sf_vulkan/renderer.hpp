@@ -12,7 +12,6 @@
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
-#include "sf_vulkan/texture.hpp"
 #include "sf_containers/optional.hpp"
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
@@ -94,6 +93,9 @@ struct Camera {
 };
 
 struct VulkanRenderer {
+public:
+    static constexpr u32 MAX_MESH_COUNT{ 512 };
+    FixedArray<Mesh, MAX_MESH_COUNT>   meshes;
     PlatformState*                     platform_state;
     VulkanGlobalUniformBufferObject    global_ubo;
     Camera                             camera;
@@ -102,7 +104,7 @@ struct VulkanRenderer {
 };
 
 VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_state);
-bool renderer_post_init();
+bool renderer_post_init(ArenaAllocator& main_alloc, StackAllocator& temp_alloc);
 bool renderer_on_resize(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 bool renderer_begin_frame(f64 delta_time);
 void renderer_end_frame(f64 delta_time);

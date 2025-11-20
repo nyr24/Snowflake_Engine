@@ -35,7 +35,15 @@ ConstantBuffer<GlobalUniformObject> global_ubo;
 ConstantBuffer<LocalUniformObject> object_ubo;
 
 [[vk::binding(1, 1)]]
-Sampler2D sampler;
+Sampler2D diffuse;
+// [[vk::binding(2, 1)]]
+// Sampler2D diffuse2;
+// [[vk::binding(3, 1)]]
+// Sampler2D diffuse3;
+// [[vk::binding(4, 1)]]
+// Sampler2D specular1;
+// [[vk::binding(5, 1)]]
+// Sampler2D ambient;
 
 [[vk::push_constant]]
 ConstantBuffer<PushConstantBlock> push_constants;
@@ -48,10 +56,11 @@ VSOutput vertMain(VSInput input) {
     return output;
 }
 
+static const int SAMPLER_COUNT = 10;
+
 [shader("fragment")]
 float4 fragMain(VSOutput input) : SV_Target
 {
-    float4 sampled_texture = sampler.Sample(input.texture_coord);
-    // return float4(object_ubo.diffuse_color.xyz * sampled_texture.xyz, 1.0f);
+    float4 sampled_texture = diffuse.Sample(input.texture_coord);
     return sampled_texture;
 }

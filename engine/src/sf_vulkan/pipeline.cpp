@@ -2,6 +2,7 @@
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float4.hpp"
 #include "sf_allocators/stack_allocator.hpp"
+#include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/result.hpp"
 #include "sf_core/application.hpp"
@@ -17,8 +18,8 @@
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/texture.hpp"
 #include "sf_vulkan/swapchain.hpp"
+#include <string_view>
 #include <vulkan/vulkan_core.h>
-#include <filesystem>
 #include <span>
 
 namespace sf {
@@ -38,20 +39,25 @@ VulkanShaderPipeline::VulkanShaderPipeline()
  
 bool VulkanShaderPipeline::create(
     VulkanContext&                 context,
-    const char*                    shader_file_name,
+    std::string_view               shader_file_name,
     VkPrimitiveTopology            primitive_topology,
     bool                           enable_color_blend,
     const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& attrib_description_config,
     VkViewport                     viewport,
     VkRect2D                       scissors,
     std::span<Texture*>            default_textures,
-    VulkanShaderPipeline&          out_pipeline
+    VulkanShaderPipeline&          out_pipeline,
+    StackAllocator&                alloc
 ) {
-    #ifdef SF_DEBUG
-    fs::path shader_path = fs::current_path() / "build" / "debug/engine/shaders/" / shader_file_name;
-    #else
-    fs::path shader_path = fs::current_path() / "build" / "release/engine/shaders/" / shader_file_name;
-    #endif
+#ifdef SF_DEBUG
+    std::string_view init_path = "build/debug/engine/shaders/";
+#else
+    std::string_view init_path = "build/release/engine/shaders/";
+#endif
+    StringBacked<StackAllocator> shader_path(init_path.size() + shader_file_name.size() + 1, &alloc);
+    shader_path.append_sv(init_path);
+    shader_path.append_sv(shader_file_name);
+    shader_path.append('\0');
 
     Result<VkShaderModule> maybe_shader_module = create_shader_module(context.device, std::move(shader_path));
     if (maybe_shader_module.is_err()) {
@@ -250,7 +256,7 @@ void VulkanShaderPipeline::update_material(VulkanContext& context, MaterialUpdat
     u32 range{sizeof(LocalUniformObject)};
     u64 offset{sizeof(LocalUniformObject) * render_data.descriptor_state_index};
 
-    local_ubo.update(offset, render_data.material->config.diffuse_color);
+    local_ubo.update(offset, render_data.material->diffuse_color);
 
     VkDescriptorBufferInfo buffer_info{
         .buffer = local_ubo.buffer.handle,
@@ -277,15 +283,14 @@ void VulkanShaderPipeline::update_material(VulkanContext& context, MaterialUpdat
 
     descriptor_index++;
 
+    // TODO: abstract in Texture.bind();
     // Samplers
     constexpr u32 SAMPLER_COUNT{1};
     FixedArray<VkDescriptorImageInfo, SAMPLER_COUNT> image_infos(SAMPLER_COUNT);
 
     for (u32 i{0}; i < SAMPLER_COUNT; ++i) {
-        Texture* diffuse_texture{ render_data.material->diffuse_map.texture };
-        if (!diffuse_texture) {
-            continue;
-        }
+        // Texture* diffuse_texture{ render_data.material->diffuse_map.texture };
+        Texture* diffuse_texture = render_data.material->diffuse_textures[0];
         
         u32& descriptor_generation{ object_state.descriptor_states[descriptor_index].generations[curr_frame] };
 
@@ -493,8 +498,8 @@ void VulkanDescriptorSetLayout::destroy(const VulkanDevice& device) {
     }
 }
 
-Result<VkShaderModule> create_shader_module(const VulkanDevice& device, fs::path&& shader_file_path) {
-    Result<DynamicArrayBacked<char, StackAllocator>> shader_file_contents = read_file(shader_file_path, application_get_temp_allocator());
+Result<VkShaderModule> create_shader_module(const VulkanDevice& device, StringBacked<StackAllocator>&& shader_file_path) {
+    Result<StringBacked<StackAllocator>> shader_file_contents = read_file(shader_file_path.to_string_view(), application_get_temp_allocator());
 
     if (shader_file_contents.is_err()) {
         return {ResultError::VALUE};

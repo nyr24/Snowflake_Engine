@@ -1,4 +1,4 @@
 diffuse_color=0.3f 0.8f 0.5f 1.0f
 name=test
-texture_map_name=grass.jpg
+diffuse_texture_name=grass.jpg
 auto_release=false

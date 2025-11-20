@@ -1,6 +1,8 @@
 #pragma once
 
 #include "glm/fwd.hpp"
+#include "sf_allocators/stack_allocator.hpp"
+#include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/optional.hpp"
 #include "sf_core/defines.hpp"
@@ -9,19 +11,15 @@
 #include "sf_vulkan/material.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/texture.hpp"
-#include <filesystem>
+#include "sf_vulkan/shared_types.hpp"
 #include <span>
+#include <string_view>
 #include <vulkan/vulkan_core.h>
 #include <glm/glm.hpp>
 
-namespace fs = std::filesystem;
-
 namespace sf {
 
-struct VulkanContext;
-struct VulkanCommandBuffer;
-
-Result<VkShaderModule> create_shader_module(const VulkanDevice& device, fs::path&& shader_file_path);
+Result<VkShaderModule> create_shader_module(const VulkanDevice& device, StringBacked<StackAllocator>&& shader_file_path);
 
 struct VulkanDescriptorSetLayout {
 public:
@@ -90,14 +88,15 @@ public:
     
     static bool create(
         VulkanContext&                 context,
-        const char*                    shader_file_name,
+        std::string_view               shader_file_name,
         VkPrimitiveTopology            primitive_topology,
         bool                           enable_color_blend,
         const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& attrib_descriptions,
         VkViewport                     viewport,
         VkRect2D                       scissors,
         std::span<Texture*>            default_textures,
-        VulkanShaderPipeline&          out_pipeline
+        VulkanShaderPipeline&          out_pipeline,
+        StackAllocator&                alloc
     );
     void destroy(const VulkanDevice& device);
     void bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_frame);

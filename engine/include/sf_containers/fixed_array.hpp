@@ -16,7 +16,7 @@ namespace sf {
 // _capacity and _len are in elements, not bytes
 template<typename T, u32 Capacity>
 struct FixedArray {
-private:
+protected:
     u32 _count;
     T   _buffer[Capacity];
 
@@ -50,29 +50,16 @@ public:
         }
     }
 
-    FixedArray(const FixedArray<T, Capacity>& rhs) noexcept
+    constexpr FixedArray(const FixedArray<T, Capacity>& rhs) noexcept
         : _count{ rhs._count }
     {
         sf_mem_copy((void*)_buffer, (void*)(rhs._buffer), sizeof(T) * _count);
     }
 
-    FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
+    constexpr FixedArray<T, Capacity>& operator=(const FixedArray<T, Capacity>& rhs) noexcept {
         _count = rhs._count;
         sf_mem_copy((void*)_buffer, (void*)rhs._buffer, sizeof(T) * _count);
         return *this;
-    }
-
-    FixedArray(std::string_view str) noexcept
-        : _count{static_cast<u32>(str.size())}
-    {
-        sf_mem_copy((void*)_buffer, (void*)str.data(), sizeof(T) * _count);
-    }
-
-    FixedArray(std::span<T> sp) noexcept
-        : _count{ sp.size() }
-    {
-        SF_ASSERT_MSG(sp.size() <= Capacity, "Should not exceed capacity");
-        sf_mem_copy((void*)_buffer, (void*)sp.data(), sizeof(T) * _count); 
     }
 
     constexpr FixedArray(FixedArray<T, Capacity>&& rhs) noexcept
@@ -83,8 +70,16 @@ public:
 
     constexpr FixedArray<T, Capacity>& operator=(FixedArray<T, Capacity>&& rhs) noexcept
     {
-        sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * _count);
+        _count = rhs._count;
+        sf_mem_copy(_buffer, rhs._buffer, sizeof(T) * rhs._count);
         return *this;
+    }
+
+    constexpr FixedArray(std::span<T> sp) noexcept
+        : _count{ static_cast<u32>(sp.size()) }
+    {
+        SF_ASSERT_MSG(sp.size() <= Capacity, "Should not exceed capacity");
+        sf_mem_copy((void*)_buffer, (void*)sp.data(), sizeof(T) * _count); 
     }
 
     constexpr FixedArray<T, Capacity>& operator=(const std::span<T> sp) noexcept
@@ -188,13 +183,24 @@ public:
     }
 
     constexpr void resize(u32 count) noexcept {
-        if (count <= Capacity) {
-            _count = count;
+        if (count > Capacity || count <= _count) {
+            return;
+        }
+        u32 diff = count - _count;
+        if constexpr (std::is_trivial_v<T>) {
+            move_forward(diff);
+        } else {
+            move_forward_and_default_construct(diff);
         }
     }
 
     constexpr void resize_to_capacity() noexcept {
-        _count = Capacity;
+        u32 diff = Capacity - _count;
+        if constexpr (std::is_trivial_v<T>) {
+            move_forward(diff);
+        } else {
+            move_forward_and_default_construct(diff);
+        }
     }
 
     constexpr void pop() noexcept {
@@ -217,24 +223,12 @@ public:
         _count = Capacity;
     }
 
-    constexpr bool cmp_ranges(const FixedArray<T, Capacity>& rhs, u32 start, u32 rhs_start, u32 count) const noexcept {
-        return sf_mem_cmp(this->data_offset(start), rhs.data_offset(rhs_start), count);
-    }
-
     constexpr std::span<T> to_span(u32 start = 0, u32 len = 0) noexcept {
         return std::span{ _buffer + start, len == 0 ? _count : len };
     }
 
     constexpr std::span<const T> to_span(u32 start = 0, u32 len = 0) const noexcept {
         return std::span{ _buffer + start, len == 0 ? _count : len };
-    }
-
-    constexpr std::string_view to_string_view(u32 start = 0, u32 len = 0) noexcept {
-        return std::string_view{ _buffer + start, len == 0 ? _count : len };
-    }
-
-    constexpr std::string_view to_string_view(u32 start = 0, u32 len = 0) const noexcept {
-        return std::string_view{ static_cast<const T*>(_buffer + start), len == 0 ? _count : len };
     }
 
     constexpr bool has(ConstLRefOrValType<T> item) noexcept {
@@ -305,7 +299,7 @@ public:
         return _buffer[ind];
     }
 
-private:
+protected:
     constexpr T* move_forward_and_get_ptr(u32 alloc_count) noexcept
     {
         u32 free_capacity = Capacity - _count;
@@ -366,5 +360,65 @@ private:
     }
 
 }; // FixedArray
+
+template<u32 CAPACITY>
+struct FixedString : public FixedArray<char, CAPACITY>
+{
+    using FixedArray<char, CAPACITY>::FixedArray;
+
+    constexpr FixedString(std::string_view str) noexcept
+        : FixedArray<char, CAPACITY>(static_cast<u32>(str.size()))
+    {
+        sf_mem_copy((void*)this->_buffer, (void*)str.data(), sizeof(char) * this->_count);
+    }
+    
+    constexpr std::string_view to_string_view(u32 start = 0, u32 len = 0) noexcept {
+        return std::string_view{ this->data_offset(start), len == 0 ? this->_count : len };
+    }
+
+    constexpr std::string_view to_string_view(u32 start = 0, u32 len = 0) const noexcept {
+        return std::string_view{ this->data_offset(start), len == 0 ? this->_count : len };
+    }
+
+    void append_sv(std::string_view sv) noexcept {
+        if (this->_count + sv.size() > CAPACITY) {
+            return;
+        }
+        
+        this->move_forward(sv.size());
+        sf_mem_copy(this->data() + (this->_count - sv.size()), (void*)sv.data(), sizeof(char) * sv.size());
+    }
+
+    void trim_end(char trimmer = ' ') noexcept {
+        while (this->_count > 0 && (this->last() == trimmer)) {
+            this->_count--;
+        }
+    }
+
+    void concat(FixedString<CAPACITY>& rhs) noexcept {
+        if (this->_count + rhs._count > CAPACITY) {
+            return;
+        }
+        
+        u32 old_count = this->_scount;
+        this->resize(this->_count + rhs->_count);
+        sf_mem_copy((void*)(this->data_offset(old_count)), (void*)rhs.data(), rhs.size_in_bytes());
+    }
+
+    void ensure_null_terminated() noexcept {
+        if (!is_null_terminated()) {
+            if (this->capacity_remain() > 0) {
+                this->append('\0');
+            } else {
+                this->last() = '\0';
+            }
+        }
+    }
+
+    bool is_null_terminated() noexcept {
+        return this->last() == '\0';
+    }
+};
+
 
 } // sf

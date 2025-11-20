@@ -4,14 +4,11 @@
 
 namespace sf {
 
-static EventSystemState* state_ptr{nullptr};
+static EventSystem* state_ptr{nullptr};
 
-void EventSystemState::create(EventSystemState& out_system) {
+void EventSystem::create(EventSystem& out_system) {
+    state_ptr = &out_system;
     out_system.event_lists.resize_to_capacity();
-}
-
-void event_system_init_internal_state(EventSystemState* event_state) {
-    state_ptr = event_state;
 }
 
 SF_EXPORT bool event_system_add_listener(u8 code, void* listener, OnEventFn on_event_callback) {

@@ -83,16 +83,6 @@ void dyn_array_test() {
         auto time = clock.update_and_get_delta();
         LOG_TEST("new dyn array (no handle): {}", time);
     }
-
-    {
-        DynamicArray<u8> arr(32);
-        clock.restart();
-        for (usize i{0}; i < BIG_SIZE; ++i) {
-            arr.append(rand());
-        }
-        auto time = clock.update_and_get_delta();
-        LOG_TEST("default dyn array: {}", time);
-    }
 }
 
 void stack_allocator_test() {

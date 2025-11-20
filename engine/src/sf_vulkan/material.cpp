@@ -9,12 +9,23 @@
 #include "sf_core/logger.hpp"
 #include "sf_core/io.hpp"
 #include "sf_core/application.hpp"
+#include "sf_core/memory_sf.hpp"
 #include "sf_core/parsing.hpp"
+#include "sf_vulkan/command_buffer.hpp"
+#include "sf_vulkan/device.hpp"
 #include "sf_vulkan/texture.hpp"
 #include <span>
 #include <string_view>
 
 namespace sf {
+
+static MaterialSystem* state_ptr{nullptr};
+
+void Material::create_empty(u32 id, Material& mat) {
+    sf_mem_zero(&mat, sizeof(Material));
+    mat.id = id;
+    mat.generation = INVALID_ID;
+}
 
 void Material::destroy() {
     id = INVALID_ID;
@@ -23,114 +34,149 @@ void Material::destroy() {
 
 // NOTE: must be ordered as in MaterialConfig struct
 FixedArray<std::string_view, MaterialConfig::PROP_COUNT> config_property_names{
-    "name", "texture_map_name", "diffuse_color", "auto_release"
+    "name", "diffuse_texture_name", "diffuse_color", "auto_release"
 };
 
-static MaterialSystemState* state_ptr{nullptr};
-
-void MaterialSystemState::create(ArenaAllocator& system_allocator, MaterialSystemState& out_system) {
+void MaterialSystem::create(ArenaAllocator& system_allocator, MaterialSystem& out_system) {
+    state_ptr = &out_system;
     out_system.materials.set_allocator(&system_allocator);
     out_system.material_lookup_table.set_allocator(&system_allocator);
-    out_system.materials.resize(MAX_MATERIAL_AMOUNT);
-    out_system.material_lookup_table.reserve(MAX_MATERIAL_AMOUNT);
+    out_system.materials.resize(INIT_MATERIAL_AMOUNT);
+    out_system.material_lookup_table.reserve(INIT_MATERIAL_AMOUNT);
 
-    for (auto& m : out_system.materials) {
-        m.id = INVALID_ID;
-        m.generation = INVALID_ID;
-    }
-    for (auto& m : out_system.material_lookup_table) {
-        m.value.handle = INVALID_ID;
+    u32 count = out_system.materials.count();
+    for (u32 i{0}; i < count; ++i) {
+        auto& mat = out_system.materials[i];
+        Material::create_empty(i, mat);
     }
 }
 
-void material_system_init_internal_state(MaterialSystemState* state) {
-    state_ptr = state;
+void MaterialSystem::create_default_material(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc) {
+    Material::create_empty(-1, state_ptr->default_material); 
+    MaterialSystem::get_or_load_material_from_file(MaterialSystem::DEFAULT_NAME, device, cmd_buffer, alloc);
 }
 
-MaterialSystemState::~MaterialSystemState()
+Material& MaterialSystem::get_default_material() {
+    SF_ASSERT_MSG(state_ptr, "Should be valid ptr");
+    return state_ptr->default_material;
+}
+
+Material& MaterialSystem::get_empty_slot() {
+    SF_ASSERT_MSG(state_ptr, "Should be valid ptr");
+
+    auto& materials = state_ptr->materials;
+    u32 count{ materials.count() };
+    
+    for (u32 i{0}; i < count; ++i) {
+        if (materials[i].generation == INVALID_ID) {
+            materials[i].generation = 0;
+            return materials[i];
+        }
+    }
+    // empty slot not found, do resizing
+    u32 free_slot = materials.count();
+    materials.resize_exponent(materials.count() + 1);
+
+    Material::create_empty(free_slot, materials[free_slot]);
+    count = materials.count();
+
+    for (u32 i{free_slot + 1}; i < count; ++i) {
+        Material::create_empty(i, materials[i]);
+    }
+
+    return materials[free_slot];
+}
+
+MaterialSystem::~MaterialSystem()
 {
     for (auto& m : materials) {
         m.destroy();
     }
 }
 
-static bool material_parse_config(std::string_view file_name, MaterialConfig& out_config);
+static bool material_parse_config(std::string_view file_name, MaterialConfig& out_config, StackAllocator& alloc);
 static bool is_all_config_parsed(u8 parsed_state);
-static u32 get_new_material_id();
 
-void material_system_load_from_file_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, std::span<std::string_view> file_names, std::span<Material*> out_materials) {
+Material& MaterialSystem::create_material_from_textures(
+    const VulkanDevice& device,
+    VulkanCommandBuffer& cmd_buffer,
+    StackAllocator& alloc,
+    std::span<TextureInputConfig> diffuse_tex_configs,
+    std::span<TextureInputConfig> specular_tex_configs,
+    std::span<TextureInputConfig> ambient_tex_configs
+) {
+    Material& new_mat = MaterialSystem::get_empty_slot();
+    new_mat.diffuse_textures.resize(std::min(static_cast<u32>(diffuse_tex_configs.size()), Material::MAX_DIFFUSE_COUNT));
+    new_mat.diffuse_textures.resize(std::min(static_cast<u32>(specular_tex_configs.size()), Material::MAX_SPECULAR_COUNT));
+    new_mat.diffuse_textures.resize(std::min(static_cast<u32>(ambient_tex_configs.size()), Material::MAX_AMBIENT_COUNT));
+    TextureSystem::get_or_load_textures_many(device, cmd_buffer, alloc, diffuse_tex_configs, new_mat.diffuse_textures.to_span());
+    TextureSystem::get_or_load_textures_many(device, cmd_buffer, alloc, specular_tex_configs, new_mat.specular_textures.to_span());
+    TextureSystem::get_or_load_textures_many(device, cmd_buffer, alloc, ambient_tex_configs, new_mat.ambient_textures.to_span());
+
+    // NOTE: this is not a reference to current stack frame memory (safe)
+    return new_mat;
+}
+
+void MaterialSystem::load_material_from_file_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc, std::span<std::string_view> file_names, std::span<Material*> out_materials) {
     SF_ASSERT(file_names.size() == out_materials.size());
     for (u32 i{0}; i < file_names.size(); ++i) {
-       out_materials[i] = material_system_get_or_load_from_file(file_names[i], device, cmd_buffer);
+       out_materials[i] = MaterialSystem::get_or_load_material_from_file(file_names[i], device, cmd_buffer, alloc);
     }
 }
 
-void material_system_load_from_config_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, std::span<MaterialConfig> configs, std::span<Material*> out_materials) {
+void MaterialSystem::load_material_from_config_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc, std::span<MaterialConfig> configs, std::span<Material*> out_materials) {
     SF_ASSERT(configs.size() == out_materials.size());
     for (u32 i{0}; i < configs.size(); ++i) {
-       out_materials[i] = material_system_get_or_load_from_config(configs[i], device, cmd_buffer);
+       out_materials[i] = MaterialSystem::get_or_load_material_from_config(std::move(configs[i]), device, cmd_buffer, alloc);
     }
 }
 
-Material* material_system_get_or_load_from_file(std::string_view file_name, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer) {
+Material* MaterialSystem::get_or_load_material_from_file(std::string_view file_name, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc) {
     MaterialConfig config;
-    bool parse_res = material_parse_config(file_name, config);
+    bool parse_res = material_parse_config(file_name, config, alloc);
     if (!parse_res) {
         return nullptr;
     }
-    return material_system_get_or_load_from_config(config, device, cmd_buffer);
+    return MaterialSystem::get_or_load_material_from_config(std::move(config), device, cmd_buffer, alloc);
 }
 
-Material* material_system_get_or_load_from_config(MaterialConfig& config, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer) {
-    Option<MaterialRef*> maybe_existing_material = state_ptr->material_lookup_table.get(config.name.to_string_view());
-    if (maybe_existing_material.is_some()) {
-        MaterialRef* existing_material = maybe_existing_material.unwrap_copy();
+Material* MaterialSystem::get_or_load_material_from_config(MaterialConfig&& config, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc) {
+    Option<MaterialRef*> maybe_existing_material_ref = state_ptr->material_lookup_table.get(config.name.to_string_view());
+    if (maybe_existing_material_ref.is_some()) {
+        MaterialRef* existing_material = maybe_existing_material_ref.unwrap_copy();
         existing_material->ref_count++;
         return &state_ptr->materials[existing_material->handle];
     }
 
-    Material new_material{
-        .id = get_new_material_id(),
-        .generation = 0,
-        .config = config,
-    };
+    Material& new_mat = MaterialSystem::get_empty_slot();
+    new_mat.config.set_some(std::move(config));
 
-    TextureInputConfig texture_conf{ config.texture_map_name.to_string_view() };
-    new_material.diffuse_map = {
-        .texture = texture_system_get_or_load_texture(device, cmd_buffer, texture_conf),
-        .use = TextureUse::MAP_DIFFUSE
-    };
+    TextureInputConfig texture_conf{ config.diffuse_texture_name.to_string_view() };
+    
+    // TODO: remove if maps are bad idea
+    // new_mat.diffuse_map = {
+    //     .texture = texture_system_get_or_load_texture(device, cmd_buffer, texture_conf, alloc),
+    //     .use = TextureUse::MAP_DIFFUSE
+    // };
+    new_mat.diffuse_textures.append(TextureSystem::get_or_load_texture(device, cmd_buffer, texture_conf, alloc));
 
 #ifdef SF_DEBUG
-    if (!new_material.diffuse_map.texture) {
-        LOG_ERROR("Material {} can not acquire texture with name: {}, file is missing", config.name.to_string_view(), config.texture_map_name.to_string_view());
+    if (!new_mat.diffuse_textures[0] || new_mat.diffuse_textures[0]->generation == INVALID_ID) {
+        LOG_ERROR("Material {} can not acquire texture with name: {}, file is missing", config.name.to_string_view(), config.diffuse_texture_name.to_string_view());
     }
 #endif
 
-    u32 handle{0};
-    for (u32 i{0}; i < state_ptr->materials.capacity(); ++i) {
-        if (state_ptr->materials[i].id == INVALID_ID) {
-            state_ptr->materials[i] = new_material;
-            handle = i;
-        }
-    }
-
-    if (handle >= state_ptr->materials.capacity()) {
-        LOG_ERROR("Not enough space to load texture: {}", config.name.to_string_view());
-        return nullptr;
-    }
-
     MaterialRef ref{
-        .handle = handle,
+        .handle = new_mat.id,
         .ref_count = 0,
         .auto_release = config.auto_release,    
     };
 
-    state_ptr->material_lookup_table.put(new_material.config.name.to_string_view(), ref);
-    return &state_ptr->materials[ref.handle];
+    state_ptr->material_lookup_table.put(new_mat.config.unwrap_ref().name.to_string_view(), ref);
+    return &new_mat;
 }
 
-void material_system_free_material(std::string_view name_input) {
+void MaterialSystem::free_material(std::string_view name_input) {
     auto name = strip_extension_from_file_name(name_input);
     Option<MaterialRef*> maybe_material_ref = state_ptr->material_lookup_table.get(name);
     if (maybe_material_ref.is_none()) {
@@ -149,21 +195,26 @@ void material_system_free_material(std::string_view name_input) {
     }
 }
 
-static bool material_parse_config(std::string_view file_name, MaterialConfig& out_config) {
+static bool material_parse_config(std::string_view file_name, MaterialConfig& out_config, StackAllocator& alloc) {
 #ifdef SF_DEBUG
-    fs::path file_path = fs::current_path() / "build" / "debug/engine/assets/materials/" / file_name;
+    std::string_view init_path = "build/debug/engine/assets/materials/";
 #else
-    fs::path file_path = fs::current_path() / "build" / "release/engine/assets/materials/" / file_name;
+    std::string_view init_path = "build/release/engine/assets/materials/";
 #endif
-    auto maybe_file_contents = read_file(file_path, application_get_temp_allocator());
+    StringBacked<StackAllocator> material_path(init_path.size() + file_name.size() + 1, &alloc);
+    material_path.append_sv(init_path);
+    material_path.append_sv(file_name);
+    material_path.append('\0');
+
+    auto maybe_file_contents = read_file(material_path.to_string_view(), application_get_temp_allocator());
     if (maybe_file_contents.is_err()) {
-        LOG_ERROR("Material System: can't read file from path: {}", file_path.c_str());
+        LOG_ERROR("Material System: can't read file from path: {}", material_path.to_string_view());
         return false;
     }
 
     StringBacked<StackAllocator> file_contents{ maybe_file_contents.unwrap_move() };    
 
-    FixedArray<char, MaterialConfig::MAX_STR_LEN> line_buff;
+    FixedString<MaterialConfig::MAX_STR_LEN> line_buff;
     Parser<StackAllocator> parser{ file_contents };
     // bitwise
     u8 parsed_state{0};
@@ -201,7 +252,7 @@ static bool material_parse_config(std::string_view file_name, MaterialConfig& ou
                 out_config.name = line_buff.to_span();
             } break;
             case 1: {
-                out_config.texture_map_name = line_buff.to_span();
+                out_config.diffuse_texture_name = line_buff.to_string_view();
             } break;
             case 2: {
                 glm::vec4 vec;
@@ -232,10 +283,6 @@ static bool material_parse_config(std::string_view file_name, MaterialConfig& ou
 
 static bool is_all_config_parsed(u8 parsed_state) {
     return (parsed_state & 0b1111) == 0b1111;
-}
-
-static u32 get_new_material_id() {
-    return state_ptr->id_counter++;
 }
 
 } // sf

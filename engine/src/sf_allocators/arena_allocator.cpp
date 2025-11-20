@@ -1,5 +1,6 @@
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/traits.hpp"
+#include "sf_core/application.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/defines.hpp"
@@ -11,8 +12,9 @@
 namespace sf {
 
 ArenaAllocator::ArenaAllocator()
-    : regions(DEFAULT_REGIONS_INIT_CAPACITY)
-{}
+    : regions(DEFAULT_REGIONS_INIT_CAPACITY, &application_get_gpa())
+{
+}
 
 void* ArenaAllocator::allocate(usize size, u16 alignment) {
     const usize aligned_size = (size + alignment - 1) & ~(alignment - 1);
@@ -89,19 +91,19 @@ void ArenaAllocator::clear() {
 
 void ArenaAllocator::reserve(usize needed_capacity) {
     Region* region;
-    i32 founded_region{-1};
+    u32 founded_region{regions.count()};
 
     for (i32 i{0}; i < regions.count(); ++i) {
         region = &regions[i];
         if (!region->data) {
             founded_region = i;
         }
-        else if ((region->offset - region->capacity) >= needed_capacity) {
+        else if ((region->capacity - region->offset) >= needed_capacity) {
             founded_region = i;
         }
     }
 
-    if (founded_region == -1) {
+    if (founded_region == regions.count()) {
         regions.append(Region{});
         region = regions.last_ptr();
     }

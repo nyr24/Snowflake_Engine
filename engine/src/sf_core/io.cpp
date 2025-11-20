@@ -16,7 +16,6 @@ std::string_view extract_extension_from_file_name(std::string_view file_name) {
     }
 
     if (last_dot_ind == 0) {
-        LOG_WARN("File name {} don't have extension, nothing to strip", file_name);
         return file_name;
     }
 
@@ -35,7 +34,6 @@ std::string_view strip_extension_from_file_name(std::string_view file_name) {
     }
 
     if (last_dot_ind == 0) {
-        LOG_WARN("File name {} don't have extension, nothing to strip", file_name);
         return file_name;
     }
 

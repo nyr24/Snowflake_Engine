@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sf_allocators/arena_allocator.hpp"
+#include "sf_allocators/general_purpose_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_core/clock.hpp"
@@ -26,10 +27,11 @@ public:
     static constexpr f64 TARGET_FRAME_SECONDS = 1.0 / 60.0;
     ArenaAllocator              main_allocator;
     StackAllocator              temp_allocator;
-    EventSystemState            event_system;
-    TextureSystemState          texture_system;
-    MaterialSystemState         material_system;
-    MeshSystemState             mesh_system;
+    GeneralPurposeAllocator     gpa;
+    EventSystem                 event_system;
+    TextureSystem               texture_system;
+    MaterialSystem              material_system;
+    GeometrySystem              geometry_system;
     PlatformState               platform_state;
     GameInstance*               game_inst;
     Clock                       clock;
@@ -48,6 +50,7 @@ bool application_on_mouse(u8 code, void* sender, void* listener_inst, Option<Eve
 bool application_on_key(u8 code, void* sender, void* listener_inst, Option<EventContext> context);
 ArenaAllocator& application_get_main_allocator();
 StackAllocator& application_get_temp_allocator();
+GeneralPurposeAllocator& application_get_gpa();
 
 }
 

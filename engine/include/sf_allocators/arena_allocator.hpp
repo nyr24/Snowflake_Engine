@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sf_allocators/general_purpose_allocator.hpp"
 #include "sf_containers/traits.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_containers/dynamic_array.hpp"
@@ -23,7 +24,7 @@ public:
         u32 offset;
     };
 private:
-    DynamicArray<Region> regions;
+    DynamicArrayBacked<Region, GeneralPurposeAllocator, false> regions;
 public:
     ArenaAllocator();
     ~ArenaAllocator();

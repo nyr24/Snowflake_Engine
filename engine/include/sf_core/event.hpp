@@ -47,19 +47,18 @@ struct Event {
     OnEventFn   callback;
 };
 
-struct EventSystemState {
+struct EventSystem {
     static constexpr u32 MAX_EVENT_COUNT{50};
     FixedArray<FixedArray<Event, MAX_EVENT_COUNT>, static_cast<u32>(SystemEventCode::COUNT)> event_lists;
 
-    static void create(EventSystemState& out_system);
-    ~EventSystemState() {
+    static void create(EventSystem& out_system);
+    ~EventSystem() {
         for (auto& list : event_lists) {
             list.clear();
         }
     }
 };
 
-void event_system_init_internal_state(EventSystemState* state);
 SF_EXPORT bool event_system_add_listener(u8 code, void* listener, OnEventFn on_event);
 SF_EXPORT bool event_system_remove_listener(u8 code, void* listener, OnEventFn on_event);
 SF_EXPORT bool event_system_fire_event(u8 code, void* sender, Option<EventContext> context);

@@ -1,11 +1,10 @@
 #pragma once
 
 #include "sf_core/defines.hpp"
+#include "sf_vulkan/shared_types.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
-struct VulkanDevice;
-struct VulkanCommandBuffer;
 
 struct VulkanImage {
 public:

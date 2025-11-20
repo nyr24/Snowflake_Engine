@@ -38,8 +38,8 @@ struct VulkanPhysicalDeviceRequirements {
 };
 
 struct VulkanSwapchainSupportInfo {
-    DynamicArrayBacked<VkSurfaceFormatKHR, ArenaAllocator>    formats;
-    DynamicArrayBacked<VkPresentModeKHR, ArenaAllocator>      present_modes;
+    DynamicArrayBacked<VkSurfaceFormatKHR, ArenaAllocator, false> formats;
+    DynamicArrayBacked<VkPresentModeKHR, ArenaAllocator, false>   present_modes;
     VkSurfaceCapabilitiesKHR            capabilities;
     u32                                 format_count;
     u32                                 present_mode_count;

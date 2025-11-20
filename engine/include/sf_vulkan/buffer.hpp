@@ -1,13 +1,11 @@
 #pragma once
 
 #include "glm/ext/matrix_float4x4.hpp"
-#include "sf_allocators/arena_allocator.hpp"
-// #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_core/defines.hpp"
-#include "sf_vulkan/mesh.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/swapchain.hpp"
+#include "sf_vulkan/shared_types.hpp"
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -31,14 +29,15 @@ struct VulkanVertexIndexBuffer {
 public:
     VulkanBuffer                               staging_buffer;
     VulkanBuffer                               main_buffer;
-    Mesh*                                      mesh;
+    Geometry*                                  geometry;
 public:
-    static bool create(const VulkanDevice& device, Mesh* mesh, VulkanVertexIndexBuffer& out_buffer);
+    static bool create(const VulkanDevice& device, Geometry* init_geometry, VulkanVertexIndexBuffer& out_buffer);
     bool copy_data_to_staging_buffer(const VulkanDevice& device);
     void destroy(const VulkanDevice& device);
     void bind(const VulkanCommandBuffer& cmd_buffer);
-    void set_mesh(const VulkanDevice& device, Mesh* mesh);
+    void set_geometry(const VulkanDevice& device, const Geometry& geometry);
     void draw(const VulkanCommandBuffer& cmd_buffer);
+    u32  curr_geometry_id() const;
 };
 
 // Needs to be at least 256 bytes for Nvidia cards
