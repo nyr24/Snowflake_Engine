@@ -109,7 +109,7 @@ void* FreeList<RESIZABLE>::allocate(usize size, u16 alignment) noexcept {
     usize remain_space = curr->size - required_space;
 
     if (remain_space > MIN_ALLOC_SIZE + sizeof(FreeListNode)) {
-        FreeListNode* new_node = ptr_step_bytes_forward(curr, required_space);
+        FreeListNode* new_node = ptr_step_bytes_forward<FreeListNode>(curr, required_space);
         new_node->size = remain_space;
         insert_node(curr, new_node);
     }

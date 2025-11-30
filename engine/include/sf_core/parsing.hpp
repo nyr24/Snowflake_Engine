@@ -13,10 +13,10 @@ template<AllocatorTrait Allocator>
 struct Parser {
 public:
     using CheckCharFn = i32(*)(i32) noexcept;
-    const StringBacked<Allocator>& str;
+    const String<Allocator>& str;
     u32 offset;
 public:
-    Parser(const StringBacked<Allocator>& str_in)
+    Parser(const String<Allocator>& str_in)
         : str{ str_in }
         , offset{0}
     {}

@@ -3,7 +3,6 @@
 #include "sf_containers/optional.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_vulkan/image.hpp"
-#include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/synch.hpp"
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"

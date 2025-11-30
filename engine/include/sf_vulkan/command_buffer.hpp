@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sf_containers/optional.hpp"
-#include "sf_vulkan/pipeline.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_vulkan/synch.hpp"

@@ -19,7 +19,7 @@ namespace sf {
 
 // _capacity and _len are in elements, not bytes
 template<typename T, AllocatorTrait Allocator = GeneralPurposeAllocator, bool USE_HANDLE = true, f32 GROW_FACTOR = 2.0f, u32 DEFAULT_CAPACITY = 8>
-struct DynamicArrayBacked {
+struct DynamicArray {
 protected:
     union Data {
         T*     ptr;
@@ -36,7 +36,7 @@ public:
     using PointerType   = T*;
 
 public:
-    DynamicArrayBacked() noexcept
+    DynamicArray() noexcept
         : _allocator{nullptr}
         , _capacity{0}
         , _count{0}
@@ -48,7 +48,7 @@ public:
         }
     }
 
-    explicit DynamicArrayBacked(Allocator* allocator) noexcept
+    explicit DynamicArray(Allocator* allocator) noexcept
         : _allocator{allocator}
         , _capacity{0}
         , _count{0}
@@ -60,7 +60,7 @@ public:
         }
     }
 
-    explicit DynamicArrayBacked(u32 capacity_input, Allocator* allocator) noexcept
+    explicit DynamicArray(u32 capacity_input, Allocator* allocator) noexcept
         : _allocator{allocator}
         , _capacity{capacity_input}
         , _count{0}
@@ -72,11 +72,11 @@ public:
                 _data.ptr = static_cast<T*>(allocator->allocate(capacity_input * sizeof(T), alignof(T)));
             }
         } else {
-            LOG_ERROR("DynamicArrayBacked: provided allocator is nullptr");
+            LOG_ERROR("DynamicArray: provided allocator is nullptr");
         }
     }
 
-    explicit DynamicArrayBacked(u32 capacity_input, u32 count, Allocator* allocator) noexcept
+    explicit DynamicArray(u32 capacity_input, u32 count, Allocator* allocator) noexcept
         : _allocator{allocator}
         , _capacity{capacity_input}
         , _count{0}
@@ -91,11 +91,11 @@ public:
             }
             move_forward(count);
         } else {
-            LOG_ERROR("DynamicArrayBacked: provided allocator is nullptr");
+            LOG_ERROR("DynamicArray: provided allocator is nullptr");
         }
     }
 
-    DynamicArrayBacked(std::tuple<Allocator*, std::initializer_list<T>>&& config) noexcept
+    DynamicArray(std::tuple<Allocator*, std::initializer_list<T>>&& config) noexcept
         : _allocator{std::get<0>(config)}
         , _capacity{static_cast<u32>(std::get<1>(config).size())}
         , _count{0}
@@ -121,12 +121,12 @@ public:
                 }
             }
         } else {
-            LOG_ERROR("DynamicArrayBacked: provided allocator is nullptr");
+            LOG_ERROR("DynamicArray: provided allocator is nullptr");
         }
     }
 
 
-    DynamicArrayBacked(std::tuple<Allocator*, u32, std::initializer_list<T>>&& config) noexcept
+    DynamicArray(std::tuple<Allocator*, u32, std::initializer_list<T>>&& config) noexcept
         : _allocator{std::get<0>(config)}
         , _capacity{static_cast<u32>(std::get<1>(config))}
         , _count{0}
@@ -155,11 +155,11 @@ public:
                 }
             }
         } else {
-            LOG_ERROR("DynamicArrayBacked: provided allocator is nullptr");
+            LOG_ERROR("DynamicArray: provided allocator is nullptr");
         }
     }
 
-    DynamicArrayBacked(DynamicArrayBacked<T, Allocator>&& rhs) noexcept
+    DynamicArray(DynamicArray<T, Allocator>&& rhs) noexcept
         : _allocator{rhs._allocator}
         , _data{rhs._data}
         , _capacity{rhs._capacity}
@@ -174,7 +174,7 @@ public:
         rhs._count = 0;
     }
 
-    DynamicArrayBacked<T, Allocator>& operator=(DynamicArrayBacked<T, Allocator>&& rhs) noexcept
+    DynamicArray<T, Allocator>& operator=(DynamicArray<T, Allocator>&& rhs) noexcept
     {
         if (this == &rhs) return *this;
 
@@ -197,7 +197,7 @@ public:
         return *this;
     }
 
-    DynamicArrayBacked(const DynamicArrayBacked<T, Allocator>& rhs) noexcept
+    DynamicArray(const DynamicArray<T, Allocator>& rhs) noexcept
         : _allocator{rhs._allocator}
         , _data{rhs._data}
         , _capacity{rhs._capacity}
@@ -213,7 +213,7 @@ public:
         }
     }
 
-    DynamicArrayBacked<T, Allocator>& operator=(const DynamicArrayBacked<T, Allocator>& rhs) noexcept {
+    DynamicArray<T, Allocator>& operator=(const DynamicArray<T, Allocator>& rhs) noexcept {
         if (this == &rhs) return *this;
 
         T* data = access_data();
@@ -233,7 +233,7 @@ public:
         return *this;
     }
 
-    ~DynamicArrayBacked() noexcept
+    ~DynamicArray() noexcept
     {
         free();
     }
@@ -257,7 +257,7 @@ public:
         if (allocator) {
             _allocator = allocator;
         } else {
-            LOG_ERROR("DynamicArrayBacked : set_allocator(): provided allocator is nullptr");
+            LOG_ERROR("DynamicArray : set_allocator(): provided allocator is nullptr");
         }
     }
     
@@ -373,7 +373,7 @@ public:
 
     void resize(u32 new_count) noexcept {
         if (!_allocator) {
-            LOG_ERROR("DynamicArrayBacked : resize(): _allocator should be valid pointer");
+            LOG_ERROR("DynamicArray : resize(): _allocator should be valid pointer");
             return;
         }
 
@@ -392,7 +392,7 @@ public:
     void resize_exponent(u32 new_count) noexcept
     {
         if (!_allocator) {
-            LOG_ERROR("DynamicArrayBacked : reserve_and_resize_exponent(): _allocator should be valid pointer");
+            LOG_ERROR("DynamicArray : reserve_and_resize_exponent(): _allocator should be valid pointer");
             return;
         }
 
@@ -404,7 +404,7 @@ public:
 
     void resize_to_capacity() noexcept {
         if (!_allocator) {
-            LOG_ERROR("DynamicArrayBacked : resize(): _allocator should be valid pointer");
+            LOG_ERROR("DynamicArray : resize(): _allocator should be valid pointer");
             return;
         }
         if (_count < _capacity) {
@@ -422,7 +422,7 @@ public:
         SF_ASSERT_MSG(new_capacity >= new_count, "Invalid resize count");
 
         if (!_allocator) {
-            LOG_ERROR("DynamicArrayBacked : reserve_and_resize(): _allocator should be valid pointer");
+            LOG_ERROR("DynamicArray : reserve_and_resize(): _allocator should be valid pointer");
             return;
         }
 
@@ -488,13 +488,13 @@ public:
     }
 
     friend bool operator==(
-        const DynamicArrayBacked<T, Allocator, USE_HANDLE, GROW_FACTOR, DEFAULT_CAPACITY>& first,
-        const DynamicArrayBacked<T, Allocator, USE_HANDLE, GROW_FACTOR, DEFAULT_CAPACITY>& second) noexcept
+        const DynamicArray<T, Allocator, USE_HANDLE, GROW_FACTOR, DEFAULT_CAPACITY>& first,
+        const DynamicArray<T, Allocator, USE_HANDLE, GROW_FACTOR, DEFAULT_CAPACITY>& second) noexcept
     {
         return first._count == second._count && sf_mem_cmp(first.access_data(), second.access_data(), first._count * sizeof(T));
     }
 
-    static u64 hash(const DynamicArrayBacked<T, Allocator>& key) noexcept {
+    static u64 hash(const DynamicArray<T, Allocator>& key) noexcept {
         constexpr u64 PRIME = 1099511628211u;
         constexpr u64 OFFSET_BASIS = 14695981039346656037u;
 
@@ -639,19 +639,43 @@ protected:
 
         _count -= move_count;
     }
-}; // DynamicArrayBacked
+}; // DynamicArray
 
 template<AllocatorTrait Allocator, bool USE_HANDLE = true, f32 GROW_FACTOR = 2.0f, u32 DEFAULT_CAPACITY = 8>
-struct StringBacked : public DynamicArrayBacked<char, Allocator, USE_HANDLE, GROW_FACTOR, DEFAULT_CAPACITY>
+struct String : public DynamicArray<char, Allocator, USE_HANDLE, GROW_FACTOR, DEFAULT_CAPACITY>
 {
-    using DynamicArrayBacked<char, Allocator>::DynamicArrayBacked;
+    using DynamicArray<char, Allocator>::DynamicArray;
     
-    std::string_view to_string_view(u32 start = 0, u32 len = 0) noexcept {
+    std::string_view to_sv(u32 start = 0, u32 len = 0) noexcept {
         return std::string_view{ this->access_data() + start, len == 0 ? this->_count : len };
     }
 
-    std::string_view to_string_view(u32 start = 0, u32 len = 0) const noexcept {
+    std::string_view to_sv(u32 start = 0, u32 len = 0) const noexcept {
         return std::string_view{ static_cast<const char*>(this->access_data() + start), len == 0 ? this->_count : len };
+    }
+
+    std::string_view to_sv_not_null_terminated(u32 start = 0, u32 len = 0) noexcept {
+        if (is_null_terminated()) {
+            if (len == this->_count) {
+                len--;
+                return std::string_view{ this->access_data() + start, len };
+            }
+            return std::string_view{ this->access_data() + start, len == 0 ? this-> _count - 1 : len };
+        } else {
+            return std::string_view{ this->access_data() + start, len == 0 ? this->_count : len };
+        }
+    }
+
+    std::string_view to_sv_not_null_terminated(u32 start = 0, u32 len = 0) const noexcept {
+        if (is_null_terminated()) {
+            if (len == this->_count) {
+                len--;
+                return std::string_view{ this->access_data() + start, len };
+            }
+            return std::string_view{ this->access_data() + start, len == 0 ? this-> _count - 1 : len };
+        } else {
+            return std::string_view{ this->access_data() + start, len == 0 ? this->_count : len };
+        }
     }
 
     void append_sv(std::string_view sv) noexcept {
@@ -665,7 +689,7 @@ struct StringBacked : public DynamicArrayBacked<char, Allocator, USE_HANDLE, GRO
         }
     }
 
-    void concat(StringBacked<Allocator>& rhs) noexcept {
+    void concat(String<Allocator>& rhs) noexcept {
         u32 old_count = this->_scount;
         this->reserve_and_resize(this->_count + rhs->_count);
         sf_mem_copy((void*)(this->data_offset(old_count)), (void*)rhs.data(), rhs.size_in_bytes());
@@ -677,11 +701,11 @@ struct StringBacked : public DynamicArrayBacked<char, Allocator, USE_HANDLE, GRO
         }
     }
 
-    bool is_null_terminated() noexcept {
+    bool is_null_terminated() const noexcept {
         return this->last() == '\0';
     }
 };
 
-// Backed
+// 
 
 } // sf

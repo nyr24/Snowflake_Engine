@@ -53,7 +53,7 @@ public:
     static bool load(
         const VulkanDevice& device,
         VulkanCommandBuffer& cmd_buffer,
-        TextureInputConfig input_config,
+        TextureInputConfig&& input_config,
         StackAllocator& alloc,
         Texture& out_texture
     );
@@ -64,7 +64,7 @@ private:
         const VulkanDevice& device,
         VulkanCommandBuffer& cmd_buffer
     );
-    bool load_from_disk(std::string_view file_name, StackAllocator& alloc);
+    bool load_from_disk(String<StackAllocator>&& file_name, StackAllocator& alloc);
 };
 
 struct TextureRef {
@@ -76,31 +76,29 @@ struct TextureRef {
 struct TextureSystem {
 public:
     static constexpr u32 MAX_TEXTURE_AMOUNT{ 65536 };
-    using TextureHashMap = HashMapBacked<std::string_view, TextureRef, ArenaAllocator, false>;
+#ifdef SF_DEBUG
+    static constexpr std::string_view TEXTURE_FILE_PATH_TRIM_PART{"build/engine/debug/assets/"};
+#else
+    static constexpr std::string_view TEXTURE_FILE_PATH_TRIM_PART{"build/engine/release/assets/"};
+#endif
+    
+    // storing hash of the string as key
+    using TextureHashMap = HashMap<u64, TextureRef, ArenaAllocator, false>;
 
-    DynamicArrayBacked<Texture, ArenaAllocator, false> textures;
-    TextureHashMap                                     texture_lookup_table;
+    DynamicArray<Texture, ArenaAllocator, false> textures;
+    TextureHashMap                               texture_lookup_table;
     const VulkanDevice*    device;
     u32                    id_counter;
 public:
     static consteval u32 get_memory_requirement() { return MAX_TEXTURE_AMOUNT * sizeof(Texture) + MAX_TEXTURE_AMOUNT * sizeof(TextureHashMap::Bucket); }
+    static String<StackAllocator> acquire_default_texture_path(std::string_view texture_file_name, StackAllocator& alloc);
     static void create(ArenaAllocator& allocator, const VulkanDevice& device, TextureSystem& out_system);
     ~TextureSystem();
     static void get_or_load_textures_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc,  std::span<TextureInputConfig> configs, std::span<Texture*> out_textures);
-    static Texture* get_or_load_texture(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, const TextureInputConfig config, StackAllocator& alloc);
+    static Texture* get_or_load_texture(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, TextureInputConfig&& config, StackAllocator& alloc);
     static Texture* get_texture(std::string_view name);
     static void free_texture(const VulkanDevice& device, std::string_view name);
     static Texture& get_empty_slot();
-};
-
-enum struct TextureUse : u8 {
-    UNKNOWN,
-    MAP_DIFFUSE 
-};
-
-struct TextureMap {
-    Texture*   texture;
-    TextureUse use; 
 };
 
 } // sf

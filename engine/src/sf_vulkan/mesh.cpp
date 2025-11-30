@@ -2,210 +2,149 @@
 #include "sf_allocators/arena_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
-#include "sf_containers/optional.hpp"
 #include "sf_core/asserts_sf.hpp"
 #include "sf_core/constants.hpp"
+#include "sf_vulkan/command_buffer.hpp"
+#include "sf_vulkan/device.hpp"
 #include "sf_vulkan/material.hpp"
+#include "sf_vulkan/pipeline.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan_core.h>
-
-// TODO: adding geometries to render queue/array
 
 namespace sf {
 
 static GeometrySystem* state_ptr{nullptr};
 
-void Geometry::create_empty(
-    u32 id,
-    ArenaAllocator& alloc,
-    Geometry& out_geometry
+void GeometryView::create(
+    u32           indeces_offset_,
+    u32           indeces_count_,
+    u32           vertex_offset_,
+    GeometryView& out_view
 ) {
-    sf_mem_zero(&out_geometry, sizeof(Geometry));
-    out_geometry.id = id;
-    out_geometry.generation = INVALID_ID;
-    out_geometry.data.set_allocator(&alloc);
-    out_geometry.data.reserve(Geometry::get_memory_requirement());
+    out_view.indeces_count = indeces_count_;
+    out_view.indeces_offset = indeces_offset_;
+    out_view.vertex_offset = vertex_offset_;
 }
 
-void Geometry::create_from_vertices_and_indices(
-    u32 id,
-    ArenaAllocator& alloc,
-    DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
-    DynamicArrayBacked<u32, StackAllocator>&& indices,
-    Geometry& out_geometry
-) {
-    Geometry::create_empty(id, alloc, out_geometry);
-    out_geometry.set_vertices_and_indices(std::move(vertices), std::move(indices));
-}
-    
-void Geometry::set_vertices_and_indices(
-    DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
-    DynamicArrayBacked<u32, StackAllocator>&& indices
-) {
-    data.resize(vertices.size_in_bytes() + indices.size_in_bytes());
-    indeces_count = indices.count();
-    indeces_offset = vertices.size_in_bytes(); 
-    sf_mem_copy(data.data(), vertices.data(), vertices.size_in_bytes());
-    sf_mem_copy(data.data_offset(indeces_offset), indices.data(), indices.size_in_bytes());
-}
-
-void Geometry::destroy() {
-    data.free();    
-    id = INVALID_ID;
-    indeces_count = 0;
-    indeces_offset = 0;
+void GeometryView::destroy() {
+    indeces_count = INVALID_ID;
+    indeces_offset = INVALID_ID;
+    vertex_offset = INVALID_ID;
 }
 
 // GeometrySystem
 
 void GeometrySystem::create(ArenaAllocator& main_allocator, StackAllocator& temp_allocator, GeometrySystem &out_state) {
     state_ptr = &out_state;
-    out_state.geometries.set_allocator(&main_allocator);
-    out_state.geometries.resize(INIT_CAPACITY);
     out_state.alloc = &main_allocator;
-    
-    for (u32 i{0}; i < out_state.geometries.count(); ++i) {
-        auto& geometry = out_state.geometries[i];
-        Geometry::create_empty(i, main_allocator, geometry);
-    }
+    out_state.geometry_views.set_allocator(&main_allocator);
+    out_state.geometry_views.reserve(INIT_GEOMETRY_COUNT);
+    out_state.indices.set_allocator(&main_allocator);
+    out_state.indices.reserve(INIT_GEOMETRY_COUNT * AVG_INDEX_COUNT);
+    out_state.vertices.set_allocator(&main_allocator);
+    out_state.vertices.reserve(INIT_GEOMETRY_COUNT * AVG_VERTEX_COUNT);
 
-    Geometry::create_empty(-1, main_allocator, out_state.default_geometry);
-    out_state.create_default_geometry(temp_allocator);
+    GeometrySystem::create_geometry_and_get_view(GeometrySystem::define_cube_vertices(temp_allocator), GeometrySystem::define_cube_indices(temp_allocator));
 }
 
-void GeometrySystem::create_default_geometry(StackAllocator& temp_allocator) {
-    auto vertices = define_cube_vertices(temp_allocator);
-    auto indices = define_cube_indices(temp_allocator);
-    default_geometry.set_vertices_and_indices(std::move(vertices), std::move(indices));
-}
-
-Geometry& GeometrySystem::get_empty_slot() {
-    SF_ASSERT_MSG(state_ptr && state_ptr->alloc, "Should be valid ptrs");
-
-    auto& geometries = state_ptr->geometries;
-    auto* alloc = state_ptr->alloc;
-    u32 count{ geometries.count() };
-    
-    for (u32 i{0}; i < count; ++i) {
-        if (geometries[i].generation == INVALID_ID) {
-            geometries[i].generation = 0;
-            return geometries[i];
-        }
-    }
-    // empty slot not found, do resizing
-    u32 free_slot = geometries.count();
-    geometries.resize_exponent(free_slot + 1);
-
-    Geometry::create_empty(free_slot, *alloc, geometries[free_slot]);
-    count = geometries.count();
-
-    for (u32 i{free_slot + 1}; i < count; ++i) {
-        Geometry::create_empty(i, *alloc, geometries[i]);
-    }
-
-    return geometries[free_slot];
-}
-
-Geometry& GeometrySystem::create_geometry_and_get(
-    DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
-    DynamicArrayBacked<u32, StackAllocator>&& indices
-) {
-    Geometry& new_geometry = GeometrySystem::get_empty_slot();
-    new_geometry.set_vertices_and_indices(std::move(vertices), std::move(indices));
-    return new_geometry;
-}
-
-Option<Geometry*> GeometrySystem::get_geometry_by_id(u32 id) {
+GeometryView& GeometrySystem::create_geometry_and_get_view(
+    DynamicArray<Vertex, StackAllocator>&& vertices_input,
+    DynamicArray<u32, StackAllocator>&& indices_input
+) { 
     SF_ASSERT_MSG(state_ptr, "Should be valid ptr");
 
-    if (id < 0 || id >= state_ptr->geometries.count()) {
-        return {None::VALUE};
+    auto& vertices = state_ptr->vertices;
+    auto& indices = state_ptr->indices;
+    
+    u32 vert_offset = vertices.count();
+    u32 vert_remain_cap = vertices.capacity_remain();
+    u32 index_offset = indices.count();
+    u32 index_remain_cap = indices.capacity_remain();
+
+    u32 vert_input_cnt = vertices_input.count();
+    if (vert_input_cnt > vert_remain_cap) {
+        vertices.reserve_exponent(vert_input_cnt - vert_remain_cap);   
+    }
+    u32 index_input_cnt = indices_input.count();
+    if (index_input_cnt > index_remain_cap) {
+        indices.reserve_exponent(index_input_cnt - index_remain_cap);   
     }
 
-    auto& geometry{ state_ptr->geometries[id] };
-    geometry.ref_count++;
-    if (geometry.generation == INVALID_ID) {
-        geometry.generation = 0;
-    } else {
-        geometry.generation++;
-    }
-    return &geometry;
+    vertices.append_slice(vertices_input.to_span());
+    indices.append_slice(indices_input.to_span());
+
+    GeometryView new_view;
+    // NOTE: THINK maybe should be in bytes, not elements?
+    // GeometryView::create(index_offset * sizeof(u32), indices_input.count(), vert_offset * sizeof(Vertex), new_view);
+    GeometryView::create(index_offset, indices_input.count(), vert_offset, new_view);
+    state_ptr->geometry_views.append(new_view);
+
+    return state_ptr->geometry_views.last();
 }
 
-Geometry& GeometrySystem::get_default_geometry() { 
+std::span<Vertex> GeometrySystem::get_vertices() {
     SF_ASSERT_MSG(state_ptr, "Should be valid ptr");
-
-    auto& default_geometry{ state_ptr->default_geometry };
-    default_geometry.ref_count++;
-    if (default_geometry.generation == INVALID_ID) {
-        default_geometry.generation = 0;
-    } else {
-        default_geometry.generation++;
-    }
-    return state_ptr->default_geometry;
+    return state_ptr->vertices.to_span(); 
 }
 
-void GeometrySystem::free_geometry(u32 id) {
-    auto& geometry{ state_ptr->geometries[id] };
-
-    if (geometry.ref_count > 0) {
-        geometry.ref_count--;
-        if (geometry.ref_count < 1 && geometry.auto_release) {
-            geometry.destroy();
-        }
-    }
+std::span<Vertex::IndexType> GeometrySystem::get_indices() {
+    SF_ASSERT_MSG(state_ptr, "Should be valid ptr");
+    return state_ptr->indices.to_span();
 }
 
-// Mesh (geometry + material)
+GeometryView& GeometrySystem::get_default_geometry_view() { 
+    SF_ASSERT_MSG(state_ptr && state_ptr->geometry_views.count() > 0, "Should have the default geometry view");
+    return state_ptr->geometry_views.first();
+}
+
+// Mesh
+
+void Mesh::create_empty(VulkanShaderPipeline& shader, const VulkanDevice& device, Mesh& out_mesh) {
+    out_mesh.descriptor_state_index = shader.acquire_resouces(device);
+}
 
 void Mesh::create_from_existing_data(
-    Geometry* geometry,
+    VulkanShaderPipeline& shader,
+    const VulkanDevice& device,
+    GeometryView* geometry_view,
     Material* material,
     Mesh& out_mesh
 ) {
-    out_mesh.geometry = geometry;
+    out_mesh.descriptor_state_index = shader.acquire_resouces(device);
+    out_mesh.geometry_view = geometry_view;
     out_mesh.material = material;
 }
 
-void Mesh::set_geometry(Geometry* input_geometry) {
-    SF_ASSERT_MSG(geometry && input_geometry, "Should be valid ptrs");
-    geometry = input_geometry;
-}
-
-void Mesh::init_geometry(
-    DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
-    DynamicArrayBacked<u32, StackAllocator>&& indices
-) {
-    SF_ASSERT_MSG(geometry, "Should be valid ptr");
-    geometry->set_vertices_and_indices(std::move(vertices), std::move(indices));
+void Mesh::set_geometry_view(GeometryView* input_geometry_view) {
+    SF_ASSERT_MSG(input_geometry_view, "Should be valid ptrs");
+    geometry_view = input_geometry_view;
 }
 
 void Mesh::set_material(Material* input_material) {
-    SF_ASSERT_MSG(material && input_material, "Should be valid ptrs");
+    SF_ASSERT_MSG(input_material, "Should be valid ptrs");
     material = input_material;
 }
 
-// void Mesh::draw(
-//     const VulkanDevice& device,
-//     VulkanVertexIndexBuffer& vbo,
-//     VulkanShaderPipeline& shader,
-// ) {
-//     vbo.set_geometry(device, *this);
- // shader.
-// }
+void Mesh::draw(VulkanCommandBuffer& cmd_buffer) {
+    vkCmdDrawIndexed(cmd_buffer.handle, geometry_view->indeces_count, 1, geometry_view->indeces_offset, geometry_view->vertex_offset, 0); 
+}
 
-bool Mesh::has_geometry() const {
-    return geometry != nullptr;
+bool Mesh::has_geometry_view() const {
+    return geometry_view != nullptr;
 }
 
 bool Mesh::has_material() const {
     return material != nullptr;    
 }
 
+bool Mesh::valid() const {
+    return geometry_view && material && descriptor_state_index != INVALID_ID;
+}
+
 void Mesh::destroy() {
-    if (geometry) {
-        geometry->destroy();
+    if (geometry_view) {
+        geometry_view->destroy();
     }
     if (material) {
         material->destroy();
@@ -246,7 +185,7 @@ void Mesh::destroy() {
 #define PURPLE  0.5f, 0.0f, 0.5f
 #define YELLOW  1.0f, 1.0f, 0.0f
 
-DynamicArrayBacked<Vertex, StackAllocator> GeometrySystem::define_cube_vertices(StackAllocator& allocator) {
+DynamicArray<Vertex, StackAllocator> GeometrySystem::define_cube_vertices(StackAllocator& allocator) {
     return std::tuple<StackAllocator*, std::initializer_list<Vertex>>{
         &allocator,
         {
@@ -289,7 +228,7 @@ DynamicArrayBacked<Vertex, StackAllocator> GeometrySystem::define_cube_vertices(
     };
 }
 
-DynamicArrayBacked<u32, StackAllocator> GeometrySystem::define_cube_indices(StackAllocator& allocator) {
+DynamicArray<u32, StackAllocator> GeometrySystem::define_cube_indices(StackAllocator& allocator) {
     return std::tuple<StackAllocator*, std::initializer_list<u32>>{
         &allocator,
         {

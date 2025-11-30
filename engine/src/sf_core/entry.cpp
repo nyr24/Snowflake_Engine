@@ -11,7 +11,7 @@ i32 main() {
     test_manager.collect_all_tests();
     test_manager.run_all_tests();
 #endif
-    sf::LinearAllocator game_allocator(sf::platform_get_mem_page_size() * 10);
+    sf::LinearAllocator game_allocator(sf::get_mem_page_size() * 10);
     sf::GameInstance game_inst{ std::move(game_allocator) };
 
     if (!create_game(&game_inst)) {

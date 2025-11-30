@@ -336,7 +336,7 @@ bool VulkanDevice::meet_requirements(
         sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, nullptr));
 
         if (available_extension_count) {
-            DynamicArrayBacked<VkExtensionProperties, StackAllocator, true> available_extensions(available_extension_count, available_extension_count, &application_get_temp_allocator());
+            DynamicArray<VkExtensionProperties, StackAllocator, true> available_extensions(available_extension_count, available_extension_count, &application_get_temp_allocator());
             sf_vk_check(vkEnumerateDeviceExtensionProperties(device, nullptr, &available_extension_count, available_extensions.data()));
 
             for (const auto* required_extension : requirements.device_extension_names) {

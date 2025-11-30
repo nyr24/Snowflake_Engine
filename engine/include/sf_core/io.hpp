@@ -10,14 +10,14 @@
 namespace sf {
 
 template<AllocatorTrait Allocator>
-Result<StringBacked<Allocator>> read_file(std::string_view file_path, Allocator& allocator) noexcept {
+Result<String<Allocator>> read_file(std::string_view file_path, Allocator& allocator) noexcept {
     std::ifstream file(file_path.data(), std::ios::ate | std::ios::binary);
 
     if (!file.is_open()) {
         return {ResultError::VALUE};
     }
 
-    StringBacked<Allocator> file_contents(file.tellg(), file.tellg(), &allocator);
+    String<Allocator> file_contents(file.tellg(), file.tellg(), &allocator);
     file.seekg(0, std::ios::beg);
     file.read(file_contents.data(), static_cast<std::streamsize>(file_contents.count()));
 
@@ -48,5 +48,8 @@ FixedString<ARR_LEN>& strip_extension_from_file_name(FixedString<ARR_LEN>& file_
 
 std::string_view extract_extension_from_file_name(std::string_view file_name);
 std::string_view strip_extension_from_file_name(std::string_view file_name);
+std::string_view strip_file_name_from_path(std::string_view file_path);
+std::string_view trim_dir_and_extension_from_path(std::string_view file_path);
+std::string_view strip_part_from_start_and_extension(std::string_view file_path, std::string_view part);
 
 } // sf

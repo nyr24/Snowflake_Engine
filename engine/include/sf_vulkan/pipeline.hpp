@@ -1,17 +1,17 @@
 #pragma once
 
-#include "glm/fwd.hpp"
+#include "sf_vulkan/shared_types.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
 #include "sf_containers/optional.hpp"
+#include "sf_containers/result.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_vulkan/buffer.hpp"
+#include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/device.hpp"
-#include "sf_vulkan/material.hpp"
 #include "sf_vulkan/swapchain.hpp"
-#include "sf_vulkan/texture.hpp"
-#include "sf_vulkan/shared_types.hpp"
+#include "glm/fwd.hpp"
 #include <span>
 #include <string_view>
 #include <vulkan/vulkan_core.h>
@@ -19,7 +19,7 @@
 
 namespace sf {
 
-Result<VkShaderModule> create_shader_module(const VulkanDevice& device, StringBacked<StackAllocator>&& shader_file_path);
+Result<VkShaderModule> create_shader_module(const VulkanDevice& device, String<StackAllocator>&& shader_file_path);
 
 struct VulkanDescriptorSetLayout {
 public:
@@ -39,18 +39,6 @@ public:
     void destroy(const VulkanDevice& device);
 };
 
-constexpr u32 OBJECT_SHADER_DESCRIPTOR_COUNT{ 2 };
-
-struct VulkanDescriptorState {
-    FixedArray<u32, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> generations;
-};
-
-// state of the object inside a shader
-struct ObjectShaderState {
-    FixedArray<VkDescriptorSet, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>           descriptor_sets;
-    FixedArray<VulkanDescriptorState, OBJECT_SHADER_DESCRIPTOR_COUNT>            descriptor_states;
-};
-
 struct MaterialUpdateData {
     Material*                material;
     u32                      descriptor_state_index;
@@ -64,10 +52,28 @@ struct EventContext;
 
 struct VulkanShaderPipeline {
 public:
-    static constexpr u32 MAX_OBJECT_COUNT{ 256 };
+    static constexpr u32 DIFFUSE_TEX_COUNT { 1 };
+    static constexpr u32 SPECULAR_TEX_COUNT{ 1 };
+    static constexpr u32 NORMAL_TEX_COUNT  { 1 };
+    static constexpr u32 AMBIENT_TEX_COUNT { 1 };
+    static constexpr u32 TEXTURE_COUNT { DIFFUSE_TEX_COUNT + SPECULAR_TEX_COUNT + AMBIENT_TEX_COUNT + NORMAL_TEX_COUNT };
+    static constexpr u32 DESCRIPTOR_BINDING_COUNT{ 1 + TEXTURE_COUNT };
+
+    static constexpr u32 MAX_OBJECT_COUNT{ 1024 };
     static constexpr u32 MAX_ATTRIB_COUNT{ 3 };
     static constexpr u32 MAX_DEFAULT_TEXTURES{ 20 };
 
+    static constexpr FixedArray<TextureType, TEXTURE_COUNT> TEXTURE_TYPES{ TextureType::DIFFUSE, TextureType::SPECULAR, TextureType::NORMALS, TextureType::AMBIENT };
+
+    struct VulkanDescriptorState {
+        FixedArray<u32, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT> generations;
+    };
+
+    struct ObjectShaderState {
+        FixedArray<VkDescriptorSet, VulkanSwapchain::MAX_FRAMES_IN_FLIGHT>    descriptor_sets;
+        FixedArray<VulkanDescriptorState, DESCRIPTOR_BINDING_COUNT>           descriptor_binding_states;
+    };
+public:
     VulkanLocalUniformBufferObject                                                local_ubo;
     VulkanContext*                                                                context;
     VulkanDescriptorSetLayout                                                     object_descriptor_layout;
@@ -102,7 +108,7 @@ public:
     void bind(const VulkanCommandBuffer& cmd_buffer, u32 curr_frame);
     void bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame);
     void update_model(VulkanCommandBuffer& cmd_buffer, glm::mat4& model);
-    void update_material(VulkanContext& context, MaterialUpdateData& render_data);
+    void update_material(VulkanContext& context, VulkanCommandBuffer& cmd_buffer, MaterialUpdateData& render_data);
     u32  acquire_resouces(const VulkanDevice& device);
     void release_resouces(const VulkanDevice& device, u32 descriptor_state_index);
     static bool handle_swap_default_texture(u8 code, void* sender, void* listener_inst, Option<EventContext> context);
@@ -110,7 +116,6 @@ private:
     void create_attribute_descriptions(const FixedArray<VkVertexInputAttributeDescription, MAX_ATTRIB_COUNT>& config);
     void create_local_descriptors(const VulkanDevice& device);
     void update_local_descriptors(const VulkanDevice& device);
-    // void create_default_textures(std::span<const TextureInputConfig> configs);
 };
 
 } // sf

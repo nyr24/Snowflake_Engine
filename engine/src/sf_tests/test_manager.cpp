@@ -1,5 +1,6 @@
 #ifdef SF_TESTS
 
+#include "sf_core/io.hpp"
 #include "sf_containers/bitset.hpp"
 #include "sf_allocators/general_purpose_allocator.hpp"
 #include "sf_allocators/linear_allocator.hpp"
@@ -64,7 +65,7 @@ void dyn_array_test() {
 
     {
         LinearAllocator al;
-        DynamicArrayBacked<u8, LinearAllocator, true> arr(32, &al);
+        DynamicArray<u8, LinearAllocator, true> arr(32, &al);
         clock.restart();
         for (usize i{0}; i < BIG_SIZE; ++i) {
             arr.append(rand());
@@ -75,7 +76,7 @@ void dyn_array_test() {
 
     {
         GeneralPurposeAllocator al;
-        DynamicArrayBacked<u8, GeneralPurposeAllocator, false> arr(32, &al);
+        DynamicArray<u8, GeneralPurposeAllocator, false> arr(32, &al);
         clock.restart();
         for (usize i{0}; i < BIG_SIZE; ++i) {
             arr.append(rand());
@@ -90,15 +91,15 @@ void stack_allocator_test() {
     StackAllocator alloc{500};
 
     {
-        DynamicArrayBacked<u8, StackAllocator> arr(&alloc);
+        DynamicArray<u8, StackAllocator> arr(&alloc);
         arr.reserve(200);
         expect(alloc.count() >= 200 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
 
-        DynamicArrayBacked<u8, StackAllocator> arr2(&alloc);
+        DynamicArray<u8, StackAllocator> arr2(&alloc);
         arr2.reserve(200);
         expect(alloc.count() >= 400 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
 
-        DynamicArrayBacked<u8, StackAllocator> arr3(&alloc);
+        DynamicArray<u8, StackAllocator> arr3(&alloc);
         arr3.reserve(300);
         expect(alloc.count() >= 700 * sizeof(u8) + sizeof(StackAllocatorHeader), counter);
     }
@@ -107,7 +108,7 @@ void stack_allocator_test() {
 void freelist_allocator_test() {
     FreeList alloc(512);
 
-    DynamicArrayBacked<u8, FreeList<true>> arr(500, &alloc);
+    DynamicArray<u8, FreeList<true>> arr(500, &alloc);
 
     // lookup data
     for (usize i{0}; i < 5; ++i) {
@@ -129,15 +130,15 @@ void linear_allocator_test() {
     LinearAllocator alloc{500};
 
     {
-        DynamicArrayBacked<u8, LinearAllocator> arr(&alloc);
+        DynamicArray<u8, LinearAllocator> arr(&alloc);
         arr.reserve(200);
         expect(alloc.count() >= 200 * sizeof(u8), counter);
 
-        DynamicArrayBacked<u8, LinearAllocator> arr2(&alloc);
+        DynamicArray<u8, LinearAllocator> arr2(&alloc);
         arr2.reserve(200);
         expect(alloc.count() >= 400 * sizeof(u8), counter);
 
-        DynamicArrayBacked<u8, LinearAllocator> arr3(&alloc);
+        DynamicArray<u8, LinearAllocator> arr3(&alloc);
         arr3.reserve(300);
         expect(alloc.count() >= 700 * sizeof(u8), counter);
     }
@@ -147,7 +148,7 @@ void hashmap_test() {
     TestCounter counter("HashMap");
     
     LinearAllocator alloc(1024 * sizeof(usize));
-    HashMapBacked<std::string_view, usize, LinearAllocator> map(&alloc); 
+    HashMap<std::string_view, usize, LinearAllocator> map(&alloc); 
     map.reserve(32);
 
     std::string_view key1 = "kate_age";
@@ -222,6 +223,41 @@ void bitset_test() {
     expect(bitset.is_bit(213), counter);
 }
 
+void filesystem_test() {
+    TestCounter counter{"filesystem"};
+
+    {
+        FixedArray<std::string_view, 4> input{ "/location/number/one.jpg", "one.jpg", "locationone", "garbage@/value.png" };
+        FixedArray<std::string_view, 4> expected_output{ "one", "one", "locationone", "value" };
+
+        for (u32 i{0}; i < input.count(); ++i) {
+            auto res = trim_dir_and_extension_from_path(input[i]);
+            expect(res == expected_output[i], counter, {"Filesystem test expected: equal to {:s}, found {:s}"}, expected_output[i], res);
+        }
+    }
+
+    {
+        FixedArray<std::string_view, 3> input{ "/location/number/one.jpg", "path1/location/two/one.png", "locationone/locationtwo/" };
+        FixedArray<std::string_view, 3> expected_output{"/location/number/", "path1/location/two/", "locationone/locationtwo/" };
+
+        for (u32 i{0}; i < input.count(); ++i) {
+            auto res = strip_file_name_from_path(input[i]);
+            expect(res == expected_output[i], counter, {"Filesystem test expected: equal to {:s}, found {:s}"}, expected_output[i], res);
+        }
+    }
+
+    {
+        FixedArray<std::string_view, 4> input{ "/location/number/one.jpg", "path1/location/two.png", "input1/here.imdb", "here" };
+        FixedArray<std::string_view, 4> strip{ "/location/num", "path1/location/", "input2/here", "input4here" };
+        FixedArray<std::string_view, 4> expected_output{"ber/one", "two", "1/here", "here" };
+
+        for (u32 i{0}; i < input.count(); ++i) {
+            auto res = strip_part_from_start_and_extension(input[i], strip[i]);
+            expect(res == expected_output[i], counter, {"Filesystem test expected: equal to {:s}, found {:s}"}, expected_output[i], res);
+        }
+    }
+}
+
 void TestManager::collect_all_tests() {
     module_tests.append(hashmap_test);
     module_tests.append(linear_allocator_test);
@@ -230,6 +266,7 @@ void TestManager::collect_all_tests() {
     module_tests.append(fixed_array_test);
     module_tests.append(dyn_array_test);
     module_tests.append(bitset_test);
+    module_tests.append(filesystem_test);
 }
 
 } // sf

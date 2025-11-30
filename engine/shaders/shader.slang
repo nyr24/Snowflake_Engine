@@ -28,22 +28,22 @@ struct PushConstantBlock {
     float4x4    model;    
 };
 
+// set 0 - global
 [[vk::binding(0, 0)]]
 ConstantBuffer<GlobalUniformObject> global_ubo;
 
+// set 1 - object
 [[vk::binding(0, 1)]]
 ConstantBuffer<LocalUniformObject> object_ubo;
 
 [[vk::binding(1, 1)]]
 Sampler2D diffuse;
-// [[vk::binding(2, 1)]]
-// Sampler2D diffuse2;
-// [[vk::binding(3, 1)]]
-// Sampler2D diffuse3;
-// [[vk::binding(4, 1)]]
-// Sampler2D specular1;
-// [[vk::binding(5, 1)]]
-// Sampler2D ambient;
+[[vk::binding(2, 1)]]
+Sampler2D specular;
+[[vk::binding(3, 1)]]
+Sampler2D ambient;
+[[vk::binding(4, 1)]]
+Sampler2D normal;
 
 [[vk::push_constant]]
 ConstantBuffer<PushConstantBlock> push_constants;
@@ -56,11 +56,12 @@ VSOutput vertMain(VSInput input) {
     return output;
 }
 
-static const int SAMPLER_COUNT = 10;
-
 [shader("fragment")]
 float4 fragMain(VSOutput input) : SV_Target
 {
-    float4 sampled_texture = diffuse.Sample(input.texture_coord);
-    return sampled_texture;
+    float4 diffuse_sample = diffuse.Sample(input.texture_coord);
+    float4 specular_sample = specular.Sample(input.texture_coord);
+    float4 ambient_sample = ambient.Sample(input.texture_coord);
+    float4 normal_sample = normal.Sample(input.texture_coord);
+    return lerp(lerp(lerp(diffuse_sample, specular_sample, 0.2), ambient_sample, 0.2), normal_sample, 0.2);
 }

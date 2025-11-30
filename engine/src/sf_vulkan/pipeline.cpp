@@ -30,8 +30,8 @@ VulkanShaderPipeline::VulkanShaderPipeline()
     object_shader_states.resize_to_capacity();
     for (auto& state : object_shader_states) {
         state.descriptor_sets.resize_to_capacity();
-        state.descriptor_states.resize_to_capacity();
-         for (auto& state : state.descriptor_states) {
+        state.descriptor_binding_states.resize_to_capacity();
+         for (auto& state : state.descriptor_binding_states) {
              state.generations.resize_to_capacity();
          }
     }
@@ -54,7 +54,7 @@ bool VulkanShaderPipeline::create(
 #else
     std::string_view init_path = "build/release/engine/shaders/";
 #endif
-    StringBacked<StackAllocator> shader_path(init_path.size() + shader_file_name.size() + 1, &alloc);
+    String<StackAllocator> shader_path(init_path.size() + shader_file_name.size() + 1, &alloc);
     shader_path.append_sv(init_path);
     shader_path.append_sv(shader_file_name);
     shader_path.append('\0');
@@ -241,17 +241,18 @@ void VulkanShaderPipeline::update_model(VulkanCommandBuffer& cmd_buffer, glm::ma
     vkCmdPushConstants(cmd_buffer.handle, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &model);
 }
 
-void VulkanShaderPipeline::update_material(VulkanContext& context, MaterialUpdateData& render_data) {
-    VulkanCommandBuffer& curr_cmd_buffer{ context.curr_frame_graphics_cmd_buffer() };    
-    SF_ASSERT_MSG(curr_cmd_buffer.state == VulkanCommandBufferState::RECORDING_BEGIN, "Should be in recording state");
+void VulkanShaderPipeline::update_material(VulkanContext& context, VulkanCommandBuffer& cmd_buffer, MaterialUpdateData& render_data) {
+    SF_ASSERT_MSG((cmd_buffer.state == VulkanCommandBufferState::RECORDING_BEGIN) || (cmd_buffer.state == VulkanCommandBufferState::READY), "Should be in correct state");
+    if (cmd_buffer.state == VulkanCommandBufferState::READY) {
+        cmd_buffer.begin_recording(0);
+    }
 
     ObjectShaderState& object_state{ object_shader_states[render_data.descriptor_state_index] };
 
     u32 curr_frame{ context.curr_frame };
     VkDescriptorSet& curr_frame_object_descriptor_set = object_state.descriptor_sets[curr_frame];
 
-    FixedArray<VkWriteDescriptorSet, OBJECT_SHADER_DESCRIPTOR_COUNT> descriptor_writes;
-    u32 descriptor_index{0};
+    FixedArray<VkWriteDescriptorSet, DESCRIPTOR_BINDING_COUNT> descriptor_writes;
 
     u32 range{sizeof(LocalUniformObject)};
     u64 offset{sizeof(LocalUniformObject) * render_data.descriptor_state_index};
@@ -264,73 +265,54 @@ void VulkanShaderPipeline::update_material(VulkanContext& context, MaterialUpdat
         .range = range 
     };
 
-    if (object_state.descriptor_states[descriptor_index].generations[curr_frame] == INVALID_ID) {
-        VkWriteDescriptorSet descriptor_write = {
+    VkWriteDescriptorSet local_ubo_write = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = curr_frame_object_descriptor_set,
+        .dstBinding = descriptor_writes.count(),
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &buffer_info,
+    };
+
+    descriptor_writes.append(local_ubo_write);
+
+    // Samplers
+    FixedArray<VkDescriptorImageInfo, TEXTURE_COUNT> texture_binding_infos(TEXTURE_COUNT);
+
+    for (u32 i{0}; i < TEXTURE_COUNT; ++i) {
+        // update diffuse
+        TextureMap texture_map = render_data.material->texture_maps[i];
+
+        // if texture hasn't been loaded - use the default one
+        if (!texture_map.texture || texture_map.texture->generation == INVALID_ID) {
+            texture_map.texture = default_textures[default_texture_index]; 
+        }
+
+        texture_binding_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        texture_binding_infos[i].imageView = texture_map.texture->image.view;
+        texture_binding_infos[i].sampler = texture_map.texture->sampler; 
+
+        VkWriteDescriptorSet descriptor_write{
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = curr_frame_object_descriptor_set,
-            .dstBinding = descriptor_index,
+            .dstBinding = descriptor_writes.count(),
             .dstArrayElement = 0,
             .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .pBufferInfo = &buffer_info,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &texture_binding_infos[i],
+            .pBufferInfo = nullptr,
+            .pTexelBufferView = nullptr,
         };
 
         descriptor_writes.append(descriptor_write);
-
-        // update the frame generation (needed only once)
-        object_state.descriptor_states[descriptor_index].generations[curr_frame] = 1;
     }
-
-    descriptor_index++;
-
-    // TODO: abstract in Texture.bind();
-    // Samplers
-    constexpr u32 SAMPLER_COUNT{1};
-    FixedArray<VkDescriptorImageInfo, SAMPLER_COUNT> image_infos(SAMPLER_COUNT);
-
-    for (u32 i{0}; i < SAMPLER_COUNT; ++i) {
-        // Texture* diffuse_texture{ render_data.material->diffuse_map.texture };
-        Texture* diffuse_texture = render_data.material->diffuse_textures[0];
-        
-        u32& descriptor_generation{ object_state.descriptor_states[descriptor_index].generations[curr_frame] };
-
-        // if texture hasn't been loaded - use the default one
-        if (!diffuse_texture || diffuse_texture->generation == INVALID_ID) {
-            diffuse_texture = default_textures[default_texture_index]; 
-            descriptor_generation = INVALID_ID;
-        }
-
-        if (descriptor_generation != diffuse_texture->generation || diffuse_texture->generation == INVALID_ID) {
-            image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            image_infos[i].imageView = diffuse_texture->image.view;
-            image_infos[i].sampler = diffuse_texture->sampler; 
-
-            VkWriteDescriptorSet descriptor_write{
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = curr_frame_object_descriptor_set,
-                .dstBinding = descriptor_index,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &image_infos[i],
-                .pBufferInfo = nullptr,
-                .pTexelBufferView = nullptr,
-            };
-
-            descriptor_writes.append(descriptor_write);
-
-            if (diffuse_texture->generation != INVALID_ID) {
-                descriptor_generation = diffuse_texture->generation;
-            }
-            descriptor_index++;
-        }
-    }
-
+    
     if (descriptor_writes.count() > 0) {
         vkUpdateDescriptorSets(context.device.logical_device, descriptor_writes.count(), descriptor_writes.data(), 0, nullptr);
     }
 
-    bind_object_descriptor_sets(curr_cmd_buffer, render_data.descriptor_state_index, curr_frame);    
+    bind_object_descriptor_sets(cmd_buffer, render_data.descriptor_state_index, curr_frame);    
 }
 
 void VulkanShaderPipeline::bind_object_descriptor_sets(VulkanCommandBuffer& cmd_buffer, u32 object_id, u32 curr_frame) {
@@ -347,9 +329,11 @@ u32 VulkanShaderPipeline::acquire_resouces(const VulkanDevice& device) {
 
     ObjectShaderState& object_state{ object_shader_states[object_descriptor_state_index] };
 
-    for (u32 i{0}; i < OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {
+    for (u32 i{0}; i < DESCRIPTOR_BINDING_COUNT; ++i) {
         for (u32 j{0}; j < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++j) {
-            object_state.descriptor_states[i].generations[j] = INVALID_ID;
+            // NOTE: TEMP
+            // object_state.descriptor_binding_states[i].generations[j] = INVALID_ID;
+            object_state.descriptor_binding_states[i].generations[j] = 0;
         }
     }
 
@@ -371,9 +355,9 @@ void VulkanShaderPipeline::release_resouces(const VulkanDevice& device, u32 desc
             LOG_ERROR("Error freeing object descriptor sets");
         }
 
-        for (u32 i{0}; i < OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {
+        for (u32 i{0}; i < DESCRIPTOR_BINDING_COUNT; ++i) {
             for (u32 j{0}; j < 3; ++j) {
-                object_state.descriptor_states[i].generations[j] = INVALID_ID;
+                object_state.descriptor_binding_states[i].generations[j] = INVALID_ID;
             }
         }
     }
@@ -410,17 +394,24 @@ void VulkanShaderPipeline::create_attribute_descriptions(const FixedArray<VkVert
 }
 
 void VulkanShaderPipeline::create_local_descriptors(const VulkanDevice& device) {
-    constexpr u32 LOCAL_SAMPLER_COUNT{1};
-    
-    FixedArray<VkDescriptorPoolSize, OBJECT_SHADER_DESCRIPTOR_COUNT> pool_sizes{
+    FixedArray<VkDescriptorPoolSize, DESCRIPTOR_BINDING_COUNT> pool_sizes{
         { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT },
-        { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = LOCAL_SAMPLER_COUNT * MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT }
+        { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT },
+        { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT },
+        { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT },
+        { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT },
     };
     VulkanDescriptorPool::create(device, {pool_sizes.data(), pool_sizes.count()}, MAX_OBJECT_COUNT * VulkanSwapchain::MAX_FRAMES_IN_FLIGHT, object_descriptor_pool);
 
-    FixedArray<VkDescriptorType, OBJECT_SHADER_DESCRIPTOR_COUNT> descriptor_types = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER };
+    FixedArray<VkDescriptorType, DESCRIPTOR_BINDING_COUNT> descriptor_types = {
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    };
     
-    FixedArray<VkDescriptorSetLayoutBinding, OBJECT_SHADER_DESCRIPTOR_COUNT> bindings(OBJECT_SHADER_DESCRIPTOR_COUNT);
+    FixedArray<VkDescriptorSetLayoutBinding, DESCRIPTOR_BINDING_COUNT> bindings(DESCRIPTOR_BINDING_COUNT);
 
     VulkanDescriptorSetLayout::create_bindings(VK_SHADER_STAGE_FRAGMENT_BIT, {descriptor_types.data(), descriptor_types.count()}, {bindings.data(), bindings.count()});
     VulkanDescriptorSetLayout::create(device, {bindings.data(), bindings.count()}, object_descriptor_layout);
@@ -498,8 +489,8 @@ void VulkanDescriptorSetLayout::destroy(const VulkanDevice& device) {
     }
 }
 
-Result<VkShaderModule> create_shader_module(const VulkanDevice& device, StringBacked<StackAllocator>&& shader_file_path) {
-    Result<StringBacked<StackAllocator>> shader_file_contents = read_file(shader_file_path.to_string_view(), application_get_temp_allocator());
+Result<VkShaderModule> create_shader_module(const VulkanDevice& device, String<StackAllocator>&& shader_file_path) {
+    Result<String<StackAllocator>> shader_file_contents = read_file(shader_file_path.to_sv(), application_get_temp_allocator());
 
     if (shader_file_contents.is_err()) {
         return {ResultError::VALUE};

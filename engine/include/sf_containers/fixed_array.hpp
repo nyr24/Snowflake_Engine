@@ -407,11 +407,7 @@ struct FixedString : public FixedArray<char, CAPACITY>
 
     void ensure_null_terminated() noexcept {
         if (!is_null_terminated()) {
-            if (this->capacity_remain() > 0) {
-                this->append('\0');
-            } else {
-                this->last() = '\0';
-            }
+            this->append('\0');
         }
     }
 

@@ -3,9 +3,9 @@
 #include "sf_allocators/arena_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
-#include "sf_vulkan/material.hpp"
+#include "sf_core/constants.hpp"
+#include "sf_core/defines.hpp"
 #include "sf_vulkan/shared_types.hpp"
-#include "sf_containers/optional.hpp"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan_core.h>
 
@@ -20,80 +20,66 @@ struct Vertex {
     static VkVertexInputBindingDescription get_binding_descr();
 };
 
-struct Geometry {
+struct GeometryView {
 public:
-    static constexpr u32 MAX_VERTEX_COUNT{ 4 * 256 };
-    static constexpr u32 MAX_INDEX_COUNT{ 6 * 256 };
-
-    DynamicArrayBacked<u8, ArenaAllocator, false> data;
-    u32 indeces_offset;
-    u32 indeces_count;
-    u32 id;
-    u32 generation;
-    u16 ref_count;
-    bool auto_release;
+    u32  indeces_offset;
+    u32  indeces_count;
+    u32  vertex_offset;
 public:
-    static u32 consteval get_memory_requirement() { return sizeof(Vertex) * MAX_VERTEX_COUNT + sizeof(Vertex::IndexType) * MAX_INDEX_COUNT; };
-    static void create_empty(
-        u32 id,
-        ArenaAllocator& alloc,
-        Geometry& out_geometry
+    static void create(
+        u32  indeces_offset,
+        u32  indeces_count,
+        u32  vertex_offset,
+        GeometryView& out_view
     );
-    static void create_from_vertices_and_indices(
-        u32 id,
-        ArenaAllocator& alloc,
-        DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
-        DynamicArrayBacked<u32, StackAllocator>&& indices,
-        Geometry& out_geometry
-    );
-    void set_vertices_and_indices(
-        DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
-        DynamicArrayBacked<u32, StackAllocator>&& indices
-    );
+    void draw(VulkanCommandBuffer& cmd_buffer);
     void destroy();
 };
 
 struct GeometrySystem {
-    static constexpr u32 INIT_CAPACITY{64};
-    DynamicArrayBacked<Geometry, ArenaAllocator, false>  geometries;
-    Geometry                                             default_geometry;
-    ArenaAllocator*                                      alloc;
+    static constexpr u32 INIT_GEOMETRY_COUNT{64};
+    static constexpr u32 AVG_VERTEX_COUNT{ 4 * 256 };
+    static constexpr u32 AVG_INDEX_COUNT{ 6 * 256 };
+
+    DynamicArray<Vertex, ArenaAllocator, false>               vertices;
+    DynamicArray<Vertex::IndexType, ArenaAllocator, false>    indices;
+    DynamicArray<GeometryView, ArenaAllocator, false>         geometry_views;
+    ArenaAllocator*                                           alloc;
 public:
-    static consteval u32 get_memory_requirement() { return INIT_CAPACITY * sizeof(Geometry) + INIT_CAPACITY * Geometry::get_memory_requirement(); }
+    static consteval u32 get_memory_requirement() { return INIT_GEOMETRY_COUNT * sizeof(GeometryView) + INIT_GEOMETRY_COUNT * (AVG_INDEX_COUNT * sizeof(Vertex::IndexType) + AVG_VERTEX_COUNT * sizeof(Vertex)); }
     static void create(ArenaAllocator& allocator, StackAllocator& temp_allocator, GeometrySystem& out_state);
-    static Option<Geometry*> get_geometry_by_id(u32 id);
-    static Geometry& create_geometry_and_get(
-        DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
-        DynamicArrayBacked<u32, StackAllocator>&& indices
+    static GeometryView& create_geometry_and_get_view(
+        DynamicArray<Vertex, StackAllocator>&& vertices,
+        DynamicArray<u32, StackAllocator>&& indices
     );
-    static Geometry& get_default_geometry();
-    static void free_geometry(u32 id);
-    static Geometry& get_empty_slot();
+    static GeometryView& get_default_geometry_view();
+    static std::span<Vertex> get_vertices();
+    static std::span<Vertex::IndexType> get_indices();
 private:
-    void create_default_geometry(StackAllocator& temp_allocator);
-    static DynamicArrayBacked<Vertex, StackAllocator> define_cube_vertices(StackAllocator& temp_allocator);
-    static DynamicArrayBacked<u32, StackAllocator> define_cube_indices(StackAllocator& temp_allocator);
+    static DynamicArray<Vertex, StackAllocator> define_cube_vertices(StackAllocator& temp_allocator);
+    static DynamicArray<u32, StackAllocator> define_cube_indices(StackAllocator& temp_allocator);
 };
 
 struct Mesh {
     static constexpr u32 MAX_TEXTURE_COUNT{ 8 };
-    Geometry* geometry;
-    Material* material;
+    GeometryView* geometry_view;
+    Material*     material;
+    u32           descriptor_state_index{INVALID_ID};
 public:
+    static void create_empty(VulkanShaderPipeline& shader, const VulkanDevice& device, Mesh& out_mesh);
     static void create_from_existing_data(
-        Geometry* geometry,
+        VulkanShaderPipeline& shader,
+        const VulkanDevice& device,
+        GeometryView* geometry,
         Material* material,
         Mesh& out_mesh
     );
-    void init_geometry(
-        DynamicArrayBacked<Vertex, StackAllocator>&& vertices,
-        DynamicArrayBacked<u32, StackAllocator>&& indices
-    );
-    void set_geometry(Geometry* geometry);
+    void set_geometry_view(GeometryView* geometry);
+    bool has_geometry_view() const;
     void set_material(Material* mat);
     bool has_material() const;
-    bool has_geometry() const;
-    void draw();
+    bool valid() const;
+    void draw(VulkanCommandBuffer& cmd_buffer);
     void destroy();
 };
 

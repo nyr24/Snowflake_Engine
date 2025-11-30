@@ -15,7 +15,7 @@ struct StackAllocator {
 public:
 static constexpr usize DEFAULT_INIT_CAPACITY{1024};
 private:
-    u8* _buffer;
+    u8*   _buffer;
     usize _capacity;
     usize _count;
     usize _prev_count;

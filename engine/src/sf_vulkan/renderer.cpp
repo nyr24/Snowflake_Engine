@@ -1,4 +1,3 @@
-#include "glm/geometric.hpp"
 #include "sf_allocators/arena_allocator.hpp"
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/optional.hpp"
@@ -14,6 +13,7 @@
 #include "sf_vulkan/command_buffer.hpp"
 #include "sf_vulkan/material.hpp"
 #include "sf_vulkan/pipeline.hpp"
+#include "sf_vulkan/shared_types.hpp"
 #include "sf_vulkan/texture.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include "sf_vulkan/synch.hpp"
@@ -26,10 +26,8 @@
 #include "sf_vulkan/mesh.hpp"
 #include "sf_vulkan/buffer.hpp"
 #include "sf_platform/glfw3.h"
-// #include "sf_vulkan/allocator.hpp"
-// #include "sf_allocators/free_list_allocator.hpp"
+#include <glm/geometric.hpp>
 #include <algorithm>
-#include <cmath>
 #include <span>
 #include <string_view>
 #include <vulkan/vk_platform.h>
@@ -48,21 +46,21 @@ static VulkanContext vk_context{};
 
 static constexpr u32 REQUIRED_VALIDATION_LAYER_CAPACITY{ 1 };
 static constexpr u32 MAIN_PIPELINE_ATTRIB_COUNT{ 3 };
-static constexpr u32 OBJECT_RENDER_COUNT{ 256 };
 static constexpr u32 MAX_MODEL_COUNT{ 16 };
+static constexpr u32 DEFAULT_MESH_COUNT{ 0 };
 static std::string_view MAIN_SHADER_FILE_NAME{"shader.spv"};
 
 // TODO: move to renderer struct
-static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> texture_load_configs{
-    {"grass.jpg"}, {"liquid_1.jpg"}, {"liquid_2.jpg"}, {"metal.jpg"}, {"painting.jpg"}, {"rock_wall.jpg"},
-    {"soil.jpg"}, {"water.jpg"}, {"stones.jpg"}, {"tree.jpg"}, {"sand.jpg"}
+static FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> preload_texture_file_names{
+    "grass.jpg", "liquid_1.jpg", "liquid_2.jpg", "metal.jpg", "painting.jpg", "rock_wall.jpg",
+    "soil.jpg", "water.jpg", "stones.jpg", "tree.jpg", "sand.jpg"
 };
-static FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> material_load_configs{ MaterialSystem::DEFAULT_NAME };
-static FixedArray<std::string_view, 10> model_names{ "viking_room.obj" };
-static FixedArray<Texture*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> textures(texture_load_configs.count());
-static FixedArray<Material*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> materials(material_load_configs.count());
-static FixedArray<Model, MAX_MODEL_COUNT> models(MAX_MODEL_COUNT);
-static FixedArray<MaterialUpdateData, OBJECT_RENDER_COUNT> object_material_data;
+static FixedArray<TextureInputConfig, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> preload_texture_configs;
+static FixedArray<std::string_view, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> preload_material_configs{ MaterialSystem::DEFAULT_FILE_NAME };
+static FixedArray<std::string_view, 10> model_names{ /* { "box", "gltf" }, */ { "avocado.gltf" } };
+static FixedArray<Texture*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> preload_textures(preload_texture_file_names.count());
+static FixedArray<Material*, VulkanShaderPipeline::MAX_DEFAULT_TEXTURES> preload_materials(preload_material_configs.count());
+static FixedArray<Model, MAX_MODEL_COUNT> models(model_names.count());
 
 bool create_instance(ApplicationConfig& config, PlatformState& platform_state);
 void create_debugger();
@@ -81,10 +79,10 @@ void create_descriptor_layouts_and_sets_for_ubo(
 );
 static bool create_main_shader_pipeline();
 static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc);
-static void init_object_material_data(VulkanShaderPipeline& shader, const VulkanDevice& device);
-static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time);
+static void init_meshes(VulkanShaderPipeline& shader, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, ArenaAllocator& main_alloc, StackAllocator& temp_alloc);
 static void init_global_descriptors(const VulkanDevice& device);
 static void update_global_descriptors(const VulkanDevice& device);
+static void renderer_create_default_meshes(const VulkanDevice& device, VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, StackAllocator& temp_alloc, u32 count = 1);
 static void renderer_update_global_state();
 static bool renderer_handle_mouse_move_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
 static bool renderer_handle_key_press_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context);
@@ -97,18 +95,8 @@ VulkanContext::VulkanContext()
     transfer_command_buffers.resize_to_capacity();
     image_available_semaphores.resize_to_capacity();
     render_finished_semaphores.resize_to_capacity();
-    draw_fences.resize_to_capacity();
-    transfer_fences.resize_to_capacity();
+    draw_fences.resize_to_capacity(); transfer_fences.resize_to_capacity();
     global_descriptor_sets.resize_to_capacity();
-}
-
-static void renderer_create_default_mesh(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& temp_alloc) {
-    Geometry& default_geometry = GeometrySystem::get_default_geometry();
-    MaterialSystem::create_default_material(device, cmd_buffer, temp_alloc);
-    Material& default_material = MaterialSystem::get_default_material();
-    Mesh new_mesh;
-    Mesh::create_from_existing_data(&default_geometry, &default_material, new_mesh);
-    vk_renderer.meshes.append(new_mesh);
 }
 
 // returns poitnter to static variable
@@ -153,29 +141,22 @@ VulkanDevice* renderer_init(ApplicationConfig& config, PlatformState& platform_s
 
 // NOTE: main systems should be available at the moment of call
 bool renderer_post_init(ArenaAllocator& main_alloc, StackAllocator& temp_alloc) {
+    vk_context.texture_load_command_buffer.begin_recording(0);
+
     preload_textures_and_materials(vk_context.device, vk_context.texture_load_command_buffer, temp_alloc);
 
-    SF_ASSERT_MSG(vk_renderer.meshes[0].has_geometry(), "Default mesh shoult exist");
-
-    if (!VulkanVertexIndexBuffer::create(vk_context.device, vk_renderer.meshes[0].geometry, vk_context.vertex_index_buffer)) {
-        LOG_FATAL("Failed to create vertex buffer");
-        return false;
-    }
-    
     if (!create_main_shader_pipeline()) {
         return false;
     }
 
-    init_object_material_data(vk_context.pipeline, vk_context.device);
+    init_meshes(vk_context.pipeline, vk_context.device, vk_context.texture_load_command_buffer, main_alloc, temp_alloc);
 
-    // NOTE: TEMP >>
-    if (!Model::load(model_names[0], main_alloc, temp_alloc, vk_context.device, vk_context.texture_load_command_buffer, models[0])) {
-        LOG_ERROR("Model with name {} fails to load", model_names[0]);
+    SF_ASSERT_MSG(vk_renderer.meshes.count() > 0, "Should have at least 1 geometry");
+
+    if (!VulkanVertexIndexBuffer::create(vk_context.device, GeometrySystem::get_vertices(), GeometrySystem::get_indices(), vk_context.vertex_index_buffer)) {
+        LOG_FATAL("Failed to create vertex buffer");
+        return false;
     }
-    for (auto& mesh : models[0].meshes) {
-        vk_renderer.meshes.append(mesh);
-    }
-    // NOTE: TEMP <<
 
     event_system_add_listener(SystemEventCode::RESIZED, nullptr, renderer_on_resize);
     event_system_add_listener(SystemEventCode::MOUSE_MOVED, nullptr, renderer_handle_mouse_move_event);
@@ -223,79 +204,113 @@ bool renderer_begin_frame(f64 delta_time) {
 }
 
 bool renderer_draw_frame(const RenderPacket& packet) {
-    // THINK: can we do all stuff with copying buffer data on renderer_init()?
-    VulkanCommandBuffer& curr_graphics_buffer = vk_context.graphics_command_buffers[vk_context.curr_frame];
-    VulkanCommandBuffer& curr_transfer_buffer = vk_context.transfer_command_buffers[vk_context.curr_frame];
-    VulkanSemaphore& curr_image_available_semaphore = vk_context.image_available_semaphores[vk_context.curr_frame];
-    VulkanSemaphore& curr_render_finished_semaphore = vk_context.render_finished_semaphores[vk_context.curr_frame];
-    VulkanFence& curr_draw_fence = vk_context.draw_fences[vk_context.curr_frame];
-    VulkanFence& curr_transfer_fence = vk_context.transfer_fences[vk_context.curr_frame];
+    VulkanCommandBuffer& graphics_cmd_buffer = vk_context.graphics_command_buffers[vk_context.curr_frame];
+    VulkanCommandBuffer& transfer_cmd_buffer = vk_context.transfer_command_buffers[vk_context.curr_frame];
+    VulkanSemaphore& image_available_semaphore = vk_context.image_available_semaphores[vk_context.curr_frame];
+    VulkanSemaphore& render_finished_semaphore = vk_context.render_finished_semaphores[vk_context.curr_frame];
+    VulkanFence& draw_fence = vk_context.draw_fences[vk_context.curr_frame];
+    VulkanFence& transfer_fence = vk_context.transfer_fences[vk_context.curr_frame];
+    auto& shader = vk_context.pipeline;
+    auto& device = vk_context.device;
+    auto& vertex_index_buffer = vk_context.vertex_index_buffer;
 
-    // THINK: we maybe need semaphore to synch copy and draw commands
-    curr_transfer_buffer.begin_recording(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    glm::mat4 rotate_mat = glm::mat4(1.0f);
+    glm::mat4 translate_mat = glm::mat4(1.0f);
+    glm::mat4 scale_mat = glm::mat4(1.0f);
+    glm::mat4 result_mat;
+    // NOTE: TEMP
+    // glm::mat4 identity_mat = glm::mat4(1.0f);
+
+    graphics_cmd_buffer.begin_recording(0);
+    vertex_index_buffer.bind(graphics_cmd_buffer);
+    vk_context.pipeline.bind(graphics_cmd_buffer, vk_context.curr_frame);
+    renderer_update_global_state();
+    graphics_cmd_buffer.begin_rendering(vk_context);
+
+    // TODO + THINK: move transfer logic to initialization
+    // transfer geometry data to GPU
+    transfer_cmd_buffer.begin_recording(0);
 
     VkBufferCopy vertex_copy_region{
         .srcOffset = 0,
         .dstOffset = 0,
-        .size = vk_context.vertex_index_buffer.geometry->indeces_offset 
+        .size = vertex_index_buffer.vertices_size_bytes 
     };
 
     VkBufferCopy index_copy_region{
-        .srcOffset = vk_context.vertex_index_buffer.geometry->indeces_offset,
-        .dstOffset = vk_context.vertex_index_buffer.geometry->indeces_offset,
-        .size = vk_context.vertex_index_buffer.geometry->indeces_count * sizeof(u32)
+        .srcOffset = vertex_index_buffer.vertices_size_bytes,
+        .dstOffset = vertex_index_buffer.vertices_size_bytes,
+        .size = vertex_index_buffer.whole_size_bytes - vertex_index_buffer.vertices_size_bytes
     };
-    
-    curr_transfer_buffer.copy_data_between_buffers(vk_context.vertex_index_buffer.staging_buffer.handle, vk_context.vertex_index_buffer.main_buffer.handle, vertex_copy_region);
-    curr_transfer_buffer.copy_data_between_buffers(vk_context.vertex_index_buffer.staging_buffer.handle, vk_context.vertex_index_buffer.main_buffer.handle, index_copy_region);
-    curr_transfer_buffer.end_recording();
+
+    transfer_cmd_buffer.copy_data_between_buffers(vertex_index_buffer.staging_buffer.handle, vertex_index_buffer.main_buffer.handle, vertex_copy_region);
+    transfer_cmd_buffer.copy_data_between_buffers(vertex_index_buffer.staging_buffer.handle, vertex_index_buffer.main_buffer.handle, index_copy_region);
+    transfer_cmd_buffer.end_recording();
 
     VkSubmitInfo transfer_submit_info{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
-        .pCommandBuffers = &curr_transfer_buffer.handle  
+        .pCommandBuffers = &transfer_cmd_buffer.handle  
     };
 
-    curr_transfer_buffer.submit(vk_context, vk_context.device.transfer_queue, transfer_submit_info, {curr_transfer_fence});
+    transfer_cmd_buffer.submit(vk_context, vk_context.device.transfer_queue, transfer_submit_info, {transfer_fence});
+    if (!transfer_fence.wait(vk_context)) {
+        return false;
+    }
+    transfer_cmd_buffer.reset();
 
-    curr_graphics_buffer.begin_recording(0);
-    vk_context.pipeline.bind(curr_graphics_buffer, vk_context.curr_frame);
-    renderer_update_global_state();
-    curr_graphics_buffer.begin_rendering(vk_context);
-    vk_context.vertex_index_buffer.bind(curr_graphics_buffer);
+    auto& meshes = vk_renderer.meshes;
+    const u32 MESH_CNT = meshes.count();
+    static constexpr f32 STEP{ 0.8f };
 
-    // NOTE: DRAW call
-    draw_objects(vk_context.pipeline, curr_graphics_buffer, packet.elapsed_time);
+    // NOTE: TEMP
+    // shader.update_model(graphics_cmd_buffer, identity_mat);
 
-    curr_graphics_buffer.end_rendering(vk_context);
-    curr_graphics_buffer.end_recording();
-    
+    for (u32 i{0}; i < MESH_CNT; ++i) {
+        // update model matrix
+        f32 mult_x = ((i & 0b1) == 0b1) ? -STEP : STEP;
+        f32 mult_y = ((i & 0b1) == 0b0) ? -STEP : STEP;
+        rotate_mat = glm::rotate(glm::mat4(1.0f), static_cast<f32>(packet.elapsed_time) * glm::radians(90.0f),
+            ((i & 0b1) == 0b1) ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f));
+        translate_mat = glm::translate(glm::mat4(1.0f), glm::vec3(mult_x * i, mult_y * i, 1.0f));
+        scale_mat = glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 3.0f });
+        result_mat = { translate_mat * rotate_mat * scale_mat };
+        shader.update_model(graphics_cmd_buffer, result_mat);
+
+        // update material
+        MaterialUpdateData material_data{};
+        material_data.descriptor_state_index = meshes[i].descriptor_state_index;
+        material_data.material = meshes[i].material;
+        shader.update_material(vk_context, graphics_cmd_buffer, material_data);
+
+        meshes[i].draw(graphics_cmd_buffer);
+    }
+
+    graphics_cmd_buffer.end_rendering(vk_context);
+    graphics_cmd_buffer.end_recording();
+
     VkPipelineStageFlags wait_dest_mask{ VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT };
 
     VkSubmitInfo submit_info{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &curr_image_available_semaphore.handle,
+        .pWaitSemaphores = &image_available_semaphore.handle,
         .pWaitDstStageMask = &wait_dest_mask,
         .commandBufferCount = 1,
-        .pCommandBuffers = &curr_graphics_buffer.handle,
+        .pCommandBuffers = &graphics_cmd_buffer.handle,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &curr_render_finished_semaphore.handle,
+        .pSignalSemaphores = &render_finished_semaphore.handle,
     };
 
-    curr_graphics_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, curr_draw_fence);
+    graphics_cmd_buffer.submit(vk_context, vk_context.device.present_queue, submit_info, draw_fence);
 
-    if (!curr_transfer_fence.wait(vk_context)) {
+    if (!draw_fence.wait(vk_context)) {
         return false;
     }
-    curr_transfer_buffer.reset();
+    graphics_cmd_buffer.reset();
 
-    if (!curr_draw_fence.wait(vk_context)) {
-        return false;
-    }
-    curr_graphics_buffer.reset();
+    vk_context.swapchain.present(vk_context, vk_context.device.present_queue, render_finished_semaphore.handle, vk_context.image_index);
 
-    vk_context.swapchain.present(vk_context, vk_context.device.present_queue, curr_render_finished_semaphore.handle, vk_context.image_index);
     return true;
 }
 
@@ -577,7 +592,7 @@ static bool create_main_shader_pipeline() {
         attrib_descriptions,
         viewport,
         scissors,
-        textures.to_span(),
+        preload_textures.to_span(),
         vk_context.pipeline,
         temp_alloc
     );
@@ -623,9 +638,9 @@ void Camera::update_vectors() {
     target.x = glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
     target.y = glm::sin(glm::radians(pitch));
     target.z = glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
-    target = glm::normalize(target);
-    right = glm::normalize(glm::cross(target, Camera::WORLD_UP));
-    up = glm::normalize(glm::cross(right, target));
+    target   = glm::normalize(target);
+    right    = glm::normalize(glm::cross(target, Camera::WORLD_UP));
+    up       = glm::normalize(glm::cross(right, target));
 }
 
 static bool renderer_handle_key_press_event(u8 code, void* sender, void* listener_inst, Option<EventContext> maybe_context)  {
@@ -727,12 +742,41 @@ static void update_global_descriptors(const VulkanDevice& device) {
 }
 
 static void preload_textures_and_materials(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& temp_alloc) {
-    cmd_buffer.begin_recording(0);
+    u32 cnt = preload_texture_file_names.count();
+    for (u32 i{0}; i < cnt; ++i) {
+        preload_texture_configs.append(TextureInputConfig{ TextureSystem::acquire_default_texture_path(preload_texture_file_names[i], temp_alloc) });
+    }
+    TextureSystem::get_or_load_textures_many(device, cmd_buffer, temp_alloc, preload_texture_configs.to_span(), preload_textures.to_span());
+    MaterialSystem::load_and_get_material_from_file_many(device, cmd_buffer, temp_alloc, preload_material_configs.to_span(), preload_materials.to_span());
+}
 
-    TextureSystem::get_or_load_textures_many(device, cmd_buffer, temp_alloc, texture_load_configs.to_span(), textures.to_span());
-    MaterialSystem::load_material_from_file_many(device, cmd_buffer, temp_alloc, material_load_configs.to_span(), materials.to_span());
+static void renderer_create_default_meshes(const VulkanDevice& device, VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, StackAllocator& temp_alloc, u32 count) {
+    SF_ASSERT_MSG(count > 0, "Should create at least 1 default mesh");
+    
+    GeometryView& default_geometry = GeometrySystem::get_default_geometry_view();
+    MaterialSystem::create_default_material(device, cmd_buffer, temp_alloc);
+    Material& default_material = MaterialSystem::get_default_material();
+    for (u32 i = 0; i < count; ++i) {
+        Mesh new_mesh;
+        new_mesh.descriptor_state_index = shader.acquire_resouces(device);
+        Mesh::create_from_existing_data(shader, device, &default_geometry, &default_material, new_mesh);
+        vk_renderer.meshes.append(new_mesh);
+    }
+}
 
-    renderer_create_default_mesh(vk_context.device, vk_context.texture_load_command_buffer, temp_alloc);
+static void init_meshes(VulkanShaderPipeline& shader, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, ArenaAllocator& main_alloc, StackAllocator& temp_alloc) {
+    if (DEFAULT_MESH_COUNT > 0) {
+        renderer_create_default_meshes(vk_context.device, shader, vk_context.texture_load_command_buffer, temp_alloc, DEFAULT_MESH_COUNT);
+    }
+
+    for (u32 i{0}; i < model_names.count(); ++i) {
+        if (!Model::load(model_names[i], main_alloc, temp_alloc, vk_context.device, vk_context.texture_load_command_buffer, vk_context.pipeline, models[i])) {
+            LOG_ERROR("Model with name {} fails to load", model_names[i]);
+        }
+        for (auto& mesh : models[i].meshes) {
+            vk_renderer.meshes.append(mesh);
+        }
+    }
 
     VkSubmitInfo submit_info{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -743,47 +787,7 @@ static void preload_textures_and_materials(const VulkanDevice& device, VulkanCom
     cmd_buffer.end_recording();
     cmd_buffer.submit(vk_context, vk_context.device.graphics_queue, submit_info, {None::VALUE});
     vkQueueWaitIdle(vk_context.device.graphics_queue);
-}
-
-static void init_object_material_data(VulkanShaderPipeline& shader, const VulkanDevice& device) {
-    object_material_data.resize_to_capacity();
-
-    for (auto& material_data : object_material_data) {
-        material_data.descriptor_state_index = shader.acquire_resouces(device);
-        material_data.material = materials[0];
-    }
-}
-
-static void draw_objects(VulkanShaderPipeline& shader, VulkanCommandBuffer& cmd_buffer, f64 elapsed_time) {
-    static const u32 ROW_COUNT{ static_cast<u32>(std::sqrt(OBJECT_RENDER_COUNT)) };
-    static constexpr f32 STEP{ 0.8f };
-
-    glm::mat4 rotate_mat;
-    glm::mat4 translate_mat;
-    glm::mat4 result_mat;
-
-    for (u32 i{0}; i < ROW_COUNT; ++i) {
-        for (u32 j{0}; j < ROW_COUNT; ++j) {
-            const u32 ind{ j + i * ROW_COUNT };
-            if (!object_material_data[ind].material) {
-                continue;
-            }
-
-            f32 mult_x = ((j & 0b1) == 0b1) ? -STEP : STEP;
-            f32 mult_y = ((i & 0b1) == 0b1) ? -STEP : STEP;
-            rotate_mat = glm::rotate(glm::mat4(1.0f), static_cast<f32>(elapsed_time) * glm::radians(90.0f),
-                ((i & 0b1) == 0b1) ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f));
-            translate_mat = glm::translate(glm::mat4(1.0f), glm::vec3(mult_x * j, mult_y * i, 1.0f));
-            result_mat = { translate_mat * rotate_mat };
-            shader.update_model(vk_context.curr_frame_graphics_cmd_buffer(), result_mat);
-
-            MaterialUpdateData material_data{};
-            material_data.descriptor_state_index = object_material_data[ind].descriptor_state_index;
-            material_data.material = object_material_data[ind].material;
-            shader.update_material(vk_context, material_data);
-            vk_context.vertex_index_buffer.draw(cmd_buffer);
-        }
-    }
+    cmd_buffer.reset();
 }
 
 VkViewport VulkanContext::get_viewport() const {

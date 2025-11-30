@@ -21,9 +21,9 @@ static const u32 TEMP_ALLOCATOR_INIT_PAGES{ 16 };
 static ApplicationState state;
 
 ApplicationState::ApplicationState()
-    : temp_allocator{ platform_get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
+    : temp_allocator{ get_mem_page_size() * TEMP_ALLOCATOR_INIT_PAGES }
 {
-    main_allocator.reserve(TextureSystem::get_memory_requirement() + MaterialSystem::get_memory_requirement() + GeometrySystem::get_memory_requirement() + platform_get_mem_page_size());
+    main_allocator.reserve(TextureSystem::get_memory_requirement() + MaterialSystem::get_memory_requirement() + GeometrySystem::get_memory_requirement() + get_mem_page_size());
 }
 
 void application_init_internal_state(const VulkanDevice& device) {

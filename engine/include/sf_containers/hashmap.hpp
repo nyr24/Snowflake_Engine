@@ -30,6 +30,23 @@ bool equal_fn_default(ConstLRefOrValType<K> first, ConstLRefOrValType<K> second)
     return first == second;
 };
 
+template<>
+inline bool equal_fn_default<std::string_view>(ConstLRefOrValType<std::string_view> first, ConstLRefOrValType<std::string_view> second) {
+    if (first.size() != second.size()) {
+        return false;
+    }
+    return sf_mem_cmp((void*)first.data(), (void*)second.data(), first.size());
+};
+
+template<>
+inline bool equal_fn_default<const char*>(ConstLRefOrValType<const char*> first, ConstLRefOrValType<const char*> second) {
+    const u32 first_len = strlen(first);
+    if (first_len != strlen(second)) {
+        return false;
+    }
+    return sf_mem_cmp((void*)first, (void*)second, first_len);
+};
+
 // fnv1a hash function
 static constexpr u64 PRIME = 1099511628211ull;
 static constexpr u64 OFFSET_BASIS = 14695981039346656037ull;
@@ -106,7 +123,7 @@ static HashMapConfig<K> get_default_config() {
 }
 
 template<typename K, typename V, AllocatorTrait Allocator = GeneralPurposeAllocator, bool USE_HANDLE = true, u32 DEFAULT_INIT_CAPACITY = 8>
-struct HashMapBacked {
+struct HashMap {
 public:
     using KeyType = K;
     using ValueType = V;
@@ -136,7 +153,7 @@ private:
     HashMapConfig<K>    _config;
 
 public:
-    HashMapBacked()
+    HashMap()
         : _allocator{nullptr}
         , _capacity{0}
         , _count{0}
@@ -149,7 +166,7 @@ public:
         }
     }
 
-    HashMapBacked(Allocator* allocator)
+    HashMap(Allocator* allocator)
         : _allocator{allocator}
         , _capacity{0}
         , _count{0}
@@ -162,7 +179,7 @@ public:
         }
     }
     
-    HashMapBacked(u32 prealloc_count, Allocator* allocator, const HashMapConfig<K>& config = get_default_config<K>())
+    HashMap(u32 prealloc_count, Allocator* allocator, const HashMapConfig<K>& config = get_default_config<K>())
         : _allocator{allocator}
         , _capacity{prealloc_count}
         , _count{0}
@@ -171,7 +188,7 @@ public:
         init_buffer_empty(access_data(), _capacity);
     }
 
-    HashMapBacked(HashMapBacked<K, V, Allocator>&& rhs) noexcept
+    HashMap(HashMap<K, V, Allocator>&& rhs) noexcept
         : _allocator{rhs._allocator}
         , _data{rhs._data}
         , _capacity{rhs._capacity}
@@ -189,7 +206,7 @@ public:
         rhs._count = 0;
     }
 
-    HashMapBacked<K, V, Allocator>& operator=(HashMapBacked<K, V, Allocator>&& rhs) noexcept
+    HashMap<K, V, Allocator>& operator=(HashMap<K, V, Allocator>&& rhs) noexcept
     {
         if (this == &rhs) {
             return *this;
@@ -217,10 +234,10 @@ public:
         rhs._count = 0;
     }
     
-    HashMapBacked(const HashMapBacked<K, V, Allocator>& rhs) = delete;
-    HashMapBacked<K, V, Allocator>& operator=(const HashMapBacked<K, V, Allocator>& rhs) = delete;
+    HashMap(const HashMap<K, V, Allocator>& rhs) = delete;
+    HashMap<K, V, Allocator>& operator=(const HashMap<K, V, Allocator>& rhs) = delete;
 
-    ~HashMapBacked() noexcept {
+    ~HashMap() noexcept {
         free();
     }
 
@@ -271,7 +288,7 @@ public:
     // put without resize, if can
     template<typename Key, typename Val>
     requires SameTypes<K, Key> && SameTypes<V, Val>
-    bool put_assume_capacity(K&& key, V&& val) noexcept {
+    bool put_assume_capacity(Key&& key, Val&& val) noexcept {
         Bucket* data = access_data();
         u32 index = static_cast<u32>(_config.hash_fn(key)) % _capacity;
 
@@ -282,10 +299,10 @@ public:
 
         if (data[index].state != Bucket::FILLED) {
             if (_count > static_cast<u32>(_capacity * _config.load_factor)) {
-                LOG_ERROR("Not enough capacity in HashMapBacked");
+                LOG_ERROR("Not enough capacity in HashMap");
                 return false;
             }
-            data[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
+            data[index] = Bucket{ .key = std::forward<Key>(key), .value = std::forward<Val>(val), .state = Bucket::FILLED };
             ++_count;
         } else {
             data[index].value = std::move(val);
@@ -297,7 +314,7 @@ public:
     // put without update
     template<typename Key, typename Val>
     requires SameTypes<K, Key> && SameTypes<V, Val>
-    bool put_if_empty(K&& key, V&& val) noexcept {
+    bool put_if_empty(Key&& key, Val&& val) noexcept {
         SF_ASSERT_MSG(_allocator, "Should be valid pointer");
         if (_count > static_cast<u32>(_capacity * _config.load_factor)) {
             resize(_capacity * _config.grow_factor);
@@ -315,7 +332,7 @@ public:
             return false;
         } else {
             ++_count;
-            data[index] = Bucket{ .key = std::move(key), .value = std::move(val), .state = Bucket::FILLED };
+            data[index] = Bucket{ .key = std::forward<Key>(key), .value = std::forward<Val>(val), .state = Bucket::FILLED };
             return true;
         }
     }

@@ -5,12 +5,13 @@
 #include "sf_allocators/stack_allocator.hpp"
 #include "sf_containers/dynamic_array.hpp"
 #include "sf_containers/fixed_array.hpp"
-// #include "sf_containers/optional.hpp"
+#include "sf_core/asserts_sf.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/defines.hpp"
 #include "sf_vulkan/device.hpp"
 #include "sf_vulkan/shared_types.hpp"
 #include "sf_vulkan/texture.hpp"
+#include "sf_vulkan/pipeline.hpp"
 #include <span>
 #include <string_view>
 
@@ -28,21 +29,62 @@ struct MaterialConfig {
     bool             auto_release;
 };
 
+struct TextureMap {
+    Texture*      texture;
+    TextureType   type;  
+};
+
+template<u32 CAPACITY>
+struct TextureMaps {
+    FixedArray<Texture*, CAPACITY>      textures;
+    FixedArray<TextureType, CAPACITY>   types;
+
+    TextureMaps()
+    {
+        textures.resize_to_capacity();
+        types.resize_to_capacity();
+    }
+
+    void append(TextureMap map) {
+        textures.append(map.texture);
+        types.append(map.type);
+    }
+
+    void resize_to_capacity() {
+        textures.resize_to_capacity();
+        types.resize_to_capacity();
+    }
+
+    void resize(u32 val) {
+        textures.resize(val);
+        types.resize(val);
+    }
+
+    u32 count() {
+        SF_ASSERT(textures.count() == types.count());
+        return textures.count();
+    }
+
+    void clear() {
+        textures.clear();
+        types.clear();
+    }
+
+    TextureMap operator[](u32 i) {
+        SF_ASSERT_MSG(i >= 0 && i < this->count(), "Out of bounds");
+        return TextureMap{ textures[i], types[i] };
+    }
+};
+
 struct Material {
-    static constexpr u32 MAX_DIFFUSE_COUNT{ 8 };
-    static constexpr u32 MAX_SPECULAR_COUNT{ 4 };
-    static constexpr u32 MAX_AMBIENT_COUNT{ 4 };
-    static constexpr glm::vec4 DEFAULT_DIFFUSE_COLOR{ 1.0f, 1.0f, 1.0f, 1.0f }; 
+    static constexpr glm::vec4 DEFAULT_DIFFUSE_COLOR{ 1.0f, 1.0f, 1.0f, 0.0f }; 
     
-    FixedArray<Texture*, MAX_DIFFUSE_COUNT>     diffuse_textures;
-    FixedArray<Texture*, MAX_SPECULAR_COUNT>    specular_textures;
-    FixedArray<Texture*, MAX_AMBIENT_COUNT>     ambient_textures;
-    // THINK: should ve have optional?
-    // Option<glm::vec4>                           diffuse_color{None::VALUE};
-    glm::vec4                                   diffuse_color{ DEFAULT_DIFFUSE_COLOR };
-    Option<MaterialConfig>                      config{None::VALUE};
-    u32                                         id{INVALID_ID};
-    u32                                         generation{INVALID_ID};
+    // SOA
+    TextureMaps<VulkanShaderPipeline::TEXTURE_COUNT> texture_maps;
+    glm::vec4                                        diffuse_color{ DEFAULT_DIFFUSE_COLOR };
+    Option<MaterialConfig>                           config{None::VALUE};
+    u32                                              id{INVALID_ID};
+    u32                                              generation{INVALID_ID};
 public:
     static void create_empty(u32 id, Material& out_material);
     void destroy();
@@ -56,28 +98,27 @@ struct MaterialRef {
 
 struct MaterialSystem {
 public:
-    static constexpr std::string_view DEFAULT_NAME{ "default_mat.sfmt" };
+    static constexpr std::string_view DEFAULT_FILE_NAME{ "default_mat.sfmt" };
     static constexpr u32 INIT_MATERIAL_AMOUNT{ 4096 };
 
-    using MaterialHashMap = HashMapBacked<std::string_view, MaterialRef, ArenaAllocator, false>;
-    DynamicArrayBacked<Material, ArenaAllocator, false> materials;
-    Material                                            default_material;
+    using MaterialHashMap = HashMap<std::string_view, MaterialRef, ArenaAllocator, false>;
+    DynamicArray<Material, ArenaAllocator, false>       materials;
     MaterialHashMap                                     material_lookup_table;
 public:
     static void create(ArenaAllocator& system_allocator, MaterialSystem& out_system);
     static consteval u32 get_memory_requirement() { return INIT_MATERIAL_AMOUNT * sizeof(Material) + INIT_MATERIAL_AMOUNT * sizeof(MaterialHashMap::Bucket); }
     ~MaterialSystem();
-    static void load_material_from_file_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc, std::span<std::string_view> file_names, std::span<Material*> out_materials);
-    static void load_material_from_config_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc, std::span<MaterialConfig> configs, std::span<Material*> out_materials);
-    static Material* get_or_load_material_from_config(MaterialConfig&& config, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc);
-    static Material* get_or_load_material_from_file(std::string_view file_name, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc);
+    static void preload_material_from_file_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc, std::span<std::string_view> file_names);
+    static void preload_material_from_config_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc, std::span<MaterialConfig> configs);
+    static void load_and_get_material_from_file_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc, std::span<std::string_view> file_names, std::span<Material*> out_materials);
+    static void load_and_get_material_from_config_many(const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc, std::span<MaterialConfig> configs, std::span<Material*> out_materials);
+    static Material* load_and_get_material_from_config(MaterialConfig&& config, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc);
+    static Material* load_and_get_material_from_file(std::string_view file_name, const VulkanDevice& device, VulkanCommandBuffer& cmd_buffer, StackAllocator& alloc);
     static Material& create_material_from_textures(
         const VulkanDevice& device,
         VulkanCommandBuffer& cmd_buffer,
         StackAllocator& alloc,
-        std::span<TextureInputConfig> diffuse_tex_configs,
-        std::span<TextureInputConfig> specular_tex_configs,
-        std::span<TextureInputConfig> ambient_tex_configs
+        std::span<TextureInputConfig> tex_configs
     );
     static void free_material(std::string_view name);
     static Material& get_empty_slot();

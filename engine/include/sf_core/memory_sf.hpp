@@ -33,14 +33,14 @@ constexpr ReturnPtr rebase_ptr(void* old_ptr, void* old_base, void* new_base) no
     return reinterpret_cast<ReturnPtr>(turn_handle_into_ptr(turn_ptr_into_handle(old_ptr, old_base), new_base));
 }
 
-template<typename T>
-constexpr T* ptr_step_bytes_forward(T* ptr, u32 byte_count) noexcept {
-    return reinterpret_cast<T*>(reinterpret_cast<u8*>(ptr) + byte_count);
+template<typename R = void, typename T = void>
+constexpr R* ptr_step_bytes_forward(T* ptr, u32 byte_count) noexcept {
+    return reinterpret_cast<R*>(reinterpret_cast<u8*>(ptr) + byte_count);
 }
 
-template<typename T>
-constexpr T* ptr_step_bytes_backward(T* ptr, u32 byte_count) noexcept {
-    return reinterpret_cast<T*>(reinterpret_cast<u8*>(ptr) - byte_count);
+template<typename R = void, typename T = void>
+constexpr R* ptr_step_bytes_backward(T* ptr, u32 byte_count) noexcept {
+    return reinterpret_cast<R*>(reinterpret_cast<u8*>(ptr) - byte_count);
 }
 
 template<typename T>

@@ -1,6 +1,4 @@
 #include "sf_vulkan/buffer.hpp"
-#include "sf_containers/dynamic_array.hpp"
-#include "sf_core/asserts_sf.hpp"
 #include "sf_core/logger.hpp"
 #include "sf_core/memory_sf.hpp"
 #include "sf_vulkan/command_buffer.hpp"
@@ -9,6 +7,7 @@
 #include "sf_vulkan/renderer.hpp"
 #include "sf_vulkan/swapchain.hpp"
 #include <cstddef>
+#include <span>
 #include <vulkan/vulkan_core.h>
 
 namespace sf {
@@ -72,50 +71,64 @@ void VulkanBuffer::destroy(const VulkanDevice& device) {
     }
 }
 
-bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, Geometry* init_geometry, VulkanVertexIndexBuffer& out_buffer) {
-    SF_ASSERT_MSG(init_geometry, "Should be valid pointer");
-    out_buffer.geometry = init_geometry;
-
+bool VulkanVertexIndexBuffer::create(const VulkanDevice& device, std::span<Vertex> vertices, std::span<Vertex::IndexType> indices, VulkanVertexIndexBuffer& out_buffer) {
+    u32 whole_size = vertices.size_bytes() + indices.size_bytes();
+    
     VulkanBuffer::create(
-        device, out_buffer.geometry->data.size_in_bytes(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        device, whole_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
         out_buffer.staging_buffer
     );
 
     VulkanBuffer::create(
-        device, out_buffer.geometry->data.size_in_bytes(), static_cast<VkBufferUsageFlagBits>(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
+        device, whole_size, static_cast<VkBufferUsageFlagBits>(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
         VK_SHARING_MODE_EXCLUSIVE, static_cast<VkMemoryPropertyFlagBits>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
         out_buffer.main_buffer
     );
 
-    return out_buffer.staging_buffer.copy_data(device, out_buffer.geometry->data.data(), out_buffer.geometry->data.size_in_bytes());
+    void* mapped_data;
+
+    if (vkMapMemory(device.logical_device, out_buffer.staging_buffer.memory.handle, 0, whole_size, 0, &mapped_data) != VK_SUCCESS) {
+        return false;
+    }
+
+    sf_mem_copy(mapped_data, vertices.data(), vertices.size_bytes());
+    sf_mem_copy(static_cast<u8*>(mapped_data) + vertices.size_bytes(), indices.data(), indices.size_bytes());
+        
+    vkUnmapMemory(device.logical_device, out_buffer.staging_buffer.memory.handle);
+
+    out_buffer.vertices_size_bytes = vertices.size_bytes();
+    out_buffer.whole_size_bytes = whole_size;
+
+    return true;
 }
 
-void VulkanVertexIndexBuffer::set_geometry(const VulkanDevice& device, const Geometry& input_geometry) {
-    if (geometry && input_geometry.id == geometry->id) {
-        return;
-    }
-    staging_buffer.copy_data(device, (void*)input_geometry.data.data(), input_geometry.data.size_in_bytes());
-}
+// bool VulkanVertexIndexBuffer::set_geometry(const VulkanDevice& device, const Geometry& input_geometry) {
+//     if (geometry && input_geometry.id == geometry->id) {
+//         return false;
+//     }
+//     staging_buffer.copy_data(device, (void*)input_geometry.data.data(), input_geometry.data.size_in_bytes());
+//     return true;
+// }
 
 void VulkanVertexIndexBuffer::bind(const VulkanCommandBuffer& cmd_buffer) {
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(cmd_buffer.handle, 0, 1, &main_buffer.handle, offsets);
-    vkCmdBindIndexBuffer(cmd_buffer.handle, main_buffer.handle, geometry->indeces_offset, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmd_buffer.handle, main_buffer.handle, vertices_size_bytes, VK_INDEX_TYPE_UINT32);
 }
 
-u32 VulkanVertexIndexBuffer::curr_geometry_id() const {
-    return geometry->id;
-}
+// u32 VulkanVertexIndexBuffer::curr_geometry_id() const {
+//     return geometry->id;
+// }
 
 void VulkanVertexIndexBuffer::destroy(const VulkanDevice& device) {
     staging_buffer.destroy(device);
     main_buffer.destroy(device);
 }
 
-void VulkanVertexIndexBuffer::draw(const VulkanCommandBuffer& cmd_buffer) {
-    vkCmdDrawIndexed(cmd_buffer.handle, geometry->indeces_count, 1, 0, 0, 0);
-}
+// void VulkanVertexIndexBuffer::draw(const VulkanCommandBuffer& cmd_buffer) {
+//     vkCmdDrawIndexed(cmd_buffer.handle, geometry->indeces_count, 1, 0, 0, 0);
+// }
 
 bool VulkanGlobalUniformBufferObject::create(const VulkanDevice& device, VulkanGlobalUniformBufferObject& out_global_ubo) {
     for (u32 i{0}; i < VulkanSwapchain::MAX_FRAMES_IN_FLIGHT; ++i) {

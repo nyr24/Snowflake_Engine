@@ -2,12 +2,12 @@
 #include "sf_containers/traits.hpp"
 #include "sf_core/constants.hpp"
 #include "sf_core/memory_sf.hpp"
-#include "sf_platform/platform.hpp"
+#include "sf_core/utility.hpp"
 
 namespace sf {
 
 LinearAllocator::LinearAllocator() noexcept
-    : _capacity{ platform_get_mem_page_size() * 10 }
+    : _capacity{ get_mem_page_size() * 10 }
     , _count{ 0 }
     , _buffer{ static_cast<u8*>(sf_mem_alloc(_capacity)) }
 {}
